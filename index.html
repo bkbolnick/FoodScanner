@@ -4,11 +4,13 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#0b6b46">
+<meta name="color-scheme" content="light dark">
 <meta name="format-detection" content="telephone=no">
 <meta name="referrer" content="no-referrer">
 <title>FoodScanner</title>
 <style>
 :root {
+  color-scheme: light dark;
   --bg: #f3f6f4; --card: #ffffff; --text: #15201b; --muted: #5f6d66; --border: #d7dfda;
   --accent: #0b6b46; --accent-ink: #ffffff; --danger: #b3261e; --warn: #8a5a00; --ok: #0b6b46;
   --chip: #e6eee9; --input: #ffffff; --dbg-bg: #101613; --dbg-ink: #d7e2db;
@@ -44,6 +46,9 @@ a { color: var(--accent); }
   background: var(--card); color: var(--text); font-weight: 600; font-size: 16px; text-decoration: none;
 }
 .btn:active { transform: scale(0.98); opacity: 0.9; }
+.btn { white-space: nowrap; }
+#result { scroll-margin-top: calc(70px + env(safe-area-inset-top)); }
+.manual { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border); }
 .btn.primary { background: var(--accent); color: var(--accent-ink); border-color: transparent; }
 .btn.danger { color: var(--danger); }
 .btn.small { min-height: 40px; padding: 6px 12px; font-size: 14px; border-radius: 10px; }
@@ -70,7 +75,8 @@ input[type=text], input[type=password], input[type=search], select, textarea {
   -webkit-appearance: none; appearance: none;
 }
 input.secret { -webkit-text-security: disc; }
-textarea { min-height: 120px; font-family: var(--mono); font-size: 12px; line-height: 1.35; }
+select { background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='14' height='9' viewBox='0 0 14 9'><path d='M1 1l6 6 6-6' fill='none' stroke='%235f6d66' stroke-width='2'/></svg>"); background-repeat: no-repeat; background-position: right 14px center; padding-right: 40px; }
+textarea { min-height: 120px; font-family: var(--mono); font-size: 16px; line-height: 1.35; }
 label.field { display: block; font-size: 14px; color: var(--muted); margin-bottom: 4px; }
 /* camera */
 .viewport { position: relative; width: 100%; aspect-ratio: 4 / 3; background: #000; border-radius: 16px; overflow: hidden; }
@@ -99,7 +105,7 @@ label.field { display: block; font-size: 14px; color: var(--muted); margin-botto
 .prod .brand { color: var(--muted); margin-top: 2px; }
 table.nut { width: 100%; border-collapse: collapse; margin-top: 12px; font-size: 15px; }
 table.nut th, table.nut td { padding: 7px 4px; border-bottom: 1px solid var(--border); text-align: right; white-space: nowrap; }
-table.nut th:first-child, table.nut td:first-child { text-align: left; }
+table.nut th:first-child, table.nut td:first-child { text-align: left; white-space: normal; }
 table.nut th { font-weight: 600; color: var(--muted); font-size: 13px; }
 table.nut tr.calc td { color: var(--muted); }
 table.cov { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 6px; }
@@ -143,7 +149,7 @@ nav.tabs button.active { color: var(--accent); }
 /* debug panel */
 #dbgPanel {
   position: fixed; left: 0; right: 0; bottom: 0; z-index: 30; background: var(--dbg-bg); color: var(--dbg-ink);
-  max-height: 55vh; display: none; flex-direction: column; border-top: 2px solid var(--accent);
+  max-height: 45vh; display: none; flex-direction: column; border-top: 2px solid var(--accent);
   padding-bottom: env(safe-area-inset-bottom);
 }
 #dbgPanel.open { display: flex; }
@@ -156,6 +162,9 @@ nav.tabs button.active { color: var(--accent); }
 #toast { position: fixed; left: 50%; bottom: calc(96px + env(safe-area-inset-bottom)); transform: translateX(-50%); background: #15201b; color: #fff; padding: 10px 16px; border-radius: 999px; font-size: 14px; z-index: 40; opacity: 0; transition: opacity 0.2s; pointer-events: none; max-width: 90vw; text-align: center; }
 #toast.show { opacity: 0.95; }
 .hidden { display: none !important; }
+body.dbg-open { padding-bottom: calc(45vh + 84px + env(safe-area-inset-bottom)); }
+body.dbg-open nav.tabs { bottom: 45vh; }
+body.dbg-open #toast { bottom: calc(45vh + 96px + env(safe-area-inset-bottom)); }
 </style>
 <script>
 /* ---------------------------------------------------------------------------
@@ -259,16 +268,15 @@ nav.tabs button.active { color: var(--accent); }
           <label class="grow hidden" id="zoomWrap"><span class="small muted">Zoom</span> <input type="range" id="zoom" min="1" max="1" step="0.1" value="1"></label>
         </div>
       </div>
+      <form class="manual" id="manualForm" autocomplete="off" novalidate>
+        <label class="field" for="manualCode">Or type a barcode</label>
+        <div class="row">
+          <input class="grow" type="text" id="manualCode" inputmode="numeric" pattern="[0-9]*" placeholder="e.g. 049000028911" enterkeyhint="search">
+          <button class="btn primary" id="btnLookup" type="submit">Look up</button>
+        </div>
+        <div class="tiny muted" style="margin-top:6px">EAN-13, UPC-A (12), EAN-8 or UPC-E (8 digits). Cached lookups are instant.</div>
+      </form>
     </div>
-
-    <form class="card" id="manualForm" autocomplete="off">
-      <label class="field" for="manualCode">Manual barcode entry</label>
-      <div class="row">
-        <input class="grow" type="text" id="manualCode" inputmode="numeric" pattern="[0-9]*" placeholder="e.g. 049000028911" enterkeyhint="search">
-        <button class="btn primary" id="btnLookup" type="submit">Look up</button>
-      </div>
-      <div class="tiny muted" style="margin-top:6px">EAN-13, UPC-A (12), EAN-8 or UPC-E (8 digits). Cached lookups are instant.</div>
-    </form>
 
     <div id="result"></div>
     <div id="missingLine"></div>
@@ -316,7 +324,7 @@ nav.tabs button.active { color: var(--accent); }
       <h2>Scanner</h2>
       <label class="field" for="decoderPref">Barcode decoder</label>
       <select id="decoderPref">
-        <option value="auto">Auto (native BarcodeDetector if available, else ZXing)</option>
+        <option value="auto">Auto (native if available, else ZXing)</option>
         <option value="zxing">ZXing only</option>
       </select>
       <div class="small muted" id="decoderInfo"></div>
@@ -358,8 +366,9 @@ nav.tabs button.active { color: var(--accent); }
 
 <!-- ZXing fallback decoder (used when the native BarcodeDetector API is unavailable, i.e. iOS Safari).
      Pinned UMD build; exposes the global `ZXingBrowser` and bundles @zxing/library. -->
-<script src="https://cdn.jsdelivr.net/npm/@zxing/browser@0.2.1/umd/zxing-browser.min.js"
-        onerror="window.__zxingLoadError = true; window.__dbg && window.__dbg.push('error', 'ZXing script failed to load from jsDelivr: ' + this.src)"></script>
+<script id="zxingScript" async src="https://cdn.jsdelivr.net/npm/@zxing/browser@0.2.1/umd/zxing-browser.min.js"
+        onload="window.__zxingState = 'ok'"
+        onerror="window.__zxingState = 'error'; window.__dbg && window.__dbg.push('error', 'ZXing script failed to load from jsDelivr: ' + this.src)"></script>
 
 <script>
 (function () {
@@ -369,7 +378,7 @@ var APP_VERSION = '0.1.0';
 var OFF_BASE = 'https://world.openfoodfacts.org/api/v2/product/';
 var OFF_FIELDS = ['code', 'product_name', 'product_name_en', 'generic_name', 'brands', 'quantity', 'serving_size', 'serving_quantity',
   'serving_quantity_unit', 'nutrition_data_per', 'nutriments', 'ingredients_text', 'ingredients_text_en', 'nova_group',
-  'nutriscore_grade', 'nutrition_grades', 'additives_tags', 'categories', 'categories_tags', 'image_front_small_url',
+  'nutriscore_grade', 'nutrition_grades', 'additives_tags', 'additives_n', 'categories', 'categories_tags', 'image_front_small_url',
   'image_front_thumb_url', 'image_small_url', 'image_url'].join(',');
 var USDA_BASE = 'https://api.nal.usda.gov/fdc/v1/foods/search';
 var ZXING_FALLBACK_URL = 'https://unpkg.com/@zxing/browser@0.2.1/umd/zxing-browser.min.js';
@@ -544,9 +553,19 @@ function normOFF(p) {
       fat: g('fat' + suffix), satFat: g('saturated-fat' + suffix), sodiumMg: sodium === null ? null : Math.round(sodium * 1000) };
   }
   var servingQty = toNum(p.serving_quantity);
+  if (servingQty !== null && servingQty <= 0) servingQty = null;
   var servingUnit = p.serving_quantity_unit ? String(p.serving_quantity_unit) : 'g';
+  if (servingQty === null && p.serving_size) {                       // e.g. "2 cookies (30 g)" without serving_quantity
+    var mm = /(\d+(?:[.,]\d+)?)\s*(g|ml)\b/i.exec(String(p.serving_size));
+    if (mm) { servingQty = toNum(mm[1]); servingUnit = mm[2].toLowerCase(); if (servingQty !== null && servingQty <= 0) servingQty = null; }
+  }
   var servingSize = (p.serving_size && String(p.serving_size).trim()) || (servingQty !== null ? servingQty + ' ' + servingUnit : null);
+  if (servingSize && /^0+(\.0+)?\s*[a-z]*$/i.test(servingSize)) servingSize = null;
   function stripLang(t) { return String(t).replace(/^[a-z]{2,3}:/, ''); }
+  var nsRaw = firstNonNull(p.nutriscore_grade, p.nutrition_grades);
+  var ns = nsRaw ? String(nsRaw).trim().toLowerCase() : null;
+  var catTags = (p.categories_tags || []).map(function (t) { return stripLang(t).replace(/-/g, ' '); });
+  var catText = p.categories ? String(p.categories).split(',').map(function (c) { return stripLang(c.trim()); }).filter(Boolean).join(', ') : null;
   return {
     source: 'OFF',
     name: firstNonNull(p.product_name, p.product_name_en, p.generic_name),
@@ -559,9 +578,12 @@ function normOFF(p) {
     perServing: nut('_serving'),
     ingredients: firstNonNull(p.ingredients_text_en, p.ingredients_text),
     nova: toNum(p.nova_group),
-    nutriscore: firstNonNull(p.nutriscore_grade, p.nutrition_grades),
+    nutriscore: (ns && /^[a-e]$/.test(ns)) ? ns : null,          // only a real grade counts as present
+    nutriscoreNote: (ns && !/^[a-e]$/.test(ns)) ? ns : null,     // 'unknown' / 'not-applicable'
     additives: (p.additives_tags || []).map(stripLang),
-    categories: p.categories || ((p.categories_tags || []).map(stripLang).join(', ') || null),
+    additivesAnalysed: p.additives_n !== undefined && p.additives_n !== null,
+    categories: catTags.length ? catTags.join(', ') : catText,
+    basis: (/^ml$/i.test(servingUnit) || p.nutrition_data_per === '100ml') ? 'ml' : 'g',
     nutritionDataPer: p.nutrition_data_per || null,
     url: 'https://world.openfoodfacts.org/product/' + encodeURIComponent(p.code || '')
   };
@@ -581,7 +603,8 @@ function lookupOFF(code, format) {
         if (codeUsed !== c) dbg('log', 'OFF returned code ' + codeUsed + ' for query ' + c);
         return { status: 'found', codeUsed: c, storedCode: codeUsed, product: j.product, tried: tried };
       }
-      if (r.status === 404 || (j && j.status === 0)) { dbg('log', 'OFF: ' + c + ' not found' + (i + 1 < cands.length ? ', retrying as ' + cands[i + 1] : '')); return tryNext(i + 1); }
+      if ((j && j.status === 0) || (r.status === 404 && j)) { dbg('log', 'OFF: ' + c + ' not found' + (i + 1 < cands.length ? ', retrying as ' + cands[i + 1] : '')); return tryNext(i + 1); }
+      if (r.status === 404) return { status: 'error', error: 'OFF HTTP 404 without a JSON body (API unreachable?)', tried: tried };
       if (r.status === 429) return { status: 'error', error: 'OFF rate limited (HTTP 429)', tried: tried };
       return { status: 'error', error: 'OFF HTTP ' + r.status + (j && j.status_verbose ? ' ' + j.status_verbose : ''), tried: tried };
     }, function (err) {
@@ -610,8 +633,11 @@ function normUSDA(f) {
     if (key && per100[key] === null) per100[key] = (key === 'sodiumMg') ? Math.round(val) : val;
   });
   var ss = toNum(f.servingSize);
-  var unit = String(f.servingSizeUnit || '').toLowerCase().trim();
-  var isMassOrVol = /^(g|grm|gm|gram|grams|ml|mlt|milliliter|millilitre|millilitre)$/.test(unit);
+  if (ss !== null && ss <= 0) ss = null;
+  var unitRaw = String(f.servingSizeUnit || '').toLowerCase().trim();
+  var unitMap = { g: 'g', grm: 'g', gm: 'g', gr: 'g', gram: 'g', grams: 'g', ml: 'ml', mlt: 'ml', milliliter: 'ml', millilitre: 'ml', milliliters: 'ml', millilitres: 'ml' };
+  var unit = unitMap[unitRaw] || unitRaw;      // FDC uses g/ml for Label Insight records and GRM/MLT (UN/CEFACT) for GDSN ones
+  var isMassOrVol = !!unitMap[unitRaw];
   var servingGrams = (ss !== null && isMassOrVol) ? ss : null;
   var household = f.householdServingFullText ? String(f.householdServingFullText).trim() : '';
   var servingSize = ss !== null ? ((ss + ' ' + (unit || '')).trim() + (household ? ' (' + household + ')' : '')) : (household || null);
@@ -634,14 +660,30 @@ function normUSDA(f) {
     nutriscore: null,
     additives: [],
     categories: f.foodCategory || null,
+    basis: unit === 'ml' ? 'ml' : 'g',
     gtinUpc: f.gtinUpc || null,
     publishedDate: f.publishedDate || null,
     url: 'https://fdc.nal.usda.gov/food-details/' + encodeURIComponent(f.fdcId) + '/nutrients'
   };
 }
+// FDC's search matches the stored gtinUpc string exactly. Label Insight records store 12-digit UPC-A, GDSN records the
+// 14-digit GTIN with leading zeros, some records 13 digits or stripped zeros, so try each form in likelihood order.
+function usdaCandidates(code, format) {
+  var base = (format === 'upc_e' && upcEToUpcA(code)) || code;
+  var s = stripLeadingZeros(base) || base;
+  function pad(x, n) { while (x.length < n) x = '0' + x; return x; }
+  var out = [];
+  function add(x) { if (x && out.indexOf(x) < 0) out.push(x); }
+  if (format === 'ean_8') { add(code); add(pad(s, 14)); }
+  else if (s.length <= 12) { add(pad(s, 12)); add(pad(s, 14)); add(pad(s, 13)); add(s); }
+  else if (s.length === 13) { add(s); add(pad(s, 14)); }
+  else add(s);
+  if (format === 'upc_e' || (code.length === 8 && !format)) add(code);
+  return out;
+}
 function lookupUSDA(code, format, apiKey) {
   if (!apiKey) return Promise.resolve({ status: 'skipped' });
-  var cands = candidateCodes(code, format);
+  var cands = usdaCandidates(code, format);
   var tried = [];
   var want = stripLeadingZeros(code);
   function pickBest(foods, c) {
@@ -675,6 +717,7 @@ function lookupUSDA(code, format, apiKey) {
 function srcHas(src, field) {
   if (!src) return false;
   if (NUT_KEYS.indexOf(field) >= 0) return src.per100[field] !== null || src.perServing[field] !== null;
+  if (field === 'additives') return src.additivesAnalysed === true || (Array.isArray(src.additives) && src.additives.length > 0);
   var v = src[field];
   return v !== null && v !== undefined && v !== '' && !(Array.isArray(v) && !v.length);
 }
@@ -692,18 +735,26 @@ function mergeProduct(entry) {
   NUT_KEYS.forEach(function (k) {
     for (var i = 0; i < srcs.length; i++) { if (srcs[i].per100[k] !== null) { per100[k] = srcs[i].per100[k]; per100From[k] = srcs[i].source; break; } }
   });
-  // Per-serving values are only taken from the source that defined the serving size, so they stay internally consistent.
-  var servSrc = null;
-  for (var i = 0; i < srcs.length; i++) { if (srcs[i].source === m.servingSize.from) servSrc = srcs[i]; }
+  // Per-serving values are only taken from the source that defines the serving size, so they stay internally consistent.
+  // Prefer the source that can actually produce per-serving numbers (a weight, or ready per-serving values).
+  var servSrc = null, bestScore = 0;
+  srcs.forEach(function (src) {
+    var ready = NUT_KEYS.filter(function (k) { return src.perServing[k] !== null; }).length;
+    var score = (src.servingGrams !== null && src.servingGrams > 0) ? 10 : (ready > 0 ? 5 : 0);
+    if (score > bestScore) { bestScore = score; servSrc = src; }   // strict '>' keeps the earlier (primary) source on ties
+  });
+  if (!servSrc) { for (var i = 0; i < srcs.length; i++) { if (!servSrc && srcs[i].servingSize) servSrc = srcs[i]; } }
+  if (servSrc) m.servingSize = { v: servSrc.servingSize, from: servSrc.source };
   var perServing = emptyNut(), perServingFrom = {};
   if (servSrc) {
     NUT_KEYS.forEach(function (k) {
       if (servSrc.perServing[k] !== null) { perServing[k] = servSrc.perServing[k]; perServingFrom[k] = servSrc.source; }
-      else if (servSrc.servingGrams !== null && per100[k] !== null) { perServing[k] = per100[k] * servSrc.servingGrams / 100; perServingFrom[k] = per100From[k] + ' × serving'; }
+      else if (servSrc.servingGrams !== null && servSrc.servingGrams > 0 && per100[k] !== null) { perServing[k] = per100[k] * servSrc.servingGrams / 100; perServingFrom[k] = per100From[k] + ' × serving'; }
     });
   }
   [per100, perServing].forEach(function (t) { t.netCarbs = (t.carbs !== null && t.fiber !== null) ? Math.max(0, t.carbs - t.fiber) : null; });
   m.per100 = per100; m.perServing = perServing; m.per100From = per100From; m.perServingFrom = perServingFrom;
+  m.basis = (servSrc && servSrc.basis) || (srcs[0] && srcs[0].basis) || 'g';
   m.coverage = COVERAGE_FIELDS.map(function (cf) { return { key: cf[0], label: cf[1], by: srcs.map(function (s) { return { source: s.source, has: srcHas(s, cf[0]) }; }) }; });
   m.missing = MISSING_FIELDS.filter(function (mf) {
     var k = mf[0];
@@ -726,8 +777,8 @@ function lookup(code, format, opts) {
   if (cached && cached.barcode === code) {
     dbg('log', 'Cache hit for ' + code + ' (fetched ' + cached.fetchedAt + ')');
     // A record cached before a USDA key existed can be upgraded with a USDA query now.
-    if (apiKey && (!cached.usda || cached.usda.status === 'skipped')) {
-      dbg('log', 'Cached record has no USDA data and a key is now set — querying USDA');
+    if (apiKey && (!cached.usda || cached.usda.status === 'skipped' || cached.usda.status === 'error')) {
+      dbg('log', 'Cached record has no USDA answer yet (' + (cached.usda ? cached.usda.status : 'none') + ') and a key is set — querying USDA');
       return lookupUSDA(code, cached.format || format, apiKey).then(function (u) {
         cached.usda = usdaSummary(u);
         if (u.status !== 'error') store.setJSON(cacheKey, cached);
@@ -746,8 +797,9 @@ function lookup(code, format, opts) {
     };
     dbg('log', 'Lookup ' + code + ' done in ' + (now() - t0) + 'ms: OFF=' + off.status + (off.codeUsed ? ' (as ' + off.codeUsed + ')' : '') + (off.error ? ' [' + off.error + ']' : '') +
       ', USDA=' + usda.status + (usda.codeUsed ? ' (as ' + usda.codeUsed + ', fdcId ' + usda.food.fdcId + ')' : '') + (usda.error ? ' [' + usda.error + ']' : ''));
-    // Only cache definitive answers; a network error must not poison the cache.
-    if (off.status !== 'error' && usda.status !== 'error') store.setJSON(cacheKey, entry);
+    // Cache whenever OFF gave a definitive answer; an OFF network error must not poison the cache. A USDA error is kept in
+    // the entry and retried on the next lookup of the same code (see the cache-hit branch above).
+    if (off.status !== 'error') store.setJSON(cacheKey, entry);
     return { entry: entry, merged: mergeProduct(entry), fromCache: false };
   });
 }
@@ -758,7 +810,7 @@ function usdaSummary(u) {
 
 /* ---------------------------------------------------------- tally & log */
 var tally = null, scanLog = null;
-function emptyTally() { return { total: 0, off: 0, usda: 0, neither: 0, incomplete: 0 }; }
+function emptyTally() { return { total: 0, off: 0, usda: 0, neither: 0, incomplete: 0, errors: 0 }; }
 function loadPersisted() {
   tally = store.getJSON(LS.tally, null) || emptyTally();
   scanLog = store.getJSON(LS.log, null) || [];
@@ -767,15 +819,17 @@ function loadPersisted() {
 function recordScan(result, origin) {
   var e = result.entry, m = result.merged;
   var foundOFF = e.off.status === 'found', foundUSDA = e.usda.status === 'found';
+  var errored = e.off.status === 'error' || e.usda.status === 'error';
   tally.total++;
   if (foundOFF) tally.off++;
   if (foundUSDA) tally.usda++;
-  if (!foundOFF && !foundUSDA) tally.neither++;
+  if (!foundOFF && !foundUSDA) { if (errored) tally.errors = (tally.errors || 0) + 1; else tally.neither++; }   // a failed request says nothing about coverage
   if ((foundOFF || foundUSDA) && m.missing.length) tally.incomplete++;
   scanLog.unshift({
     ts: isoNow(), barcode: e.barcode, format: e.format || '', name: m.name.v || '',
     off: e.off.status, offCode: e.off.codeUsed || '', usda: e.usda.status, usdaCode: e.usda.codeUsed || '',
-    missing: m.missing.slice(), cached: !!result.fromCache, origin: origin
+    missing: (foundOFF || foundUSDA) ? m.missing.slice() : [],   // only meaningful for products that were found
+    cached: !!result.fromCache, origin: origin
   });
   if (scanLog.length > LOG_MAX) scanLog.length = LOG_MAX;
   store.setJSON(LS.tally, tally);
@@ -789,19 +843,19 @@ function toCSV(entries) {
   var lines = [cols.join(',')];
   entries.forEach(function (e) {
     var found = e.off === 'found' || e.usda === 'found';
-    lines.push([e.ts, e.barcode, e.format || '', e.name, e.off, e.offCode, e.usda, e.usdaCode, found ? 'yes' : 'no',
+    var errored = !found && (e.off === 'error' || e.usda === 'error');
+    lines.push([e.ts, e.barcode, e.format || '', e.name, e.off, e.offCode, e.usda, e.usdaCode, found ? 'yes' : (errored ? 'error' : 'no'),
       (found && e.missing && e.missing.length) ? 'yes' : 'no', (e.missing || []).join('; '), e.cached ? 'yes' : 'no', e.origin || ''].map(cell).join(','));
   });
   return lines.join('\r\n');
 }
 function renderTally() {
   var t = tally, el = clear($('tally'));
-  var found = t.total - t.neither;
-  [['Scans', t.total], ['Found in OFF', t.off], ['Found in USDA', t.usda], ['Found in neither', t.neither], ['Found, incomplete', t.incomplete], ['Found, complete', Math.max(0, found - t.incomplete)]]
+  [['Scans', t.total], ['Found in OFF', t.off], ['Found in USDA', t.usda], ['Found in neither', t.neither], ['Found, incomplete', t.incomplete], ['Lookup errors', t.errors || 0]]
     .forEach(function (x) { el.appendChild(h('div', { class: 'tile' }, [h('div', { class: 'n', text: String(x[1]) }), h('div', { class: 'l', text: x[0] })])); });
   var uniq = {};
   scanLog.forEach(function (e) { uniq[e.barcode] = 1; });
-  $('tallyNote').textContent = 'Every lookup counts as a scan (cached repeats included). Unique barcodes in log: ' + Object.keys(uniq).length + '. "Incomplete" = found but missing serving size, carbs, sugars, fiber, protein or ingredients.';
+  $('tallyNote').textContent = 'Every lookup counts as a scan (cached repeats included). Unique barcodes in log: ' + Object.keys(uniq).length + '. "Incomplete" = found but missing serving size, carbs, sugars, fiber, protein or ingredients. Safari may clear this data after 7 days without a visit — export now and then.';
 }
 function renderLog() {
   var ul = clear($('logList'));
@@ -811,14 +865,15 @@ function renderLog() {
     var flags = h('div', { class: 'flags' });
     flags.appendChild(h('span', { class: 'chip ' + (e.off === 'found' ? 'ok' : e.off === 'error' ? 'warn' : 'bad'), text: 'OFF ' + statusMark(e.off) }));
     if (e.usda !== 'skipped') flags.appendChild(h('span', { class: 'chip ' + (e.usda === 'found' ? 'ok' : e.usda === 'error' ? 'warn' : 'bad'), text: 'USDA ' + statusMark(e.usda) }));
-    if ((e.off === 'found' || e.usda === 'found') && e.missing && e.missing.length) flags.appendChild(h('span', { class: 'chip warn', text: 'missing ' + e.missing.length }));
+    if ((e.off === 'found' || e.usda === 'found') && e.missing && e.missing.length) flags.appendChild(h('span', { class: 'chip warn', text: 'missing: ' + e.missing.join(', ') }));
     var li = h('li', { onclick: function () { showTab('scan'); handleCode(e.barcode, e.format || null, 'log'); } }, [
       h('div', { class: 'grow' }, [
-        h('div', { class: 'nm', text: e.name || (e.off === 'found' || e.usda === 'found' ? '(unnamed)' : 'Not found') }),
+        h('div', { class: 'nm', text: e.name || (e.off === 'found' || e.usda === 'found' ? '(unnamed)' : (e.off === 'error' || e.usda === 'error') ? 'Lookup failed' : 'Not found') }),
         h('div', { class: 'bc', text: e.barcode + (e.cached ? ' · cached' : '') }),
         h('div', { class: 't', text: shortTime(e.ts) + (e.origin ? ' · ' + e.origin : '') })
       ]),
-      flags
+      flags,
+      h('span', { class: 'muted', text: '›', 'aria-hidden': 'true' })
     ]);
     ul.appendChild(li);
   });
@@ -857,10 +912,11 @@ function renderResult(res) {
   var box = clear($('result'));
   var card = h('div', { class: 'card' });
   if (!m.found) {
+    var errored = e.off.status === 'error' || e.usda.status === 'error';
     card.appendChild(h('div', { class: 'prod' }, [
-      h('div', { class: 'noimg', text: 'no data' }),
+      h('div', { class: 'noimg', text: errored ? 'error' : 'no data' }),
       h('div', { class: 'grow' }, [
-        h('div', { class: 'name', text: 'Not found' }),
+        h('div', { class: 'name', text: errored ? 'Lookup failed' : 'Not found' }),
         h('div', { class: 'brand mono', text: e.barcode + (e.format ? ' (' + e.format + ')' : '') }),
         h('div', { class: 'tiny muted', text: (res.fromCache ? 'cached result · ' : '') + e.fetchedAt })
       ])
@@ -873,7 +929,7 @@ function renderResult(res) {
     ]));
     box.appendChild(card);
     var ml = clear($('missingLine'));
-    ml.appendChild(h('div', { class: 'missing bad', text: 'Missing fields: everything — product not found in any source.' }));
+    ml.appendChild(h('div', { class: 'missing bad', text: errored ? 'Lookup failed — no data (counted as a lookup error, not as "not found"). Re-fetch to try again.' : 'Missing fields: everything — product not found in any source.' }));
     return;
   }
   var head = h('div', { class: 'prod' });
@@ -888,21 +944,24 @@ function renderResult(res) {
   card.appendChild(h('div', { class: 'kv' }, [h('b', {}, 'Serving size: '), m.servingSize.v ? (m.servingSize.v + ' ') : '— ', m.servingSize.from ? h('span', { class: 'tiny muted', text: '(' + m.servingSize.from + ')' }) : null]));
   // nutrients table
   var tbl = h('table', { class: 'nut' });
-  tbl.appendChild(h('tr', {}, [h('th', { text: 'Nutrient' }), h('th', { text: 'Per serving' }), h('th', { text: 'Per 100 g' })]));
+  tbl.appendChild(h('tr', {}, [h('th', { text: 'Nutrient' }), h('th', { text: 'Per serving' }), h('th', { text: 'Per 100 ' + (m.basis || 'g') })]));
   NUT_ROWS.forEach(function (r) {
     var k = r[0];
     var tr = h('tr', { class: k === 'netCarbs' ? 'calc' : null }, [
-      h('td', { text: r[1] + (k === 'netCarbs' ? ' (carbs − fiber)' : '') }),
+      h('td', { text: r[1] + (k === 'netCarbs' ? ' (carbs − fiber)' : '') }),   // label column may wrap on narrow phones
       h('td', { text: fmtVal(m.perServing[k], r[2]) }),
       h('td', { text: fmtVal(m.per100[k], r[2]) })
     ]);
     tbl.appendChild(tr);
   });
   card.appendChild(tbl);
-  var provenance = [];
-  NUT_KEYS.forEach(function (k) { if (m.perServingFrom[k] && m.perServingFrom[k].indexOf('×') > 0) provenance.push(k); });
-  if (provenance.length) card.appendChild(h('div', { class: 'tiny muted', style: 'margin-top:4px', text: 'Per-serving values computed from per-100 g × serving weight for: ' + provenance.join(', ') + '.' }));
-  if (m.sources.length > 1) card.appendChild(h('div', { class: 'tiny muted', text: 'Per-100 g values come from ' + uniqueList(NUT_KEYS.map(function (k) { return m.per100From[k]; })).join(' + ') + '; per-serving from ' + (m.servingSize.from || '—') + '.' }));
+  var nutLabel = {};
+  NUT_ROWS.forEach(function (r) { nutLabel[r[0]] = r[1].toLowerCase(); });
+  var provenance = NUT_KEYS.filter(function (k) { return m.perServingFrom[k] && m.perServingFrom[k].indexOf('×') > 0; });
+  var given = NUT_KEYS.filter(function (k) { return m.perServing[k] !== null; });
+  if (provenance.length) card.appendChild(h('div', { class: 'tiny muted', style: 'margin-top:4px',
+    text: (provenance.length === given.length ? 'All per-serving values are' : 'Per-serving ' + provenance.map(function (k) { return nutLabel[k]; }).join(', ') + ' are') + ' computed from per-100 ' + (m.basis || 'g') + ' × serving size (' + m.servingSize.v + ').' }));
+  if (m.sources.length > 1) card.appendChild(h('div', { class: 'tiny muted', text: 'Per-100 ' + (m.basis || 'g') + ' values come from ' + uniqueList(NUT_KEYS.map(function (k) { return m.per100From[k]; })).join(' + ') + '; per-serving from ' + (m.servingSize.from || '—') + '.' }));
   // ingredients
   var ingr = m.ingredients.v;
   var det = h('details', { open: ingr && ingr.length < 240 ? '' : null }, [
@@ -915,10 +974,11 @@ function renderResult(res) {
   var novaLabels = { 1: 'unprocessed / minimally processed', 2: 'processed culinary ingredient', 3: 'processed', 4: 'ultra-processed' };
   kv.appendChild(h('div', {}, [h('b', {}, 'NOVA group: '), m.nova.v !== null ? String(m.nova.v) + (novaLabels[m.nova.v] ? ' — ' + novaLabels[m.nova.v] : '') : '—']));
   var ns = m.nutriscore.v ? String(m.nutriscore.v).toLowerCase() : null;
-  var nsNode = (ns && /^[a-e]$/.test(ns)) ? h('span', { class: 'nutri ' + ns, text: ns.toUpperCase() }) : (ns ? ns : '—');
+  var nsNote = (e.off.norm && e.off.norm.nutriscoreNote) ? String(e.off.norm.nutriscoreNote).replace(/-/g, ' ') : null;
+  var nsNode = ns ? h('span', { class: 'nutri ' + ns, text: ns.toUpperCase() }) : (nsNote ? h('span', { class: 'muted', text: nsNote + ' (no grade)' }) : '—');
   kv.appendChild(h('div', {}, [h('b', {}, 'Nutri-Score: '), nsNode]));
   var adds = m.additives.v || [];
-  kv.appendChild(h('div', {}, [h('b', {}, 'Additives: '), adds.length ? h('span', { class: 'chips', style: 'display:inline-flex' }, adds.map(function (a) { return h('span', { class: 'chip', text: a }); })) : (m.sources.indexOf('OFF') >= 0 ? 'none tagged' : '—')]));
+  kv.appendChild(h('div', {}, [h('b', {}, 'Additives: '), adds.length ? h('span', { class: 'chips', style: 'display:inline-flex' }, adds.map(function (a) { return h('span', { class: 'chip', text: a }); })) : ((e.off.norm && e.off.norm.additivesAnalysed) ? 'none (ingredients analysed)' : '—')]));
   kv.appendChild(h('div', {}, [h('b', {}, 'Categories: '), m.categories.v || '—']));
   card.appendChild(kv);
   // sources
@@ -943,6 +1003,20 @@ function renderResult(res) {
   if (m.missing.length) ml.appendChild(h('div', { class: 'missing', text: 'Missing fields: ' + m.missing.join(', ') }));
   else ml.appendChild(h('div', { class: 'missing ok', text: 'Missing fields: none — all six tracked fields present.' }));
 }
+// After a lookup, bring the result into view. While the camera runs, keep the viewfinder on screen (scroll it to just
+// below the header so the card starts right under it); otherwise scroll the card itself into view.
+function revealResult() {
+  try {
+    if (cam.scanning) {
+      var hdr = document.querySelector('.top').offsetHeight || 0;
+      var vpTop = $('viewport').getBoundingClientRect().top + window.scrollY;
+      window.scrollTo({ top: Math.max(0, vpTop - hdr - 8), behavior: 'smooth' });
+      return;
+    }
+    var r = $('result'), rect = r.getBoundingClientRect();
+    if (rect.top > window.innerHeight * 0.55 || rect.top < 0) r.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  } catch (e) { /* ignore */ }
+}
 function uniqueList(arr) { var out = []; arr.forEach(function (x) { if (x && out.indexOf(x) < 0) out.push(x); }); return out; }
 function refetch(entry) {
   store.remove(LS.cachePrefix + entry.barcode);
@@ -950,26 +1024,44 @@ function refetch(entry) {
 }
 
 /* ------------------------------------------------------------ handling */
-var lookupInFlight = false;
+var lookupInFlight = false, lookupSeq = 0;
 function handleCode(code, format, origin) {
   code = digitsOnly(code);
   if (!code) return Promise.resolve();
   if (lookupInFlight && origin === 'scan') return Promise.resolve();
+  var seq = ++lookupSeq;            // a newer request supersedes this one: its result is neither rendered nor recorded
   lookupInFlight = true;
+  $('btnLookup').disabled = true;
   renderLoading(code);
-  return lookup(code, format, { bypassCache: origin === 'refetch' }).then(function (res) {
+  function finish() {
+    if (seq !== lookupSeq) return;
+    lookupInFlight = false;
+    $('btnLookup').disabled = false;
+    var q = cam.queued; cam.queued = null;
+    if (q && cam.scanning && !(q.code === cam.lastCode && now() - cam.lastAt < DEDUPE_MS)) dispatchScan(q.code, q.format, q.rotated);
+  }
+  return Promise.resolve().then(function () {
+    return lookup(code, format, { bypassCache: origin === 'refetch' });
+  }).then(function (res) {
+    if (seq !== lookupSeq) { dbg('log', 'Lookup ' + code + ' superseded by a newer one; not shown'); return; }
     renderResult(res);
     if (origin !== 'log') recordScan(res, origin);
+    revealResult();
   }, function (err) {
+    if (seq !== lookupSeq) return;
     console.error('Lookup failed for ' + code + ': ' + (err && err.stack || err));
     renderError(code, err);
-  }).then(function () { lookupInFlight = false; });
+  }).then(finish, function (err) {
+    console.error('Rendering the result failed: ' + (err && err.stack || err));
+    if (seq === lookupSeq) renderError(code, err);
+    finish();
+  });
 }
 
 /* -------------------------------------------------------------- camera */
 var cam = { stream: null, track: null, scanning: false, decoder: null, detector: null, zx: null, timer: null, rotate: false,
   frames: 0, decodeMs: 0, nativeErrors: 0, lastCode: null, lastAt: 0, pending: { code: null, count: 0, at: 0 }, wakeLock: null, audio: null,
-  canvas: null, ctx: null, frameSource: null, torchOn: false };
+  canvas: null, ctx: null, frameSource: null, torchOn: false, queued: null, paused: false };
 var video = null;
 function setCamStatus(msg, isErr) { var el = $('camStatus'); el.textContent = msg; el.className = 'status' + (isErr ? ' err' : ''); }
 function initAudio() {
@@ -993,23 +1085,102 @@ function flashGuide() {
   var g = $('guide'); g.classList.add('hit');
   setTimeout(function () { g.classList.remove('hit'); }, 350);
 }
+var zxingReady = null;
+// Resolves true once ZXingBrowser is available. The CDN tag is async so the app never blocks on it; if it fails
+// (or stalls for 20 s) the unpkg copy is tried once.
 function ensureZXing() {
   if (window.ZXingBrowser) return Promise.resolve(true);
-  return new Promise(function (resolve) {
-    dbg('warn', 'ZXingBrowser global missing; loading fallback from unpkg');
-    var s = document.createElement('script');
-    s.src = ZXING_FALLBACK_URL;
-    s.onload = function () { dbg('log', 'ZXing fallback loaded: ' + !!window.ZXingBrowser); resolve(!!window.ZXingBrowser); };
-    s.onerror = function () { dbg('error', 'ZXing fallback failed to load from unpkg'); resolve(false); };
-    document.head.appendChild(s);
-  });
+  if (zxingReady) return zxingReady;
+  zxingReady = new Promise(function (resolve) {
+    var settled = false, timer = null;
+    function loadFallback() {
+      dbg('warn', 'ZXingBrowser global missing; loading fallback from unpkg');
+      var s = document.createElement('script');
+      s.src = ZXING_FALLBACK_URL;
+      s.onload = function () { dbg('log', 'ZXing fallback loaded: ' + !!window.ZXingBrowser); resolve(!!window.ZXingBrowser); };
+      s.onerror = function () { dbg('error', 'ZXing fallback failed to load from unpkg'); resolve(false); };
+      document.head.appendChild(s);
+    }
+    function settle(fn) { if (settled) return; settled = true; clearTimeout(timer); fn(); }
+    var tag = document.getElementById('zxingScript');
+    if (!tag || window.__zxingState === 'error') { settle(loadFallback); return; }
+    if (window.__zxingState === 'ok') { settle(function () { if (window.ZXingBrowser) resolve(true); else loadFallback(); }); return; }
+    tag.addEventListener('load', function () { settle(function () { if (window.ZXingBrowser) { dbg('log', 'ZXing loaded from jsDelivr'); resolve(true); } else loadFallback(); }); });
+    tag.addEventListener('error', function () { settle(loadFallback); });
+    timer = setTimeout(function () { settle(function () { dbg('warn', 'ZXing from jsDelivr still not loaded after 20 s; trying unpkg'); loadFallback(); }); }, 20000);
+  }).then(function (ok) { if (!ok) zxingReady = null; return ok; });
+  return zxingReady;
 }
 function makeZXingReader() {
   var Z = window.ZXingBrowser, BF = Z.BarcodeFormat;
   // DecodeHintType is not exported by the @zxing/browser UMD bundle; its enum values are stable: POSSIBLE_FORMATS = 2, TRY_HARDER = 3.
   var hints = new Map();
   hints.set(2, [BF.EAN_13, BF.EAN_8, BF.UPC_A, BF.UPC_E]);
-  return new Z.BrowserMultiFormatOneDReader(hints, { delayBetweenScanAttempts: SCAN_INTERVAL_MS, delayBetweenScanSuccess: 300 });
+  var reader = new Z.BrowserMultiFormatOneDReader(hints, { delayBetweenScanAttempts: SCAN_INTERVAL_MS, delayBetweenScanSuccess: 300 });
+  patchZXingUPCE(Z, reader);
+  return reader;
+}
+// @zxing/library 0.23.0 (bundled in @zxing/browser 0.2.1) ships a UPCEReader whose decodeMiddle returns a bare row offset
+// instead of {rowOffset, resultString}, so UPCEANReader.decodeRow reads undefined and every UPC-E symbol ends in
+// NotFoundException. Its number-system table also has a typo (0x1 instead of 0x1A). The base class helpers are intact,
+// so we replace UPCEReader.prototype.decodeRow with a straight port of the Java implementation.
+function patchZXingUPCE(Z, browserReader) {
+  try {
+    var BF = Z.BarcodeFormat;
+    var multi = browserReader.reader;
+    var upcean = multi && multi.readers && multi.readers[0];
+    var subs = (upcean && upcean.readers) || [];
+    var inst = null;
+    for (var i = 0; i < subs.length; i++) { if (subs[i].getBarcodeFormat && subs[i].getBarcodeFormat() === BF.UPC_E) inst = subs[i]; }
+    if (!inst) { dbg('warn', 'ZXing UPCEReader not found; UPC-E left unpatched'); return false; }
+    var UPCE = inst.constructor;
+    if (UPCE.__fsPatched) return true;
+    if (typeof UPCE.findStartGuardPattern !== 'function' || typeof UPCE.decodeDigit !== 'function' || typeof UPCE.findGuardPatternWithoutCounters !== 'function' || !UPCE.L_AND_G_PATTERNS) {
+      dbg('warn', 'ZXing UPC/EAN helpers missing; UPC-E left unpatched'); return false;
+    }
+    var NS_CHECK = [[0x38, 0x34, 0x32, 0x31, 0x2C, 0x26, 0x23, 0x2A, 0x29, 0x25], [0x07, 0x0B, 0x0D, 0x0E, 0x13, 0x19, 0x1C, 0x15, 0x16, 0x1A]];
+    var END_PATTERN = Int32Array.from([1, 1, 1, 1, 1, 1]);
+    function plainResult(text, format) {
+      var meta = null;
+      return {
+        getText: function () { return text; }, getBarcodeFormat: function () { return format; }, getResultPoints: function () { return null; },
+        getRawBytes: function () { return null; }, getNumBits: function () { return 0; }, getResultMetadata: function () { return meta; },
+        putMetadata: function (k, v) { if (!meta) meta = new Map(); meta.set(k, v); },
+        putAllMetadata: function (m) { if (m) { if (!meta) meta = new Map(); m.forEach(function (v, k) { meta.set(k, v); }); } },
+        addResultPoints: function () { }, getTimestamp: function () { return Date.now(); }
+      };
+    }
+    UPCE.prototype.decodeRow = function (rowNumber, row) {
+      var startRange = UPCE.findStartGuardPattern(row);
+      var counters = new Int32Array(4);
+      var end = row.getSize();
+      var rowOffset = startRange[1];
+      var lgPattern = 0, digits = '';
+      for (var x = 0; x < 6 && rowOffset < end; x++) {
+        var best = UPCE.decodeDigit(row, counters, rowOffset, UPCE.L_AND_G_PATTERNS);
+        digits += String(best % 10);
+        for (var c = 0; c < 4; c++) rowOffset += counters[c];
+        if (best >= 10) lgPattern |= 1 << (5 - x);
+      }
+      if (digits.length !== 6) throw new Error('UPC-E: short middle');
+      var ns = -1, cd = -1;
+      for (var n = 0; n < 2 && ns < 0; n++) { for (var d = 0; d < 10; d++) { if (NS_CHECK[n][d] === lgPattern) { ns = n; cd = d; break; } } }
+      if (ns < 0) throw new Error('UPC-E: parity pattern');
+      var text = String(ns) + digits + String(cd);
+      var endRange = UPCE.findGuardPatternWithoutCounters(row, rowOffset, true, END_PATTERN);
+      var endPos = endRange[1], quietEnd = endPos + (endPos - endRange[0]);
+      if (quietEnd >= row.getSize() || !row.isRange(endPos, quietEnd, false)) throw new Error('UPC-E: no quiet zone');
+      var upca = upcEToUpcA(text);
+      if (!upca || upca.slice(-1) !== text.slice(-1)) throw new Error('UPC-E: checksum');
+      return plainResult(text, BF.UPC_E);
+    };
+    UPCE.__fsPatched = true;
+    dbg('log', 'ZXing UPCEReader patched (library UPC-E decoder is broken in 0.23.0)');
+    return true;
+  } catch (e) {
+    dbg('warn', 'ZXing UPC-E patch failed: ' + (e && e.message || e));
+    return false;
+  }
 }
 function pickDecoder() {
   var pref = store.get(LS.decoder, 'auto');
@@ -1071,9 +1242,10 @@ function startCamera() {
     cam.decoder = dec;
     cam.scanning = true;
     cam.frames = 0; cam.decodeMs = 0; cam.nativeErrors = 0; cam.rotate = false;
-    cam.pending = { code: null, count: 0, at: 0 };
+    cam.pending = { code: null, count: 0, at: 0 }; cam.queued = null;
     if (!cam.canvas) { cam.canvas = document.createElement('canvas'); cam.ctx = cam.canvas.getContext('2d', { willReadFrequently: true }) || cam.canvas.getContext('2d'); }
     $('btnStart').classList.add('hidden'); $('btnStop').classList.remove('hidden');
+    $('manualForm').classList.add('hidden');
     $('btnStart').disabled = false;
     setupTrackControls();
     requestWakeLock();
@@ -1119,6 +1291,7 @@ function stopCamera(statusMsg) {
   releaseStream();
   releaseWakeLock();
   $('btnStart').classList.remove('hidden'); $('btnStop').classList.add('hidden');
+  $('manualForm').classList.remove('hidden');
   $('camCtl').classList.add('hidden');
   var fps = cam.frames && cam.decodeMs ? ' avg decode ' + Math.round(cam.decodeMs / cam.frames) + 'ms over ' + cam.frames + ' frames' : '';
   dbg('log', 'Camera stopped.' + fps);
@@ -1126,6 +1299,7 @@ function stopCamera(statusMsg) {
 }
 function scanLoop() {
   if (!cam.scanning) return;
+  if (cam.paused) { cam.timer = setTimeout(scanLoop, 250); return; }   // another tab is showing; keep the stream, skip decoding
   var t0 = now();
   var p;
   if (cam.decoder.kind === 'native') p = detectNative();
@@ -1156,8 +1330,21 @@ function scanLoop() {
     cam.timer = setTimeout(scanLoop, Math.max(20, SCAN_INTERVAL_MS - elapsed));
   });
 }
+// The part of the camera frame actually shown in the viewport (object-fit: cover), in frame pixels.
+function visibleRect(vw, vh) {
+  var vp = $('viewport'), bw = vp.clientWidth || vw, bh = vp.clientHeight || vh;
+  var scale = Math.max(bw / vw, bh / vh);
+  var w = Math.min(vw, Math.round(bw / scale)), h = Math.min(vh, Math.round(bh / scale));
+  return { x: Math.round((vw - w) / 2), y: Math.round((vh - h) / 2), w: w, h: h };
+}
 function detectNative() {
-  return cam.detector.detect(video).then(function (codes) {
+  var vw = video.videoWidth || 0, vh = video.videoHeight || 0;
+  if (!vw || !vh) return Promise.resolve(null);
+  var vis = visibleRect(vw, vh), canvas = cam.canvas, ctx = cam.ctx;
+  if (canvas.width !== vis.w || canvas.height !== vis.h) { canvas.width = vis.w; canvas.height = vis.h; }
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.drawImage(video, vis.x, vis.y, vis.w, vis.h, 0, 0, vis.w, vis.h);
+  return cam.detector.detect(canvas).then(function (codes) {
     if (!codes || !codes.length) return null;
     var c = codes[0];
     return { text: c.rawValue, format: String(c.format || '').toLowerCase() };
@@ -1172,22 +1359,24 @@ function zxFormatName(n) {
   var name = BF && BF[n];
   return String(name || n).toLowerCase();
 }
-// Draw the guide region of the current frame onto the work canvas and run ZXing on it. Alternate frames are rotated 90°
-// so vertical barcodes decode without ZXing's expensive TRY_HARDER mode. Returns a hit or null.
+// Draw the guide region of the visible part of the frame onto the work canvas and run ZXing on it. Alternate frames are
+// rotated 90° so vertical barcodes decode without ZXing's expensive TRY_HARDER mode. Only what the user can see in the
+// viewport is decoded, so a product outside the preview cannot be scanned by accident. Returns a hit or null.
 function decodeZXingFrame() {
   var src = cam.frameSource || video;
   var vw = src.videoWidth || src.width || 0, vh = src.videoHeight || src.height || 0;
   if (!vw || !vh) return null;
   var canvas = cam.canvas, ctx = cam.ctx;
   var rotate = cam.rotate; cam.rotate = !rotate;
+  var vis = visibleRect(vw, vh);
   var cw, ch, sx, sy;
   if (!rotate) {
-    cw = Math.round(vw * 0.9); ch = Math.round(vh * 0.5); sx = Math.round((vw - cw) / 2); sy = Math.round((vh - ch) / 2);
+    cw = Math.round(vis.w * 0.92); ch = Math.round(vis.h * 0.56); sx = vis.x + Math.round((vis.w - cw) / 2); sy = vis.y + Math.round((vis.h - ch) / 2);
     if (canvas.width !== cw || canvas.height !== ch) { canvas.width = cw; canvas.height = ch; }
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.drawImage(src, sx, sy, cw, ch, 0, 0, cw, ch);
   } else {
-    cw = Math.round(vw * 0.5); ch = Math.round(vh * 0.9); sx = Math.round((vw - cw) / 2); sy = Math.round((vh - ch) / 2);
+    cw = Math.round(vis.w * 0.84); ch = vis.h; sx = vis.x + Math.round((vis.w - cw) / 2); sy = vis.y;
     if (canvas.width !== ch || canvas.height !== cw) { canvas.width = ch; canvas.height = cw; }
     ctx.setTransform(0, 1, -1, 0, ch, 0);   // rotate 90° clockwise into a (ch × cw) canvas
     ctx.drawImage(src, sx, sy, cw, ch, 0, 0, cw, ch);
@@ -1219,11 +1408,14 @@ function onRead(hit) {
   cam.pending.at = t;
   if (cam.pending.count < CONFIRM_READS) { dbg('log', 'Read ' + code + ' (' + hit.format + (hit.rotated ? ', rotated' : '') + ') — waiting for a confirming read'); return; }
   if (code === cam.lastCode && t - cam.lastAt < DEDUPE_MS) { cam.lastAt = t; return; }   // sliding 3 s window
-  cam.lastCode = code; cam.lastAt = t;
-  if (lookupInFlight) { dbg('log', 'Read ' + code + ' ignored: lookup in flight'); return; }
+  if (lookupInFlight) { cam.queued = { code: code, format: hit.format, rotated: hit.rotated }; dbg('log', 'Read ' + code + ' queued: lookup in flight'); return; }
+  dispatchScan(code, hit.format, hit.rotated);
+}
+function dispatchScan(code, format, rotated) {
+  cam.lastCode = code; cam.lastAt = now();
   flashGuide(); beep();
-  console.log('Scanned ' + code + ' (' + hit.format + ', ' + cam.decoder.kind + (hit.rotated ? ', rotated frame' : '') + ')');
-  handleCode(code, hit.format, 'scan');
+  console.log('Scanned ' + code + ' (' + format + ', ' + cam.decoder.kind + (rotated ? ', rotated frame' : '') + ')');
+  handleCode(code, format, 'scan');
 }
 function setupTrackControls() {
   var ctl = $('camCtl'), torchBtn = $('btnTorch'), zoomWrap = $('zoomWrap'), zoom = $('zoom');
@@ -1319,8 +1511,14 @@ function testUsdaKey() {
   $('keyStatus').textContent = 'Testing…';
   var url = USDA_BASE + '?query=' + encodeURIComponent('049000028911') + '&dataType=Branded&pageSize=1&api_key=' + encodeURIComponent(key);
   fetchJSON(url).then(function (r) {
-    if (r.ok && r.json) $('keyStatus').textContent = 'Key works ✓ (test query returned ' + (r.json.totalHits === undefined ? '?' : r.json.totalHits) + ' hits).';
-    else $('keyStatus').textContent = 'Key test failed: HTTP ' + r.status + ' ' + (r.json && r.json.error && (r.json.error.message || r.json.error.code) || r.text.slice(0, 120));
+    if (r.ok && r.json) {
+      store.set(LS.usdaKey, key);
+      renderSettings();
+      $('keyStatus').textContent = 'Key works ✓ and is saved (test query returned ' + (r.json.totalHits === undefined ? '?' : r.json.totalHits) + ' hits).';
+    } else {
+      var detail = (r.json && r.json.error) ? [r.json.error.code, r.json.error.message].filter(Boolean).join(': ') : r.text.slice(0, 120);
+      $('keyStatus').textContent = 'Key test failed: HTTP ' + r.status + ' ' + detail;
+    }
   }, function (e) { $('keyStatus').textContent = 'Key test failed: ' + e.message; });
 }
 
@@ -1340,8 +1538,9 @@ function initDebugPanel() {
     window.__dbg.lines.forEach(addLine);
     window.__dbg.subscribe(addLine);
   }
-  $('dbgToggle').addEventListener('click', function () { panel.classList.toggle('open'); if (panel.classList.contains('open')) linesEl.scrollTop = linesEl.scrollHeight; });
-  $('dbgClose').addEventListener('click', function () { panel.classList.remove('open'); });
+  function setOpen(open) { panel.classList.toggle('open', open); document.body.classList.toggle('dbg-open', open); if (open) linesEl.scrollTop = linesEl.scrollHeight; }
+  $('dbgToggle').addEventListener('click', function () { setOpen(!panel.classList.contains('open')); });
+  $('dbgClose').addEventListener('click', function () { setOpen(false); });
   $('dbgClear').addEventListener('click', function () { clear(linesEl); if (window.__dbg) window.__dbg.lines.length = 0; count = 0; countEl.textContent = '0'; });
   $('dbgCopy').addEventListener('click', function () {
     var header = ['FoodScanner v' + APP_VERSION, 'URL: ' + location.href, 'Time: ' + isoNow(), 'UA: ' + navigator.userAgent,
@@ -1360,6 +1559,8 @@ function showTab(name) {
   Array.prototype.forEach.call($('tabs').querySelectorAll('button'), function (b) { b.classList.toggle('active', b.getAttribute('data-tab') === name); });
   if (name === 'settings') renderSettings();
   if (name === 'log') { renderTally(); renderLog(); }
+  cam.paused = name !== 'scan';
+  if (cam.scanning) setCamStatus(cam.paused ? 'Scanning paused while on the ' + name + ' tab.' : 'Scanning (' + (cam.decoder && cam.decoder.kind === 'native' ? 'native BarcodeDetector' : 'ZXing') + ')…');
   window.scrollTo(0, 0);
 }
 
@@ -1371,7 +1572,7 @@ function init() {
   initDebugPanel();
   loadPersisted();
   renderTally(); renderLog(); renderSettings();
-  dbg('log', 'App v' + APP_VERSION + ' init. BarcodeDetector=' + (typeof window.BarcodeDetector === 'function') + ' ZXing=' + !!window.ZXingBrowser +
+  dbg('log', 'App v' + APP_VERSION + ' init. BarcodeDetector=' + (typeof window.BarcodeDetector === 'function') + ' ZXing=' + (window.ZXingBrowser ? 'loaded' : (window.__zxingState || 'loading')) +
     ' localStorage=' + store.available + ' secureContext=' + window.isSecureContext + ' mediaDevices=' + !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia));
   if (!window.ZXingBrowser) ensureZXing();
   if (!store.available) toast('localStorage unavailable: cache, log and settings will not persist');

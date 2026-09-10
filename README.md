@@ -17,7 +17,7 @@ pinned `@zxing/browser` barcode decoder loaded from a CDN, used when the browser
 2. Tap **Start camera** and allow camera access. Hold the barcode inside the frame, roughly 10–15 cm from the
    lens; it detects EAN-13, EAN-8, UPC-A and UPC-E continuously. A beep and a green flash mean a code was read.
    The same code is ignored while it stays in view and for 3 seconds after.
-3. Or type a barcode into **Manual barcode entry** and tap **Look up**.
+3. Or type a barcode into the field under the camera and tap **Look up**.
 4. The result card shows product name, brand, image, serving size, and per-serving / per-100 g values for
    calories, carbs, sugars, fiber, net carbs (carbs − fiber), protein, fat, saturated fat and sodium, plus
    ingredients, NOVA group, Nutri-Score, additive tags, categories, which source(s) found the product and a
@@ -45,6 +45,8 @@ pinned `@zxing/browser` barcode decoder loaded from a CDN, used when the browser
   instant and offline. Network errors are not cached. **Re-fetch** on a card bypasses the cache.
 - Everything (cache, log, tally, settings) lives in the browser's localStorage. Nothing is sent to any server other
   than the two data sources.
+- Safari can delete a site's localStorage after 7 days of Safari use without visiting the site, so export the log
+  now and then if the numbers matter to you.
 - Open Food Facts data is © Open Food Facts contributors, ODbL. USDA FoodData Central data is public domain.
 
 ## Development
