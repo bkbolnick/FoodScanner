@@ -1,9 +1,10 @@
 # FoodScanner
 
-A mobile-first web app that scans food barcodes and shows what the public food databases know about the product.
-Version 1 is a **data coverage tester**: it tells you whether a product is in Open Food Facts and USDA FoodData
-Central, what nutrition fields each source has, and keeps a running tally so you can judge how useful those
-sources are for the things you actually buy. Scoring comes later.
+A mobile-first web app that scans food barcodes, shows what the public food databases know about the product, and
+scores it 0–100 either with a standard method or with a scoring profile built from your own dietary goals. It also
+works as a **data coverage tester**: it tells you whether a product is in Open Food Facts and USDA FoodData Central,
+what nutrition fields each source has, and keeps a running tally so you can judge how useful those sources are for
+the things you actually buy.
 
 Live: https://bkbolnick.github.io/FoodScanner/
 
@@ -19,11 +20,11 @@ pinned `@zxing/browser` barcode decoder loaded from a CDN, used when the browser
    The same code is ignored while it stays in view and for 3 seconds after.
 3. Or type a barcode into the field under the camera and tap **Look up**. While the camera is running, tap
    **Type a barcode** to bring the field back; scanning pauses while you type.
-4. The result card shows product name, brand, image, serving size, and per-serving / per-100 g values for
-   calories, carbs, sugars, fiber, net carbs (carbs − fiber), protein, fat, saturated fat and sodium, plus
-   ingredients, NOVA group, Nutri-Score, additive tags, categories, which source(s) found the product and a
-   per-source coverage table. Below the card, **Missing fields** lists whichever of serving size, carbs, sugars,
-   fiber, protein and ingredients no source provided.
+4. The result card shows the score (see **Scoring** below), product name, brand, image, serving size, and
+   per-serving / per-100 g values for calories, carbs, sugars, fiber, net carbs (carbs − fiber), protein, fat,
+   saturated fat and sodium, plus ingredients, NOVA group, Nutri-Score, additive tags, categories, which source(s)
+   found the product and a per-source coverage table. Below the card, **Missing fields** lists whichever of serving
+   size, carbs, sugars, fiber, protein and ingredients no source provided.
 5. **Log** tab: the coverage tally (scans, found in OFF, found in USDA, found in neither, found-but-incomplete)
    and the scan log. **Export log** copies the log as CSV to the clipboard; **Share CSV** opens the iOS share
    sheet. Tap a log entry to reopen its result.
@@ -35,6 +36,29 @@ pinned `@zxing/browser` barcode decoder loaded from a CDN, used when the browser
    **Clear cache** and **Clear log & tally**.
 7. **Debug** button (top right): an on-screen log of everything (console output, uncaught errors, every fetch
    with its status code). **Copy log** copies it so you can paste it into an issue or a chat.
+
+## Scoring
+
+On first open the app asks how products should be scored. Both choices can be changed later under Settings ›
+**Scoring**.
+
+- **Standard**: a 0–100 composite of nutritional quality (60 points, from the product's Nutri-Score, estimated from
+  the nutrients with the 2023 algorithm when Open Food Facts has no grade), additives (30 points, the riskiest additive
+  sets the ceiling and each extra one costs a little) and organic certification (10 points). Components without data
+  are left out and the score is rescaled, with a note saying so.
+- **Custom**: six questions (main goal, extra things you watch, carb counting, additives and processing, organic,
+  optional daily budgets) build a profile from a preset (Balanced, Keto / low-carb, Low sugar, Heart health, High
+  protein, Weight loss, Clean label). Each of ten factors (net carbs, sugars, fiber, protein, saturated fat, sodium,
+  calories, NOVA processing, additives, organic) gets a weight from 0 to 5 and a 0–100 sub-score from its per-100 g
+  value against goal-specific thresholds; the score is the weighted average over the factors that have data. The card
+  lists the three factors that moved the score most, and with a daily budget set it shows what share of that budget one
+  serving uses. Weights can be fine-tuned under **Adjust weights**.
+- Bands: Excellent 75–100, Good 50–74, Poor 25–49, Bad 0–24. A "low confidence" note appears when much of the weighted
+  data is missing.
+- **Copy link with my profile** produces a `#profile=` link that loads the same profile on another phone, or after
+  Safari has cleared storage, exactly like the USDA key link.
+- Scores are a guide computed from public data, not medical advice. The additive risk levels are this app's own
+  editorial classification informed by public regulatory opinions; additives it does not know get a small penalty.
 
 ## Notes
 
