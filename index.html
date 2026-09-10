@@ -152,7 +152,7 @@ nav.tabs button.active { color: var(--accent); }
   max-height: 45vh; display: none; flex-direction: column; border-top: 2px solid var(--accent);
   padding-bottom: env(safe-area-inset-bottom);
 }
-#dbgPanel.open { display: flex; }
+#dbgPanel.open { display: flex; height: 45vh; }
 #dbgPanel .bar { display: flex; gap: 8px; align-items: center; padding: 8px 12px; border-bottom: 1px solid #2c3531; flex: none; }
 #dbgPanel .bar .btn { min-height: 36px; padding: 4px 10px; font-size: 13px; background: #1d2622; color: var(--dbg-ink); border-color: #3a4640; }
 #dbgLines { flex: 1 1 auto; overflow: auto; -webkit-overflow-scrolling: touch; padding: 6px 10px; font-family: var(--mono); font-size: 11px; line-height: 1.35; }
@@ -163,7 +163,7 @@ nav.tabs button.active { color: var(--accent); }
 #toast.show { opacity: 0.95; }
 .hidden { display: none !important; }
 body.dbg-open { padding-bottom: calc(45vh + 84px + env(safe-area-inset-bottom)); }
-body.dbg-open nav.tabs { bottom: 45vh; }
+body.dbg-open nav.tabs { bottom: 45vh; padding-bottom: 0; }
 body.dbg-open #toast { bottom: calc(45vh + 96px + env(safe-area-inset-bottom)); }
 </style>
 <script>
@@ -261,6 +261,7 @@ body.dbg-open #toast { bottom: calc(45vh + 96px + env(safe-area-inset-bottom)); 
       <div class="row" style="margin-top:10px">
         <button class="btn primary grow" id="btnStart" type="button">Start camera</button>
         <button class="btn grow hidden" id="btnStop" type="button">Stop camera</button>
+        <button class="btn grow hidden" id="btnTypeCode" type="button" aria-controls="manualForm" aria-expanded="false">Type a barcode</button>
       </div>
       <div class="camctl hidden" id="camCtl">
         <div class="row wrap">
@@ -382,7 +383,7 @@ var OFF_FIELDS = ['code', 'product_name', 'product_name_en', 'generic_name', 'br
   'image_front_thumb_url', 'image_small_url', 'image_url'].join(',');
 var USDA_BASE = 'https://api.nal.usda.gov/fdc/v1/foods/search';
 var ZXING_FALLBACK_URL = 'https://unpkg.com/@zxing/browser@0.2.1/umd/zxing-browser.min.js';
-var LS = { usdaKey: 'fs.usdaKey', decoder: 'fs.decoder', tally: 'fs.tally.v1', log: 'fs.log.v1', cachePrefix: 'fs.cache.v1.' };
+var LS = { usdaKey: 'fs.usdaKey', decoder: 'fs.decoder', tally: 'fs.tally.v1', log: 'fs.log.v1', cachePrefix: 'fs.cache.v2.', oldCachePrefixes: ['fs.cache.v1.'] };
 var NUT_KEYS = ['kcal', 'carbs', 'sugars', 'fiber', 'protein', 'fat', 'satFat', 'sodiumMg'];
 var NUT_ROWS = [['kcal', 'Calories', 'kcal'], ['carbs', 'Total carbs', 'g'], ['sugars', 'Sugars', 'g'], ['fiber', 'Fiber', 'g'],
   ['netCarbs', 'Net carbs', 'g'], ['protein', 'Protein', 'g'], ['fat', 'Fat', 'g'], ['satFat', 'Saturated fat', 'g'], ['sodiumMg', 'Sodium', 'mg']];
@@ -395,6 +396,8 @@ var SCAN_INTERVAL_MS = 90;     // target time between decode attempts
 var CONFIRM_READS = 2;         // identical consecutive reads required before accepting a code
 var CONFIRM_WINDOW_MS = 1500;
 var FETCH_TIMEOUT_MS = 15000;
+var USDA_RETRY_MS = 60000;        // do not re-query USDA for a cached product more often than this while it keeps erroring
+var USDA_UPGRADE_WAIT_MS = 4000;  // how long a cached hit waits for a USDA upgrade before showing cached data
 var LOG_MAX = 2000;
 
 /* ------------------------------------------------------------------ utils */
@@ -556,8 +559,13 @@ function normOFF(p) {
   if (servingQty !== null && servingQty <= 0) servingQty = null;
   var servingUnit = p.serving_quantity_unit ? String(p.serving_quantity_unit) : 'g';
   if (servingQty === null && p.serving_size) {                       // e.g. "2 cookies (30 g)" without serving_quantity
-    var mm = /(\d+(?:[.,]\d+)?)\s*(g|ml)\b/i.exec(String(p.serving_size));
-    if (mm) { servingQty = toNum(mm[1]); servingUnit = mm[2].toLowerCase(); if (servingQty !== null && servingQty <= 0) servingQty = null; }
+    var mm = /(\d+(?:[.,]\d+)?)(?:\s*[x×]\s*(\d+(?:[.,]\d+)?))?\s*(g|gr|grams?|grammes?|ml|mls?|millilit(?:er|re)s?)\b/i.exec(String(p.serving_size));
+    if (mm) {
+      var q1 = toNum(mm[1]), q2 = mm[2] ? toNum(mm[2]) : null;
+      servingQty = (q2 !== null && q1 !== null) ? q1 * q2 : q1;
+      servingUnit = /^g/i.test(mm[3]) ? 'g' : 'ml';
+      if (servingQty !== null && servingQty <= 0) servingQty = null;
+    }
   }
   var servingSize = (p.serving_size && String(p.serving_size).trim()) || (servingQty !== null ? servingQty + ' ' + servingUnit : null);
   if (servingSize && /^0+(\.0+)?\s*[a-z]*$/i.test(servingSize)) servingSize = null;
@@ -669,16 +677,25 @@ function normUSDA(f) {
 // FDC's search matches the stored gtinUpc string exactly. Label Insight records store 12-digit UPC-A, GDSN records the
 // 14-digit GTIN with leading zeros, some records 13 digits or stripped zeros, so try each form in likelihood order.
 function usdaCandidates(code, format) {
-  var base = (format === 'upc_e' && upcEToUpcA(code)) || code;
-  var s = stripLeadingZeros(base) || base;
-  function pad(x, n) { while (x.length < n) x = '0' + x; return x; }
   var out = [];
   function add(x) { if (x && out.indexOf(x) < 0) out.push(x); }
-  if (format === 'ean_8') { add(code); add(pad(s, 14)); }
-  else if (s.length <= 12) { add(pad(s, 12)); add(pad(s, 14)); add(pad(s, 13)); add(s); }
-  else if (s.length === 13) { add(s); add(pad(s, 14)); }
-  else add(s);
-  if (format === 'upc_e' || (code.length === 8 && !format)) add(code);
+  function pad(x, n) { while (x.length < n) x = '0' + x; return x; }
+  function addForms(c) {
+    var s = stripLeadingZeros(c) || c;
+    if (s.length <= 12) { add(pad(s, 12)); add(pad(s, 14)); add(pad(s, 13)); add(s); }
+    else if (s.length === 13) { add(s); add(pad(s, 14)); }
+    else add(s);
+  }
+  var upca = (format === 'upc_e' || (!format && code.length === 8)) ? upcEToUpcA(code) : null;
+  if (upca && code.length === 8 && upca.slice(-1) !== code.slice(-1)) upca = null;   // check digit says it is not a UPC-E
+  if (format === 'upc_e') { addForms(upca || code); add(code); return out; }
+  if (format === 'ean_8') { add(code); add(pad(code, 14)); return out; }
+  if (!format && code.length === 8) {              // typed: could be EAN-8 or UPC-E; try the likelier reading first
+    if (gtinCheckOK(code)) { add(code); add(pad(code, 14)); if (upca) addForms(upca); }
+    else { if (upca) addForms(upca); add(code); }
+    return out;
+  }
+  addForms(code);
   return out;
 }
 function lookupUSDA(code, format, apiKey) {
@@ -752,6 +769,18 @@ function mergeProduct(entry) {
       else if (servSrc.servingGrams !== null && servSrc.servingGrams > 0 && per100[k] !== null) { perServing[k] = per100[k] * servSrc.servingGrams / 100; perServingFrom[k] = per100From[k] + ' × serving'; }
     });
   }
+  // If neither the serving source nor any per-100 figure covers a nutrient, show another source's own per-serving value,
+  // labelled with that source's serving, rather than a dash.
+  NUT_KEYS.forEach(function (k) {
+    if (perServing[k] !== null) return;
+    for (var j = 0; j < srcs.length; j++) {
+      if (srcs[j] !== servSrc && srcs[j].perServing[k] !== null) {
+        perServing[k] = srcs[j].perServing[k];
+        perServingFrom[k] = srcs[j].source + ' own serving' + (srcs[j].servingSize ? ' (' + srcs[j].servingSize + ')' : '');
+        break;
+      }
+    }
+  });
   [per100, perServing].forEach(function (t) { t.netCarbs = (t.carbs !== null && t.fiber !== null) ? Math.max(0, t.carbs - t.fiber) : null; });
   m.per100 = per100; m.perServing = perServing; m.per100From = per100From; m.perServingFrom = perServingFrom;
   m.basis = (servSrc && servSrc.basis) || (srcs[0] && srcs[0].basis) || 'g';
@@ -760,7 +789,7 @@ function mergeProduct(entry) {
     var k = mf[0];
     if (k === 'servingSize') return !m.servingSize.v;
     if (k === 'ingredients') return !m.ingredients.v;
-    return per100[k] === null && perServing[k] === null;
+    return !srcs.some(function (src) { return srcHas(src, k); });   // present in any source, in any basis
   }).map(function (mf) { return mf[1]; });
   m.urls = {};
   srcs.forEach(function (s) { m.urls[s.source] = s.url; });
@@ -776,12 +805,30 @@ function lookup(code, format, opts) {
   var cached = opts.bypassCache ? null : store.getJSON(cacheKey, null);
   if (cached && cached.barcode === code) {
     dbg('log', 'Cache hit for ' + code + ' (fetched ' + cached.fetchedAt + ')');
-    // A record cached before a USDA key existed can be upgraded with a USDA query now.
-    if (apiKey && (!cached.usda || cached.usda.status === 'skipped' || cached.usda.status === 'error')) {
-      dbg('log', 'Cached record has no USDA answer yet (' + (cached.usda ? cached.usda.status : 'none') + ') and a key is set — querying USDA');
-      return lookupUSDA(code, cached.format || format, apiKey).then(function (u) {
+    var cu = cached.usda || { status: 'skipped' };
+    if (!apiKey && cu.status === 'error') { cached.usda = { status: 'skipped', codeUsed: null, error: null, tried: [], totalHits: null, fdcId: null, norm: null }; store.setJSON(cacheKey, cached); }
+    // A record cached without a USDA answer (no key at the time, or an error) is upgraded with a USDA query now,
+    // errors no more often than USDA_RETRY_MS. The cached data is shown after USDA_UPGRADE_WAIT_MS even if USDA is slow.
+    var retry = apiKey && (cu.status === 'skipped' || (cu.status === 'error' && (!cu.erroredAt || now() - cu.erroredAt > USDA_RETRY_MS)));
+    if (cu.status === 'error' && apiKey && !retry) {
+      // Recent USDA failure: do not hammer USDA, and do not count a lookup error for a request that was never made.
+      dbg('log', 'USDA errored ' + Math.round((now() - cu.erroredAt) / 1000) + ' s ago; not retrying yet');
+      var view = Object.assign({}, cached, { usda: { status: 'skipped', codeUsed: null, error: cu.error, erroredAt: cu.erroredAt, tried: [], totalHits: null, fdcId: null, norm: null } });
+      return Promise.resolve({ entry: view, merged: mergeProduct(view), fromCache: true });
+    }
+    if (retry) {
+      dbg('log', 'Cached record has no USDA answer yet (' + cu.status + ') and a key is set — querying USDA');
+      var usdaP = lookupUSDA(code, cached.format || format, apiKey).then(function (u) {
         cached.usda = usdaSummary(u);
-        if (u.status !== 'error') store.setJSON(cacheKey, cached);
+        store.setJSON(cacheKey, cached);
+        return true;
+      });
+      var waited = new Promise(function (resolve) { setTimeout(function () { resolve(false); }, USDA_UPGRADE_WAIT_MS); });
+      return Promise.race([usdaP, waited]).then(function (answered) {
+        if (!answered) {
+          dbg('warn', 'USDA is slow; showing cached data now, the card updates when it answers (the tally keeps this scan as recorded)');
+          usdaP.then(function () { if (current && current.entry && current.entry.barcode === code) renderResult({ entry: cached, merged: mergeProduct(cached), fromCache: true }); }, function () { /* logged elsewhere */ });
+        }
         return { entry: cached, merged: mergeProduct(cached), fromCache: true };
       });
     }
@@ -804,8 +851,8 @@ function lookup(code, format, opts) {
   });
 }
 function usdaSummary(u) {
-  return { status: u.status, codeUsed: u.codeUsed || null, error: u.error || null, tried: u.tried || [], totalHits: (u.totalHits === undefined ? null : u.totalHits),
-    fdcId: u.food ? u.food.fdcId : null, norm: u.status === 'found' ? normUSDA(u.food) : null };
+  return { status: u.status, codeUsed: u.codeUsed || null, error: u.error || null, erroredAt: u.status === 'error' ? now() : null, tried: u.tried || [],
+    totalHits: (u.totalHits === undefined ? null : u.totalHits), fdcId: u.food ? u.food.fdcId : null, norm: u.status === 'found' ? normUSDA(u.food) : null };
 }
 
 /* ---------------------------------------------------------- tally & log */
@@ -865,11 +912,13 @@ function renderLog() {
     var flags = h('div', { class: 'flags' });
     flags.appendChild(h('span', { class: 'chip ' + (e.off === 'found' ? 'ok' : e.off === 'error' ? 'warn' : 'bad'), text: 'OFF ' + statusMark(e.off) }));
     if (e.usda !== 'skipped') flags.appendChild(h('span', { class: 'chip ' + (e.usda === 'found' ? 'ok' : e.usda === 'error' ? 'warn' : 'bad'), text: 'USDA ' + statusMark(e.usda) }));
-    if ((e.off === 'found' || e.usda === 'found') && e.missing && e.missing.length) flags.appendChild(h('span', { class: 'chip warn', text: 'missing: ' + e.missing.join(', ') }));
+    var hasMissing = (e.off === 'found' || e.usda === 'found') && e.missing && e.missing.length;
+    if (hasMissing) flags.appendChild(h('span', { class: 'chip warn', text: 'missing ' + e.missing.length }));
     var li = h('li', { onclick: function () { showTab('scan'); handleCode(e.barcode, e.format || null, 'log'); } }, [
       h('div', { class: 'grow' }, [
         h('div', { class: 'nm', text: e.name || (e.off === 'found' || e.usda === 'found' ? '(unnamed)' : (e.off === 'error' || e.usda === 'error') ? 'Lookup failed' : 'Not found') }),
         h('div', { class: 'bc', text: e.barcode + (e.cached ? ' · cached' : '') }),
+        hasMissing ? h('div', { class: 't', style: 'color:var(--warn)', text: 'missing: ' + e.missing.join(', ') }) : null,
         h('div', { class: 't', text: shortTime(e.ts) + (e.origin ? ' · ' + e.origin : '') })
       ]),
       flags,
@@ -901,7 +950,7 @@ function sourceLine(entry) {
   var o = entry.off, u = entry.usda;
   parts.push(h('span', { class: 'chip ' + (o.status === 'found' ? 'ok' : o.status === 'error' ? 'warn' : 'bad'),
     text: 'OFF ' + statusMark(o.status) + (o.status === 'found' ? ' as ' + o.codeUsed : o.status === 'not_found' ? ' (tried ' + (o.tried || []).join(', ') + ')' : o.status === 'error' ? ' ' + o.error : '') }));
-  if (u.status === 'skipped') parts.push(h('span', { class: 'chip', text: 'USDA – no key' }));
+  if (u.status === 'skipped') parts.push(h('span', { class: 'chip', text: u.error ? 'USDA – skipped after a recent error (' + u.error + '); retried in a minute' : 'USDA – no key' }));
   else parts.push(h('span', { class: 'chip ' + (u.status === 'found' ? 'ok' : u.status === 'error' ? 'warn' : 'bad'),
     text: 'USDA ' + statusMark(u.status) + (u.status === 'found' ? ' as ' + u.codeUsed + ' (fdcId ' + u.fdcId + ')' : u.status === 'not_found' ? ' (tried ' + (u.tried || []).join(', ') + ')' : u.status === 'error' ? ' ' + u.error : '') }));
   return h('div', { class: 'chips' }, parts);
@@ -961,6 +1010,8 @@ function renderResult(res) {
   var given = NUT_KEYS.filter(function (k) { return m.perServing[k] !== null; });
   if (provenance.length) card.appendChild(h('div', { class: 'tiny muted', style: 'margin-top:4px',
     text: (provenance.length === given.length ? 'All per-serving values are' : 'Per-serving ' + provenance.map(function (k) { return nutLabel[k]; }).join(', ') + ' are') + ' computed from per-100 ' + (m.basis || 'g') + ' × serving size (' + m.servingSize.v + ').' }));
+  var foreign = NUT_KEYS.filter(function (k) { return m.perServingFrom[k] && m.perServingFrom[k].indexOf('own serving') > 0; });
+  if (foreign.length) card.appendChild(h('div', { class: 'tiny muted', text: 'Per-serving ' + foreign.map(function (k) { return nutLabel[k]; }).join(', ') + ': ' + uniqueList(foreign.map(function (k) { return m.perServingFrom[k]; })).join('; ') + ' — not the serving shown above.' }));
   if (m.sources.length > 1) card.appendChild(h('div', { class: 'tiny muted', text: 'Per-100 ' + (m.basis || 'g') + ' values come from ' + uniqueList(NUT_KEYS.map(function (k) { return m.per100From[k]; })).join(' + ') + '; per-serving from ' + (m.servingSize.from || '—') + '.' }));
   // ingredients
   var ingr = m.ingredients.v;
@@ -973,7 +1024,7 @@ function renderResult(res) {
   var kv = h('div', { class: 'kv' });
   var novaLabels = { 1: 'unprocessed / minimally processed', 2: 'processed culinary ingredient', 3: 'processed', 4: 'ultra-processed' };
   kv.appendChild(h('div', {}, [h('b', {}, 'NOVA group: '), m.nova.v !== null ? String(m.nova.v) + (novaLabels[m.nova.v] ? ' — ' + novaLabels[m.nova.v] : '') : '—']));
-  var ns = m.nutriscore.v ? String(m.nutriscore.v).toLowerCase() : null;
+  var ns = (m.nutriscore.v && /^[a-e]$/i.test(String(m.nutriscore.v))) ? String(m.nutriscore.v).toLowerCase() : null;
   var nsNote = (e.off.norm && e.off.norm.nutriscoreNote) ? String(e.off.norm.nutriscoreNote).replace(/-/g, ' ') : null;
   var nsNode = ns ? h('span', { class: 'nutri ' + ns, text: ns.toUpperCase() }) : (nsNote ? h('span', { class: 'muted', text: nsNote + ' (no grade)' }) : '—');
   kv.appendChild(h('div', {}, [h('b', {}, 'Nutri-Score: '), nsNode]));
@@ -1061,7 +1112,7 @@ function handleCode(code, format, origin) {
 /* -------------------------------------------------------------- camera */
 var cam = { stream: null, track: null, scanning: false, decoder: null, detector: null, zx: null, timer: null, rotate: false,
   frames: 0, decodeMs: 0, nativeErrors: 0, lastCode: null, lastAt: 0, pending: { code: null, count: 0, at: 0 }, wakeLock: null, audio: null,
-  canvas: null, ctx: null, frameSource: null, torchOn: false, queued: null, paused: false };
+  canvas: null, ctx: null, frameSource: null, torchOn: false, queued: null, paused: false, startSeq: 0 };
 var video = null;
 function setCamStatus(msg, isErr) { var el = $('camStatus'); el.textContent = msg; el.className = 'status' + (isErr ? ' err' : ''); }
 function initAudio() {
@@ -1092,22 +1143,25 @@ function ensureZXing() {
   if (window.ZXingBrowser) return Promise.resolve(true);
   if (zxingReady) return zxingReady;
   zxingReady = new Promise(function (resolve) {
-    var settled = false, timer = null;
+    var fallbackStarted = false, timer = null, poll = null;
+    function done(ok) { clearTimeout(timer); clearInterval(poll); resolve(ok); }
     function loadFallback() {
+      if (fallbackStarted) return;
+      fallbackStarted = true;
       dbg('warn', 'ZXingBrowser global missing; loading fallback from unpkg');
       var s = document.createElement('script');
       s.src = ZXING_FALLBACK_URL;
-      s.onload = function () { dbg('log', 'ZXing fallback loaded: ' + !!window.ZXingBrowser); resolve(!!window.ZXingBrowser); };
-      s.onerror = function () { dbg('error', 'ZXing fallback failed to load from unpkg'); resolve(false); };
+      s.onload = function () { dbg('log', 'ZXing fallback loaded: ' + !!window.ZXingBrowser); done(!!window.ZXingBrowser); };
+      s.onerror = function () { dbg('error', 'ZXing fallback failed to load from unpkg'); done(!!window.ZXingBrowser); };   // jsDelivr may have arrived meanwhile
       document.head.appendChild(s);
     }
-    function settle(fn) { if (settled) return; settled = true; clearTimeout(timer); fn(); }
     var tag = document.getElementById('zxingScript');
-    if (!tag || window.__zxingState === 'error') { settle(loadFallback); return; }
-    if (window.__zxingState === 'ok') { settle(function () { if (window.ZXingBrowser) resolve(true); else loadFallback(); }); return; }
-    tag.addEventListener('load', function () { settle(function () { if (window.ZXingBrowser) { dbg('log', 'ZXing loaded from jsDelivr'); resolve(true); } else loadFallback(); }); });
-    tag.addEventListener('error', function () { settle(loadFallback); });
-    timer = setTimeout(function () { settle(function () { dbg('warn', 'ZXing from jsDelivr still not loaded after 20 s; trying unpkg'); loadFallback(); }); }, 20000);
+    if (!tag || window.__zxingState === 'error') { loadFallback(); return; }
+    if (window.__zxingState === 'ok') { if (window.ZXingBrowser) done(true); else loadFallback(); return; }
+    tag.addEventListener('load', function () { if (window.ZXingBrowser) { dbg('log', 'ZXing loaded from jsDelivr'); done(true); } else loadFallback(); });
+    tag.addEventListener('error', function () { loadFallback(); });
+    poll = setInterval(function () { if (window.ZXingBrowser) done(true); }, 500);   // a late script still counts
+    timer = setTimeout(function () { if (!window.ZXingBrowser) { dbg('warn', 'ZXing from jsDelivr still not loaded after 20 s; trying unpkg as well'); loadFallback(); } }, 20000);
   }).then(function (ok) { if (!ok) zxingReady = null; return ok; });
   return zxingReady;
 }
@@ -1214,6 +1268,7 @@ function startCamera() {
     return Promise.resolve();
   }
   initAudio();                        // AudioContext must be created inside a user gesture on iOS
+  var startId = ++cam.startSeq;       // stopCamera() bumps this so an in-progress start aborts cleanly
   setCamStatus('Requesting camera…');
   $('btnStart').disabled = true;
   var constraints = { audio: false, video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } } };
@@ -1223,6 +1278,7 @@ function startCamera() {
     if (err.name === 'OverconstrainedError' || err.name === 'NotFoundError') return navigator.mediaDevices.getUserMedia({ audio: false, video: true });
     throw err;
   }).then(function (stream) {
+    if (startId !== cam.startSeq) { try { stream.getTracks().forEach(function (t) { t.stop(); }); } catch (e) { /* ignore */ } throw { name: 'AbortedStart' }; }
     cam.stream = stream;
     cam.track = stream.getVideoTracks()[0] || null;
     video.srcObject = stream;
@@ -1236,16 +1292,20 @@ function startCamera() {
     }
     return waitForVideo(video, 6000);
   }).then(function () {
+    if (startId !== cam.startSeq) throw { name: 'AbortedStart' };
     $('viewport').classList.add('live');
+    $('btnStart').classList.add('hidden'); $('btnStop').classList.remove('hidden');   // Stop must be available while the decoder loads
+    setCamStatus('Camera on — loading barcode decoder…');
     return pickDecoder();
   }).then(function (dec) {
+    if (startId !== cam.startSeq) throw { name: 'AbortedStart' };
     cam.decoder = dec;
     cam.scanning = true;
     cam.frames = 0; cam.decodeMs = 0; cam.nativeErrors = 0; cam.rotate = false;
     cam.pending = { code: null, count: 0, at: 0 }; cam.queued = null;
     if (!cam.canvas) { cam.canvas = document.createElement('canvas'); cam.ctx = cam.canvas.getContext('2d', { willReadFrequently: true }) || cam.canvas.getContext('2d'); }
     $('btnStart').classList.add('hidden'); $('btnStop').classList.remove('hidden');
-    $('manualForm').classList.add('hidden');
+    $('manualForm').classList.add('hidden'); $('btnTypeCode').classList.remove('hidden'); $('btnTypeCode').textContent = 'Type a barcode'; $('btnTypeCode').setAttribute('aria-expanded', 'false');   // keeps the card close to the viewfinder; the button brings the field back
     $('btnStart').disabled = false;
     setupTrackControls();
     requestWakeLock();
@@ -1254,13 +1314,14 @@ function startCamera() {
     scanLoop();
   }).catch(function (err) {
     $('btnStart').disabled = false;
+    if (err && err.name === 'AbortedStart') { dbg('log', 'Camera start aborted (stopped before the decoder was ready)'); return; }
     var name = err && err.name || '', msg = err && err.message || String(err);
     var hint = '';
     if (name === 'NotAllowedError' || name === 'SecurityError') hint = ' Camera permission denied. On iPhone: Settings › Safari › Camera › Allow, or tap the "aA" menu › Website Settings.';
     else if (name === 'NotReadableError') hint = ' Camera is busy in another app.';
     console.error('Camera start failed: ' + name + ': ' + msg);
+    stopCamera();                       // restores the Start/Stop/manual-entry state and releases the stream
     setCamStatus('Camera failed: ' + (name ? name + ' — ' : '') + msg + hint, true);
-    releaseStream();
   });
 }
 function waitForVideo(v, timeoutMs) {
@@ -1287,11 +1348,12 @@ function releaseStream() {
 }
 function stopCamera(statusMsg) {
   cam.scanning = false;
+  cam.startSeq++;
   clearTimeout(cam.timer);
   releaseStream();
   releaseWakeLock();
   $('btnStart').classList.remove('hidden'); $('btnStop').classList.add('hidden');
-  $('manualForm').classList.remove('hidden');
+  $('manualForm').classList.remove('hidden'); $('btnTypeCode').classList.add('hidden');
   $('camCtl').classList.add('hidden');
   var fps = cam.frames && cam.decodeMs ? ' avg decode ' + Math.round(cam.decodeMs / cam.frames) + 'ms over ' + cam.frames + ' frames' : '';
   dbg('log', 'Camera stopped.' + fps);
@@ -1305,10 +1367,12 @@ function scanLoop() {
   if (cam.decoder.kind === 'native') p = detectNative();
   else p = new Promise(function (resolve) { resolve(decodeZXingFrame()); });
   p.then(function (hit) {
+    if (!cam.scanning) return;
     cam.frames++; cam.decodeMs += now() - t0;
     if (hit) onRead(hit);
     if (cam.frames % 50 === 0) setCamStatus('Scanning (' + (cam.decoder.kind === 'native' ? 'native' : 'ZXing') + ') · ' + Math.round(cam.decodeMs / cam.frames) + ' ms/frame · ' + cam.frames + ' frames');
   }, function (err) {
+    if (!cam.scanning) return;
     cam.frames++;
     var msg = (err && (err.name + ': ' + err.message)) || String(err);
     if (cam.decoder.kind === 'native') {
@@ -1317,8 +1381,8 @@ function scanLoop() {
       if (cam.nativeErrors >= 5) {
         console.warn('Native BarcodeDetector keeps failing; switching to ZXing');
         return ensureZXing().then(function (ok) {
-          if (ok) { if (!cam.zx) cam.zx = makeZXingReader(); cam.decoder = { kind: 'zxing', formats: ['ean_13', 'ean_8', 'upc_a', 'upc_e'] }; setCamStatus('Scanning (ZXing, after native failure)…'); }
-          else setCamStatus('Native decoder failed and ZXing is unavailable.', true);
+          if (ok) { if (!cam.zx) cam.zx = makeZXingReader(); cam.decoder = { kind: 'zxing', formats: ['ean_13', 'ean_8', 'upc_a', 'upc_e'] }; cam.nativeErrors = 0; setCamStatus('Scanning (ZXing, after native failure)…'); }
+          else stopCamera('The native decoder keeps failing and ZXing could not be loaded. Check the connection and tap Start camera.');
         });
       }
     } else {
@@ -1399,6 +1463,7 @@ function decodeCanvasWithZXing(canvas) {   // exposed for tests / desktop debugg
   });
 }
 function onRead(hit) {
+  if (!cam.scanning) return;
   var code = digitsOnly(hit.text);
   if (!code) return;
   var t = now();
@@ -1552,6 +1617,8 @@ function initDebugPanel() {
 }
 
 /* ----------------------------------------------------------------- tabs */
+var activeTab = 'scan', manualFocused = false;
+function updatePaused() { cam.paused = activeTab !== 'scan' || manualFocused; }
 function showTab(name) {
   ['scan', 'log', 'settings'].forEach(function (t) {
     $('tab-' + t).classList.toggle('active', t === name);
@@ -1559,7 +1626,8 @@ function showTab(name) {
   Array.prototype.forEach.call($('tabs').querySelectorAll('button'), function (b) { b.classList.toggle('active', b.getAttribute('data-tab') === name); });
   if (name === 'settings') renderSettings();
   if (name === 'log') { renderTally(); renderLog(); }
-  cam.paused = name !== 'scan';
+  activeTab = name;
+  updatePaused();
   if (cam.scanning) setCamStatus(cam.paused ? 'Scanning paused while on the ' + name + ' tab.' : 'Scanning (' + (cam.decoder && cam.decoder.kind === 'native' ? 'native BarcodeDetector' : 'ZXing') + ')…');
   window.scrollTo(0, 0);
 }
@@ -1576,9 +1644,18 @@ function init() {
     ' localStorage=' + store.available + ' secureContext=' + window.isSecureContext + ' mediaDevices=' + !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia));
   if (!window.ZXingBrowser) ensureZXing();
   if (!store.available) toast('localStorage unavailable: cache, log and settings will not persist');
+  LS.oldCachePrefixes.forEach(function (pre) { var old = store.keys(pre); old.forEach(store.remove.bind(store)); if (old.length) dbg('log', 'Removed ' + old.length + ' cache entries with old schema ' + pre); });
 
   $('btnStart').addEventListener('click', function () { startCamera(); });
   $('btnStop').addEventListener('click', function () { stopCamera(); });
+  $('btnTypeCode').addEventListener('click', function () {
+    var open = !$('manualForm').classList.toggle('hidden');
+    this.setAttribute('aria-expanded', String(open));
+    this.textContent = open ? 'Hide barcode field' : 'Type a barcode';
+    if (open) $('manualCode').focus();      // inside the tap handler so iOS shows the keyboard
+  });
+  $('manualCode').addEventListener('focus', function () { manualFocused = true; updatePaused(); if (cam.scanning) setCamStatus('Scanning paused while you type.'); });
+  $('manualCode').addEventListener('blur', function () { manualFocused = false; updatePaused(); if (cam.scanning && !cam.paused) setCamStatus('Scanning (' + (cam.decoder && cam.decoder.kind === 'native' ? 'native BarcodeDetector' : 'ZXing') + ')…'); });
   $('manualForm').addEventListener('submit', function (ev) {
     ev.preventDefault();
     var input = $('manualCode');
@@ -1633,9 +1710,9 @@ function init() {
   });
 
   document.addEventListener('visibilitychange', function () {
-    if (document.hidden && cam.scanning) { dbg('log', 'Page hidden — stopping camera'); stopCamera('Camera stopped while the page was in the background. Tap Start camera.'); }
+    if (document.hidden && (cam.scanning || cam.stream)) { dbg('log', 'Page hidden — stopping camera'); stopCamera('Camera stopped while the page was in the background. Tap Start camera.'); }
   });
-  window.addEventListener('pagehide', function () { if (cam.scanning) stopCamera(); });
+  window.addEventListener('pagehide', function () { if (cam.scanning || cam.stream) stopCamera(); });
 
   // Support ?code=… for quick desktop testing / sharing.
   var mq = /[?&]code=(\d+)/.exec(location.search);
