@@ -42,21 +42,27 @@ pinned `@zxing/browser` barcode decoder loaded from a CDN, used when the browser
 On first open the app asks how products should be scored. Both choices can be changed later under Settings ›
 **Scoring**.
 
-- **Standard**: a 0–100 composite of nutritional quality (60 points, from the product's Nutri-Score, estimated from
-  the nutrients with the 2023 algorithm when Open Food Facts has no grade), additives (30 points, the riskiest additive
-  sets the ceiling and each extra one costs a little) and organic certification (10 points). Components without data
-  are left out and the score is rescaled, with a note saying so.
+- **Standard**: a 0–100 composite of nutritional quality (60 points, from the product's Nutri-Score; when Open Food
+  Facts has no grade it is estimated from the nutrients with the 2023 algorithm, using the beverage, fats/oils/nuts and
+  cheese variants where the category calls for them, and skipped when Open Food Facts says the Nutri-Score is not
+  applicable), additives (30 points, the riskiest additive sets the ceiling and each extra one costs a little) and organic
+  certification (10 points). Components without data are left out and the score is rescaled with a note; if nutrition is
+  among them the score is shown as **low confidence**, and no score is shown when only the organic label is known.
 - **Custom**: six questions (main goal, extra things you watch, carb counting, additives and processing, organic,
   optional daily budgets) build a profile from a preset (Balanced, Keto / low-carb, Low sugar, Heart health, High
   protein, Weight loss, Clean label). Each of ten factors (net carbs, sugars, fiber, protein, saturated fat, sodium,
   calories, NOVA processing, additives, organic) gets a weight from 0 to 5 and a 0–100 sub-score from its per-100 g
-  value against goal-specific thresholds; the score is the weighted average over the factors that have data. The card
-  lists the three factors that moved the score most, and with a daily budget set it shows what share of that budget one
-  serving uses. Weights can be fine-tuned under **Adjust weights**.
+  value against goal-specific thresholds (drinks, whose data is per 100 ml, use the roughly half-size FSA drink
+  cut-offs); the score is the weighted average over the factors that have data, and is withheld when less than half of
+  the weighted factors have data. The card lists the three factors that moved the score most, and with a daily budget
+  set it shows what share of that budget one serving uses when the serving size is known. Weights can be fine-tuned
+  under **Adjust weights** (custom profiles only).
 - Bands: Excellent 75–100, Good 50–74, Poor 25–49, Bad 0–24. A "low confidence" note appears when much of the weighted
   data is missing.
-- **Copy link with my profile** produces a `#profile=` link that loads the same profile on another phone, or after
-  Safari has cleared storage, exactly like the USDA key link.
+- **Copy link with my profile** (and **Copy link with my key**) produce one link carrying the USDA key and the
+  scoring profile, including questionnaire answers and daily budgets. Opening it seeds the profile once; changes made in
+  Settings afterwards are kept, and after Safari has cleared storage the same link seeds it again. Copy a fresh link to
+  pick up later edits.
 - Scores are a guide computed from public data, not medical advice. The additive risk levels are this app's own
   editorial classification informed by public regulatory opinions; additives it does not know get a small penalty.
 

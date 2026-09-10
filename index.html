@@ -159,13 +159,13 @@ nav.tabs button.active { color: var(--accent); }
 #dbgLines div { white-space: pre-wrap; word-break: break-all; border-bottom: 1px solid rgba(255,255,255,0.05); padding: 2px 0; }
 #dbgLines .warn { color: #f0b34a; } #dbgLines .error { color: #ff7b70; } #dbgLines .net { color: #7cc4ff; } #dbgLines .log { color: var(--dbg-ink); }
 /* toast */
-#toast { position: fixed; left: 50%; bottom: calc(96px + env(safe-area-inset-bottom)); transform: translateX(-50%); background: #15201b; color: #fff; padding: 10px 16px; border-radius: 999px; font-size: 14px; z-index: 40; opacity: 0; transition: opacity 0.2s; pointer-events: none; max-width: 90vw; text-align: center; }
+#toast { position: fixed; left: 50%; bottom: calc(96px + env(safe-area-inset-bottom)); transform: translateX(-50%); background: #15201b; color: #fff; padding: 10px 16px; border-radius: 999px; font-size: 14px; z-index: 70; opacity: 0; transition: opacity 0.2s; pointer-events: none; max-width: 90vw; text-align: center; }
 #toast.show { opacity: 0.95; }
 .hidden { display: none !important; }
 /* score */
 .scorebox { display: flex; gap: 12px; align-items: center; margin-top: 12px; padding: 10px 12px; border-radius: 14px; background: var(--chip); }
 .scoreval { min-width: 66px; text-align: center; font-size: 30px; font-weight: 800; line-height: 1; padding: 10px 6px; border-radius: 12px; color: #fff; flex: none; }
-.scoreval.band-excellent { background: #038141; } .scoreval.band-good { background: #6aa41f; } .scoreval.band-poor { background: #ee8100; } .scoreval.band-bad { background: #e63e11; } .scoreval.band-none { background: var(--muted); }
+.scoreval.band-excellent { background: #038141; } .scoreval.band-good { background: #6aa41f; } .scoreval.band-poor { background: #ee8100; } .scoreval.band-bad { background: #e63e11; } .scoreval.band-none { background: var(--muted); } .scoreval.band-low { background: #8a7a4a; }
 .scoreband { font-weight: 700; font-size: 17px; }
 .why { margin-top: 8px; }
 .why div { padding: 2px 0; }
@@ -388,7 +388,7 @@ body.dbg-open #toast { bottom: calc(45vh + 96px + env(safe-area-inset-bottom)); 
     </div>
 
     <div class="card stack small muted">
-      <div><b>FoodScanner</b> v<span id="verLabel2"></span> &middot; data coverage tester (v1).</div>
+      <div><b>FoodScanner</b> v<span id="verLabel2"></span> &middot; scores products and tests source coverage.</div>
       <div>Sources: <a href="https://world.openfoodfacts.org" target="_blank" rel="noopener noreferrer">Open Food Facts</a> (ODbL) and <a href="https://fdc.nal.usda.gov" target="_blank" rel="noopener noreferrer">USDA FoodData Central</a>.</div>
     </div>
   </section>
@@ -423,7 +423,7 @@ body.dbg-open #toast { bottom: calc(45vh + 96px + env(safe-area-inset-bottom)); 
 (function () {
 'use strict';
 
-var APP_VERSION = '0.1.0';
+var APP_VERSION = '0.2.0';
 var OFF_BASE = 'https://world.openfoodfacts.org/api/v2/product/';
 var OFF_FIELDS = ['code', 'product_name', 'product_name_en', 'generic_name', 'brands', 'quantity', 'serving_size', 'serving_quantity',
   'serving_quantity_unit', 'nutrition_data_per', 'nutriments', 'ingredients_text', 'ingredients_text_en', 'nova_group',
@@ -926,7 +926,7 @@ function recordScan(result, origin) {
   var sc = m.found ? scoreProduct(m, e, profile || { mode: 'standard' }) : null;
   scanLog.unshift({
     ts: isoNow(), barcode: e.barcode, format: e.format || '', name: m.name.v || '',
-    score: (sc && sc.score !== null) ? sc.score : null, scoreMode: sc ? sc.mode : '',
+    score: (sc && sc.score !== null) ? sc.score : null, scoreMode: sc ? sc.mode : '', lowConfidence: !!(sc && sc.score !== null && sc.lowConfidence),
     off: e.off.status, offCode: e.off.codeUsed || '', usda: e.usda.status, usdaCode: e.usda.codeUsed || '',
     missing: (foundOFF || foundUSDA) ? m.missing.slice() : [],   // only meaningful for products that were found
     cached: !!result.fromCache, origin: origin
@@ -938,7 +938,7 @@ function recordScan(result, origin) {
   renderLog();
 }
 function toCSV(entries) {
-  var cols = ['timestamp', 'barcode', 'format', 'product_name', 'off_status', 'off_code_used', 'usda_status', 'usda_code_used', 'found', 'incomplete', 'missing_fields', 'cached', 'origin', 'score', 'score_mode'];
+  var cols = ['timestamp', 'barcode', 'format', 'product_name', 'off_status', 'off_code_used', 'usda_status', 'usda_code_used', 'found', 'incomplete', 'missing_fields', 'cached', 'origin', 'score', 'score_mode', 'score_confidence'];
   function cell(v) { var s = (v === null || v === undefined) ? '' : String(v); return /[",\r\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; }
   var lines = [cols.join(',')];
   entries.forEach(function (e) {
@@ -946,7 +946,7 @@ function toCSV(entries) {
     var errored = !found && (e.off === 'error' || e.usda === 'error');
     lines.push([e.ts, e.barcode, e.format || '', e.name, e.off, e.offCode, e.usda, e.usdaCode, found ? 'yes' : (errored ? 'error' : 'no'),
       (found && e.missing && e.missing.length) ? 'yes' : 'no', (e.missing || []).join('; '), e.cached ? 'yes' : 'no', e.origin || '',
-      (e.score === null || e.score === undefined) ? '' : e.score, e.scoreMode || ''].map(cell).join(','));
+      (e.score === null || e.score === undefined) ? '' : e.score, e.scoreMode || '', (e.score === null || e.score === undefined) ? '' : (e.lowConfidence ? 'low' : 'ok')].map(cell).join(','));
   });
   return lines.join('\r\n');
 }
@@ -956,7 +956,7 @@ function renderTally() {
     .forEach(function (x) { el.appendChild(h('div', { class: 'tile' }, [h('div', { class: 'n', text: String(x[1]) }), h('div', { class: 'l', text: x[0] })])); });
   var uniq = {};
   scanLog.forEach(function (e) { uniq[e.barcode] = 1; });
-  $('tallyNote').textContent = 'Every lookup counts as a scan (cached repeats included). Unique barcodes in log: ' + Object.keys(uniq).length + '. "Incomplete" = found but missing serving size, carbs, sugars, fiber, protein or ingredients. Safari may clear this data after 7 days without a visit — export now and then.';
+  $('tallyNote').textContent = 'Every lookup counts as a scan (cached repeats included). Unique barcodes in log: ' + Object.keys(uniq).length + '. "Incomplete" = found but missing serving size, carbs, sugars, fiber, protein or ingredients. Safari may clear this data after 7 days without a visit — export now and then. Scores in the log are from the scoring profile in use at scan time; "?" marks low confidence.';
 }
 function renderLog() {
   var ul = clear($('logList'));
@@ -968,7 +968,7 @@ function renderLog() {
     if (e.usda !== 'skipped') flags.appendChild(h('span', { class: 'chip ' + (e.usda === 'found' ? 'ok' : e.usda === 'error' ? 'warn' : 'bad'), text: 'USDA ' + statusMark(e.usda) }));
     var hasMissing = (e.off === 'found' || e.usda === 'found') && e.missing && e.missing.length;
     if (hasMissing) flags.appendChild(h('span', { class: 'chip warn', text: 'missing ' + e.missing.length }));
-    if (e.score !== null && e.score !== undefined) { var sb = bandOf(e.score); flags.appendChild(h('span', { class: 'chip sc-' + sb.key, text: 'score ' + e.score })); }
+    if (e.score !== null && e.score !== undefined) { var sb = bandOf(e.score); flags.appendChild(h('span', { class: e.lowConfidence ? 'chip warn' : 'chip sc-' + sb.key, text: (e.scoreMode === 'custom' ? 'custom ' : 'std ') + e.score + (e.lowConfidence ? '?' : '') })); }
     var li = h('li', { onclick: function () { showTab('scan'); handleCode(e.barcode, e.format || null, 'log'); } }, [
       h('div', { class: 'grow' }, [
         h('div', { class: 'nm', text: e.name || (e.off === 'found' || e.usda === 'found' ? '(unnamed)' : (e.off === 'error' || e.usda === 'error') ? 'Lookup failed' : 'Not found') }),
@@ -1002,8 +1002,14 @@ var METRICS = [
   { key: 'organic', label: 'Organic label', unit: '', dir: 'flag' }
 ];
 // Per-100 g thresholds: a 'low' metric scores 100 at or below the first value and 0 at or above the second; 'high' metrics
-// the reverse. Sugar, saturated fat and sodium follow the UK FSA traffic-light cut-offs; the rest are common guidance.
+// the reverse. Sugar, saturated fat and sodium follow the UK FSA front-of-pack cut-offs for foods; the rest are common
+// guidance. Products whose data is per 100 ml get the FSA drink cut-offs instead (about half), see DRINK_THRESHOLDS.
 var DEFAULT_THRESHOLDS = { netCarbs: [15, 50], sugars: [5, 22.5], fiber: [1.5, 6], protein: [3, 15], satFat: [1.5, 5], sodiumMg: [120, 600], kcal: [150, 450] };
+// FSA drink criteria per 100 ml (sugars 2.5/11.25 g, saturates 0.75/2.5 g, salt 0.3/0.75 g = sodium 120/300 mg); calories
+// from the Nutri-Score beverage energy scale (30–390 kJ); net carbs halved like sugars. Liquid foods (soups, sauces, oils,
+// dressings, syrups) keep the food cut-offs.
+var DRINK_THRESHOLDS = { sugars: [2.5, 11.25], satFat: [0.75, 2.5], sodiumMg: [120, 300], kcal: [7, 93], netCarbs: [7.5, 25] };
+var LIQUID_FOOD = /soup|sauce|\boil|vinegar|dressing|syrup|honey|cream\b/i;
 var PRESETS = {
   balanced: { name: 'Balanced', weights: { sugars: 3, satFat: 2, sodiumMg: 2, kcal: 1, netCarbs: 0, fiber: 2, protein: 2, processing: 2, additives: 2, organic: 0 } },
   keto: { name: 'Keto / low-carb', weights: { netCarbs: 5, sugars: 4, satFat: 0, sodiumMg: 1, kcal: 0, fiber: 2, protein: 2, processing: 2, additives: 2, organic: 0 }, thresholds: { netCarbs: [3, 12] } },
@@ -1019,7 +1025,7 @@ var NOVA_SCORE = { 1: 100, 2: 80, 3: 50, 4: 10 };
 var ADDITIVE_RISK = (function () {
   var t = {};
   function set(level, list) { list.split(' ').forEach(function (k) { t[k] = level; }); }
-  set(0, 'e100 e101 e140 e160a e160c e160d e161b e162 e163 e170 e270 e290 e296 e300 e301 e302 e306 e307 e308 e309 e322 e325 e326 e327 e330 e331 e332 e333 e334 e335 e336 e337 e400 e401 e402 e403 e404 e406 e410 e412 e413 e414 e415 e416 e417 e418 e422 e440 e460 e461 e463 e464 e465 e469 e500 e501 e503 e504 e507 e508 e509 e511 e516 e524 e525 e526 e527 e528 e529 e530 e570 e574 e575 e576 e577 e578 e640 e901 e902 e903 e904 e938 e939 e941 e942 e948 e949 e953 e957 e960 e965 e966 e967 e968 e1200 e1400 e1401 e1402 e1403 e1404 e1410 e1412 e1413 e1414 e1420 e1422 e1440 e1442 e1450 e1451');
+  set(0, 'e14xx e260 e261 e304 e316 e392 e442 e514 e535 e536 e1103 e100 e101 e140 e160a e160c e160d e161b e162 e163 e170 e270 e290 e296 e300 e301 e302 e306 e307 e308 e309 e322 e325 e326 e327 e330 e331 e332 e333 e334 e335 e336 e337 e400 e401 e402 e403 e404 e406 e410 e412 e413 e414 e415 e416 e417 e418 e422 e440 e460 e461 e463 e464 e465 e469 e500 e501 e503 e504 e507 e508 e509 e511 e516 e524 e525 e526 e527 e528 e529 e530 e570 e574 e575 e576 e577 e578 e640 e901 e902 e903 e904 e938 e939 e941 e942 e948 e949 e953 e957 e960 e965 e966 e967 e968 e1200 e1400 e1401 e1402 e1403 e1404 e1410 e1412 e1413 e1414 e1420 e1422 e1440 e1442 e1450 e1451');
   set(1, 'e141 e150a e150b e160b e200 e201 e202 e203 e234 e235 e262 e263 e280 e281 e282 e283 e420 e421 e466 e470a e470b e471 e472 e472a e472b e472c e472d e472e e472f e473 e474 e475 e476 e477 e481 e482 e483 e491 e492 e493 e494 e495 e551 e552 e553a e626 e627 e628 e629 e630 e631 e632 e633 e634 e635 e900 e914 e920 e927b e999 e1105 e1505 e1518 e1520');
   set(2, 'e120 e131 e132 e133 e150c e150d e151 e155 e180 e210 e211 e212 e213 e220 e221 e222 e223 e224 e226 e227 e228 e242 e310 e311 e312 e338 e339 e340 e341 e343 e385 e407 e407a e432 e433 e434 e435 e436 e450 e451 e452 e553b e620 e621 e622 e623 e624 e625 e950 e952 e954 e955 e961 e1201 e1202');
   set(3, 'e102 e104 e110 e122 e124 e127 e129 e142 e143 e171 e173 e214 e215 e216 e217 e218 e219 e230 e231 e232 e239 e249 e250 e251 e252 e284 e285 e319 e320 e321 e924 e925 e951 e962');
@@ -1029,52 +1035,117 @@ var ADDITIVE_LEVEL_LABEL = ['no known concern', 'limited concern', 'moderate con
 function additiveLevel(tag) {
   var t = String(tag).toLowerCase().replace(/^[a-z]{2,3}:/, '');
   if (ADDITIVE_RISK[t] !== undefined) return ADDITIVE_RISK[t];
+  var v = /^(e\d{3,4}[a-z]?)(i{1,3}|iv|v)$/.exec(t);              // e160bi → e160b, e322i → e322: sub-variants inherit the parent's level
+  if (v && ADDITIVE_RISK[v[1]] !== undefined) return ADDITIVE_RISK[v[1]];
   var base = /^(e\d{3,4})/.exec(t);
   if (base && ADDITIVE_RISK[base[1]] !== undefined) return ADDITIVE_RISK[base[1]];
   return -1;
+}
+// Open Food Facts can tag both a parent and its sub-variant (en:e322 and en:e322i); count such pairs once.
+function dedupeAdditives(list) {
+  var tags = list.map(function (a) { return String(a).toLowerCase().replace(/^[a-z]{2,3}:/, ''); });
+  return tags.filter(function (t, i) {
+    if (tags.indexOf(t) !== i) return false;
+    return !tags.some(function (u) { return u !== t && t.indexOf(u) === 0 && /^(i{1,3}|iv|v|[a-z])$/.test(t.slice(u.length)); });
+  });
 }
 // 0–100 additive sub-score: the riskiest additive sets the ceiling, every extra additive costs a little more.
 function additivesScore(m, e) {
   var off = e.off && e.off.norm;
   if (!off || (!off.additivesAnalysed && !(off.additives && off.additives.length))) return null;   // no ingredient analysis available
-  var adds = off.additives || [];
+  var adds = dedupeAdditives(off.additives || []);
   if (!adds.length) return { score: 100, worst: -2, text: 'no additives' };
   var worst = -1, names = [];
   adds.forEach(function (a) { var l = additiveLevel(a); if (l > worst) worst = l; names.push(a + (l >= 0 ? ' (' + ADDITIVE_LEVEL_LABEL[l] + ')' : ' (unrated)')); });
-  var base = worst < 0 ? 70 : [100, 80, 35, 0][worst];
+  var base = worst < 0 ? 85 : [100, 80, 35, 0][worst];   // an unrated additive is a small penalty, never worse than a rated 'limited concern' one
   return { score: Math.max(0, base - 5 * (adds.length - 1)), worst: worst, text: names.slice(0, 3).join(', ') + (names.length > 3 ? ' +' + (names.length - 3) + ' more' : '') };
 }
 function organicOf(e) { var off = e.off && e.off.norm; if (!off || !off.labelsKnown) return null; return !!off.organic; }
-function isBeverage(m) { return m.basis === 'ml' || /beverage|drink|soda|juice|\bwater|\btea\b|coffee|smoothie|\bmilk|lemonade|kombucha/i.test(String(m.categories.v || '')); }
-// Nutri-Score (2023 algorithm) points from per-100 g/ml nutrients, for general foods and beverages. The fruit/vegetable
-// share is unknown here and counts as 0; the special rules for cheeses, fats and oils are not applied. Null if the key
-// inputs are missing.
-function computeNutriScore(per100, beverage, hasSweetener) {
+// Open Food Facts category lists carry every ancestor ("plant based foods and beverages, breads"), so tags are matched whole.
+var OFF_BEV_TAGS = /^(beverages|milks|dairy drinks|plant based milk alternatives|plant based beverages|tea based beverages|iced teas|herbal tea beverages|coffee beverages|coffee drinks|sodas|carbonated drinks|colas|waters|spring waters|mineral waters|fruit juices|vegetable juices|juices and nectars|smoothies|energy drinks|sports drinks|alcoholic beverages|beers|wines)$/i;
+var NOT_BEV_TAGS = /^(soups|meal replacements?|beverage preparations)$/i;
+var FDC_BEV = /(^|\s|&\s)(beverages?|drinks?|sodas?|juices?|water|milk|smoothies?|kombucha|lemonade)$/i;
+function categoryTags(m) { return String(m.categories.v || '').split(/\s*,\s*/).filter(Boolean); }
+function isBeverage(m) {
+  if (m.basis === 'ml') return true;
+  var tags = categoryTags(m);
+  if (tags.some(function (t) { return NOT_BEV_TAGS.test(t); })) return false;
+  if (m.categories.from === 'OFF') return tags.some(function (t) { return OFF_BEV_TAGS.test(t); });
+  return tags.some(function (t) { return FDC_BEV.test(t); });
+}
+var CHEESE_TAGS = /^([a-z ]*cheeses|cheddar|mozzarella|parmesan|gouda|brie|feta|gruyere|emmental|camembert)$/i, NOT_CHEESE = /^(cream cheeses?|cottage cheeses?|fromage blanc)$/i;
+var FAT_TAGS = /^(fats|animal fats|vegetable fats|oils|[a-z ]* oils|butters|margarines|spreadable fats|ghee|lards?|shortenings?|nuts|seeds|nut butters|peanut butters|nuts and their products|seeds and their products|almonds|cashews|walnuts|peanuts|hazelnuts|pistachios|pecans|sunflower seeds|pumpkin seeds|chia seeds|sesame seeds|flax seeds|tahini)$/i;
+var FDC_CHEESE = /cheese/i, FDC_FAT = /(^|\s|&\s)(oils?|fats?|butter|margarine|nuts?|seeds?|nut & seed butters)(\s|$)/i;
+// Which Nutri-Score table applies: 'cheese', 'fat' (fats, oils, nuts, seeds), 'beverage' or 'general'.
+function nutriKind(m) {
+  var tags = categoryTags(m), fromOFF = m.categories.from === 'OFF';
+  if (fromOFF) {
+    var excluded = tags.some(function (t) { return NOT_CHEESE.test(t); });   // fresh/cream cheeses are not scored with the cheese rule
+    if (!excluded && tags.some(function (t) { return CHEESE_TAGS.test(t); })) return 'cheese';
+    if (tags.some(function (t) { return FAT_TAGS.test(t); })) return 'fat';
+  } else if (tags.length) {
+    if (tags.some(function (t) { return FDC_CHEESE.test(t); })) return 'cheese';
+    if (tags.some(function (t) { return FDC_FAT.test(t); })) return 'fat';
+  }
+  return isBeverage(m) ? 'beverage' : 'general';
+}
+function oliveLikeOil(m) { var t = String(m.name.v || '') + ' ' + String(m.categories.v || ''); return /\b(olive|rapeseed|canola|colza|walnut)\b[^,]*\boils?\b|\boils?\b[^,]*\b(olive|rapeseed|canola|colza|walnut)\b/i.test(t); }
+function isPlainWater(m) {
+  var t = String(m.name.v || '') + ' ' + String(m.categories.v || '');
+  return /\b(spring|mineral|sparkling|still|purified|natural|drinking|table)?\s*waters?\b/i.test(t) && !/flavou?red|vitamin|enhanced|tonic|coconut|soda water|seltzer with/i.test(t);
+}
+// Nutri-Score (2023 algorithm) points from per-100 g/ml nutrients. kind: 'general', 'beverage', 'fat' (fats, oils, nuts,
+// seeds) or 'cheese' (true/false are accepted as beverage/general). The fruit/vegetable share is unknown here and counts
+// as 0, except the 5 points the algorithm grants olive, rapeseed and walnut oils (opts.fvl5). Plain water (opts.water)
+// gets grade A. Null if the key inputs are missing.
+function computeNutriScore(per100, kind, hasSweetener, opts) {
+  opts = opts || {};
+  if (kind === true) kind = 'beverage';
+  if (!kind || kind === false) kind = 'general';
   function pts(v, cuts) { var n = 0; for (var i = 0; i < cuts.length; i++) { if (v > cuts[i]) n = i + 1; } return n; }
+  function ptsGE(v, cuts) { var n = 0; for (var i = 0; i < cuts.length; i++) { if (v >= cuts[i]) n = i + 1; } return n; }
   if (per100.kcal === null || per100.sugars === null || per100.satFat === null || per100.sodiumMg === null) return null;
   var kj = per100.kcal * 4.184, salt = per100.sodiumMg / 1000 * 2.5;
   var fiber = per100.fiber === null ? 0 : per100.fiber, protein = per100.protein === null ? 0 : per100.protein;
   var SALT = [0.2, 0.4, 0.6, 0.8, 1, 1.2, 1.4, 1.6, 1.8, 2, 2.2, 2.4, 2.6, 2.8, 3, 3.2, 3.4, 3.6, 3.8, 4];
   var SAT = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
   var FIBER = [3, 4.1, 5.2, 6.3, 7.4];
+  var SUGARS = [3.4, 6.8, 10, 14, 17, 20, 24, 27, 31, 34, 37, 41, 44, 48, 51];
+  var PROTEIN = [2.4, 4.8, 7.2, 9.6, 12, 14, 17];
   var N, P, sc;
-  if (beverage) {
+  if (kind === 'beverage') {
+    if (opts.water && per100.kcal === 0 && per100.sugars === 0 && !hasSweetener) return { points: 0, grade: 'a', kind: 'beverage', beverage: true, estimated: true };
     N = pts(kj, [30, 90, 150, 210, 240, 270, 300, 330, 360, 390]) + pts(per100.sugars, [0.5, 2, 3.5, 5, 6, 7, 8, 9, 10, 11]) + pts(per100.satFat, SAT) + pts(salt, SALT) + (hasSweetener ? 4 : 0);
     P = pts(fiber, FIBER) + pts(protein, [1.2, 1.5, 1.8, 2.1, 2.4, 2.7, 3]);
     sc = N - P;
-    return { points: sc, grade: sc <= 2 ? 'b' : sc <= 6 ? 'c' : sc <= 9 ? 'd' : 'e', beverage: true, estimated: true };   // grade A is reserved for water
+    return { points: sc, grade: sc <= 2 ? 'b' : sc <= 6 ? 'c' : sc <= 9 ? 'd' : 'e', kind: 'beverage', beverage: true, estimated: true };   // grade A is reserved for water
   }
-  N = pts(kj, [335, 670, 1005, 1340, 1675, 2010, 2345, 2680, 3015, 3350]) + pts(per100.sugars, [3.4, 6.8, 10, 14, 17, 20, 24, 27, 31, 34, 37, 41, 44, 48, 51]) + pts(per100.satFat, SAT) + pts(salt, SALT);
-  var fiberP = pts(fiber, FIBER), proteinP = pts(protein, [2.4, 4.8, 7.2, 9.6, 12, 14, 17]);
-  P = N >= 11 ? fiberP : fiberP + proteinP;   // with 11+ negative points protein only counts alongside 5 fruit/veg points, which are unknown here
+  if (kind === 'fat') {
+    if (per100.fat === null || per100.fat === undefined) return null;
+    var satKj = per100.satFat * 37, ratio = per100.fat > 0 ? per100.satFat / per100.fat * 100 : 0;
+    N = pts(satKj, [120, 240, 360, 480, 600, 720, 840, 960, 1080, 1200]) + pts(per100.sugars, SUGARS) + ptsGE(ratio, [10, 16, 22, 28, 34, 40, 46, 52, 58, 64]) + pts(salt, SALT);
+    var fvl = opts.fvl5 ? 5 : 0;
+    P = fvl + pts(fiber, FIBER) + ((N < 7 || fvl === 5) ? pts(protein, PROTEIN) : 0);
+    sc = N - P;
+    return { points: sc, grade: sc <= -6 ? 'a' : sc <= 2 ? 'b' : sc <= 10 ? 'c' : sc <= 18 ? 'd' : 'e', kind: 'fat', beverage: false, estimated: true };
+  }
+  N = pts(kj, [335, 670, 1005, 1340, 1675, 2010, 2345, 2680, 3015, 3350]) + pts(per100.sugars, SUGARS) + pts(per100.satFat, SAT) + pts(salt, SALT);
+  var fiberP = pts(fiber, FIBER), proteinP = pts(protein, PROTEIN);
+  P = (kind === 'cheese' || N < 11) ? fiberP + proteinP : fiberP;   // with 11+ negative points protein is not counted, except for cheeses
   sc = N - P;
-  return { points: sc, grade: sc <= 0 ? 'a' : sc <= 2 ? 'b' : sc <= 10 ? 'c' : sc <= 18 ? 'd' : 'e', beverage: false, estimated: true };
+  return { points: sc, grade: sc <= 0 ? 'a' : sc <= 2 ? 'b' : sc <= 10 ? 'c' : sc <= 18 ? 'd' : 'e', kind: kind, beverage: false, estimated: true };
 }
+var SWEETENER_WORDS = /aspartame|acesulfame|sucralose|saccharin|stevi(a|ol)|rebaudioside|cyclamate|neotame|advantame|thaumatin|neohesperidin|monk ?fruit|luo han/i;
 function nutriScoreOf(m, e) {
   var off = e.off && e.off.norm;
-  if (off && off.nutriscore) return { grade: off.nutriscore, points: off.nutriscorePoints, beverage: isBeverage(m), estimated: false };
-  var sweet = (m.additives.v || []).some(function (a) { return /^e9(5\d|6\d)/i.test(String(a)); });
-  return computeNutriScore(m.per100, isBeverage(m), sweet);
+  if (off && off.nutriscoreNote === 'not-applicable') return { notApplicable: true };
+  var kind = nutriKind(m);
+  if (off && off.nutriscore) return { grade: off.nutriscore, points: off.nutriscorePoints, kind: kind, beverage: kind === 'beverage', estimated: false };
+  var sweetTag = (m.additives.v || []).some(function (a) { return /^e9(5\d|6\d)/i.test(String(a)); });
+  var sweetText = SWEETENER_WORDS.test(String(m.ingredients.v || ''));
+  var r = computeNutriScore(m.per100, kind, sweetTag || sweetText, { fvl5: kind === 'fat' && oliveLikeOil(m), water: kind === 'beverage' && isPlainWater(m) });
+  if (r && sweetText && !sweetTag) r.sweetenerFromText = true;
+  return r;
 }
 // Nutri-Score → 0–60 nutrition component. Uses the points when known (interpolated within each grade band), else the grade.
 function nutritionPoints60(ns) {
@@ -1102,27 +1173,40 @@ function linScore(v, th, dir) {
 function standardScore(m, e) {
   var comps = [];
   var ns = nutriScoreOf(m, e);
-  comps.push({ key: 'nutrition', label: 'Nutritional quality', max: 60, score: ns ? nutritionPoints60(ns) : null,
-    text: ns ? 'Nutri-Score ' + ns.grade.toUpperCase() + (ns.estimated ? ' (estimated from the nutrients)' : '') : 'not enough nutrition data' });
+  var needs = ['kcal', 'sugars', 'satFat', 'sodiumMg'].filter(function (k) { return m.per100[k] === null; }).map(function (k) { return { kcal: 'calories', sugars: 'sugars', satFat: 'saturated fat', sodiumMg: 'sodium' }[k]; });
+  var nsText;
+  if (ns && ns.notApplicable) { nsText = 'Nutri-Score not applicable to this category (per Open Food Facts)'; ns = null; }
+  else if (ns) nsText = 'Nutri-Score ' + ns.grade.toUpperCase() + (ns.estimated ? ' (estimated from the nutrients' + (ns.kind === 'fat' ? ', fats/oils table' : ns.kind === 'cheese' ? ', cheese rule' : ns.kind === 'beverage' ? ', beverage table' : '') + (ns.sweetenerFromText ? ', sweetener found in the ingredients' : '') + ')' : '');
+  else nsText = 'not enough nutrition data' + (needs.length ? ' (needs ' + needs.join(', ') + ')' : ' (needs total fat for oils and nuts)');
+  comps.push({ key: 'nutrition', label: 'Nutritional quality', max: 60, score: ns ? nutritionPoints60(ns) : null, text: nsText });
   var ad = additivesScore(m, e);
-  comps.push({ key: 'additives', label: 'Additives', max: 30, score: ad ? Math.round(ad.score * 0.3) : null, text: ad ? ad.text : 'no ingredient analysis' });
+  comps.push({ key: 'additives', label: 'Additives', max: 30, score: ad ? Math.round(ad.score * 0.3) : null, text: ad ? ad.text : 'no additive analysis (Open Food Facts only)' });
   var org = organicOf(e);
   comps.push({ key: 'organic', label: 'Organic', max: 10, score: org === null ? null : (org ? 10 : 0), text: org === null ? 'unknown' : (org ? 'organic label' : 'no organic label') });
   var have = comps.filter(function (c) { return c.score !== null; });
   var max = 0, sum = 0;
   have.forEach(function (c) { max += c.max; sum += c.score; });
-  var score = max ? Math.round(sum / max * 100) : null;
+  var informative = have.some(function (c) { return c.key !== 'organic'; });   // a label alone is not a score
+  var score = (max && informative) ? Math.round(sum / max * 100) : null;
+  if (score !== null && !isFinite(score)) score = null;
   var why = have.map(function (c) { return { positive: c.score / c.max >= 0.5, text: c.label + ': ' + c.text + ' (' + c.score + '/' + c.max + ')', weight: Math.abs(c.score / c.max - 0.5) * c.max }; })
     .sort(function (a, b) { return b.weight - a.weight; });
   return { mode: 'standard', score: score, band: bandOf(score), components: comps, why: why,
     coverageNote: have.length < 3 ? 'based on ' + have.length + ' of 3 components' : '', lowConfidence: max > 0 && max < 60,
     missingNote: comps.filter(function (c) { return c.score === null; }).map(function (c) { return c.label.toLowerCase() + ' unknown'; }).join(', '),
-    reason: max ? '' : 'no nutrition, additive or organic data' };
+    reason: score !== null ? '' : (max ? 'only the organic label is known' : 'no nutrition, additive or organic data') };
 }
 // Custom score: weighted average (weights 0–5) of per-factor sub-scores over the factors that have data.
 function customScore(m, e, prof) {
   var rows = [], wsum = 0, acc = 0, missW = 0, totalW = 0;
   var th = Object.assign({}, DEFAULT_THRESHOLDS, prof.thresholds || {});
+  var drink = m.basis === 'ml' && !LIQUID_FOOD.test(String(m.categories.v || ''));
+  if (drink) {
+    Object.keys(DRINK_THRESHOLDS).forEach(function (k) {
+      var cur = th[k], def = DEFAULT_THRESHOLDS[k];
+      th[k] = (cur && def && (cur[0] !== def[0] || cur[1] !== def[1])) ? [cur[0] / 2, cur[1] / 2] : DRINK_THRESHOLDS[k];   // goal-specific cut-offs halve like the FSA's
+    });
+  }
   METRICS.forEach(function (met) {
     var w = Number(prof.weights && prof.weights[met.key]) || 0;
     if (w <= 0) return;
@@ -1145,25 +1229,30 @@ function customScore(m, e, prof) {
     wsum += w; acc += w * s;
     rows.push({ key: met.key, label: met.label, w: w, s: s, text: text });
   });
-  var score = wsum ? Math.round(acc / wsum) : null;
+  var informative = rows.some(function (r) { return r.s !== null && r.key !== 'organic'; });
+  var enoughWeight = totalW > 0 && wsum / totalW >= 0.5;     // at least half of your weighted factors must have data
+  var score = (wsum && informative && enoughWeight) ? Math.round(acc / wsum) : null;
+  if (score !== null && !isFinite(score)) score = null;
   var why = rows.filter(function (r) { return r.s !== null; })
     .map(function (r) { return { positive: r.s >= 50, text: r.label + ' ' + r.text, weight: r.w * Math.abs(r.s - 50) }; })
     .sort(function (a, b) { return b.weight - a.weight; }).slice(0, 3);
   var missing = rows.filter(function (r) { return r.s === null; }).map(function (r) { return r.label.toLowerCase(); });
   return { mode: 'custom', score: score, band: bandOf(score), rows: rows, why: why,
-    coverageNote: missing.length ? 'based on ' + (rows.length - missing.length) + ' of ' + rows.length + ' weighted factors' : '',
+    coverageNote: (missing.length ? 'based on ' + (rows.length - missing.length) + ' of ' + rows.length + ' weighted factors' : '') + (drink ? (missing.length ? ' · ' : '') + 'drink cut-offs per 100 ml' : ''),
     lowConfidence: totalW > 0 && missW / totalW > 0.4, missingNote: missing.length ? 'no data for ' + missing.join(', ') : '',
-    reason: wsum ? '' : 'none of your weighted factors has data' };
+    reason: score !== null ? '' : (!wsum ? 'none of your weighted factors has data' : !informative ? 'only the organic label is known' : 'too little data for your weighted factors' + (missing.length ? ' (no data for ' + missing.join(', ') + ')' : '')) };
 }
 function budgetLines(m, prof) {
   var out = [];
   if (!prof || prof.mode !== 'custom' || !prof.budgets) return out;
-  var labels = { netCarbs: ['net carbs', 'g'], sugars: ['sugar', 'g'], sodiumMg: ['sodium', 'mg'], kcal: ['calories', 'kcal'] };
-  Object.keys(labels).forEach(function (k) {
+  var unknown = [];
+  Object.keys(BUDGET_LABELS).forEach(function (k) {
     var b = toNum(prof.budgets[k]), v = m.perServing[k];
-    if (b === null || b <= 0 || v === null || v === undefined) return;
-    out.push('One serving = ' + Math.round(v / b * 100) + '% of your daily ' + labels[k][0] + ' (' + fmtVal(v, labels[k][1]) + ' of ' + fmtVal(b, labels[k][1]) + ')');
+    if (b === null || b <= 0) return;
+    if (v === null || v === undefined) { unknown.push(BUDGET_LABELS[k][0]); return; }
+    out.push('One serving = ' + Math.round(v / b * 100) + '% of your daily ' + BUDGET_LABELS[k][0] + ' (' + fmtVal(v, BUDGET_LABELS[k][1]) + ' of ' + fmtVal(b, BUDGET_LABELS[k][1]) + ')');
   });
+  if (unknown.length) out.push('Daily ' + unknown.join(', ') + ' budget: no per-serving share, the serving size' + (m.servingSize.v ? ' has no weight' : ' is unknown') + '.');
   return out;
 }
 function scoreProduct(m, e, prof) {
@@ -1180,8 +1269,8 @@ function renderScore(sc) {
   }
   var label = sc.mode === 'standard' ? 'Standard score' : 'Custom score · ' + ((profile && profile.name) || 'custom');
   wrap.appendChild(h('div', { class: 'scorebox' }, [
-    h('div', { class: 'scoreval band-' + sc.band.key, text: String(sc.score) }),
-    h('div', { class: 'grow' }, [h('div', { class: 'scoreband', text: sc.band.label + ' (' + sc.score + '/100)' }), h('div', { class: 'tiny muted', text: label + (sc.coverageNote ? ' · ' + sc.coverageNote : '') })])
+    h('div', { class: 'scoreval band-' + (sc.lowConfidence ? 'low' : sc.band.key), text: String(sc.score) }),
+    h('div', { class: 'grow' }, [h('div', { class: 'scoreband', text: (sc.lowConfidence ? 'Low confidence' : sc.band.label) + ' (' + sc.score + '/100)' }), h('div', { class: 'tiny muted', text: label + (sc.coverageNote ? ' · ' + sc.coverageNote : '') })])
   ]));
   if (sc.why && sc.why.length) wrap.appendChild(h('div', { class: 'why' }, sc.why.slice(0, 3).map(function (w) { return h('div', { class: 'small ' + (w.positive ? 'pos' : 'neg'), text: (w.positive ? '+ ' : '− ') + w.text }); })));
   (sc.budgets || []).forEach(function (b) { wrap.appendChild(h('div', { class: 'small', style: 'margin-top:4px;color:var(--accent)', text: b })); });
@@ -1194,7 +1283,8 @@ function renderScore(sc) {
     tbl.appendChild(h('tr', {}, [h('th', { text: 'Factor' }), h('th', { text: 'Weight' }), h('th', { text: 'Score' })]));
     sc.rows.forEach(function (r) { tbl.appendChild(h('tr', {}, [h('td', { text: r.label + (r.text ? ' — ' + r.text : '') }), h('td', { text: String(r.w) }), h('td', { text: r.s === null ? '–' : String(r.s) })])); });
   }
-  wrap.appendChild(h('details', {}, [h('summary', { class: 'small', text: 'Score details' }), tbl]));
+  wrap.appendChild(h('details', {}, [h('summary', { class: 'small', text: 'Score details' }), tbl,
+    h('div', { class: 'tiny muted', style: 'margin-top:6px', text: 'Scores are a guide computed from public data, not medical advice. Additive risk levels are this app\'s own editorial classification.' })]));
   return wrap;
 }
 
@@ -1205,8 +1295,16 @@ var QUESTIONS = [
   { id: 'carbs', title: 'Do you count carbs?', type: 'single', options: [['none', 'No'], ['moderate', 'Somewhat — I prefer lower-carb foods'], ['strict', 'Strictly — keto or diabetes']] },
   { id: 'additives', title: 'Additives and ultra-processed food?', type: 'single', options: [['avoid', 'Avoid strictly'], ['prefer', 'Prefer to avoid'], ['ok', 'Do not mind']] },
   { id: 'organic', title: 'Does an organic label matter to you?', type: 'single', options: [['yes', 'Yes, it counts'], ['no', 'No']] },
-  { id: 'budgets', title: 'Daily budgets (optional)', hint: 'If you set one, every card shows what share of it one serving uses.', type: 'budgets', fields: [['netCarbs', 'Net carbs per day (g)'], ['sugars', 'Sugar per day (g)'], ['sodiumMg', 'Sodium per day (mg)'], ['kcal', 'Calories per day']] }
+  { id: 'budgets', title: 'Daily budgets (optional)', hint: 'If you set one, each card shows what share of it one serving uses, when the serving size is known.', type: 'budgets', fields: [['netCarbs', 'Net carbs per day (g)'], ['sugars', 'Sugar per day (g)'], ['sodiumMg', 'Sodium per day (mg)'], ['kcal', 'Calories per day']] }
 ];
+// '1,800' is a thousands separator here, not a European decimal comma.
+function parseBudget(v) {
+  var str = String(v === null || v === undefined ? '' : v).trim();
+  if (/^\d{1,3}(,\d{3})+(\.\d+)?$/.test(str)) str = str.replace(/,/g, '');
+  var n = toNum(str);
+  return (n !== null && n > 0) ? n : null;
+}
+var BUDGET_LABELS = { netCarbs: ['net carbs', 'g'], sugars: ['sugar', 'g'], sodiumMg: ['sodium', 'mg'], kcal: ['calories', 'kcal'] };
 function answersToProfile(a) {
   a = a || {};
   var preset = PRESETS[a.goal] || PRESETS.balanced;
@@ -1219,14 +1317,31 @@ function answersToProfile(a) {
   else if (a.additives === 'ok') { w.additives = 0; w.processing = 0; }
   if (a.organic === 'yes') w.organic = Math.max(w.organic || 0, 2); else if (a.organic === 'no') w.organic = 0;
   var budgets = {};
-  Object.keys(a.budgets || {}).forEach(function (k) { var n = toNum(a.budgets[k]); if (n !== null && n > 0) budgets[k] = n; });
+  Object.keys(a.budgets || {}).forEach(function (k) { if (!BUDGET_LABELS[k]) return; var n = parseBudget(a.budgets[k]); if (n !== null) budgets[k] = n; });
   return { mode: 'custom', version: 1, preset: PRESETS[a.goal] ? a.goal : 'balanced', name: preset.name, weights: w, thresholds: th, budgets: budgets, answers: a };
 }
 function profileName(p) { if (!p) return 'not chosen'; return p.mode === 'standard' ? 'Standard' : 'Custom · ' + (p.name || 'custom'); }
-function loadProfile() {
-  var p = store.getJSON(PROFILE_KEY, null);
-  profile = (p && (p.mode === 'standard' || (p.mode === 'custom' && p.weights))) ? p : null;
+// Anything read from storage or a link is normalised to a safe shape (weights 0–5, valid thresholds, positive budgets).
+function sanitizeProfile(p) {
+  if (!p || typeof p !== 'object' || Array.isArray(p)) return null;
+  if (p.mode === 'standard') return { mode: 'standard', version: 1 };
+  if (p.mode !== 'custom' || !p.weights || typeof p.weights !== 'object' || Array.isArray(p.weights)) return null;
+  var out = { mode: 'custom', version: 1, preset: PRESETS[p.preset] ? p.preset : 'balanced', name: (typeof p.name === 'string' && p.name.trim()) ? p.name.trim().slice(0, 60) : null, weights: {}, thresholds: {}, budgets: {}, answers: {} };
+  var wtotal = 0;
+  METRICS.forEach(function (met) { var v = Number(p.weights[met.key]); out.weights[met.key] = isFinite(v) ? Math.max(0, Math.min(5, Math.round(v))) : 0; wtotal += out.weights[met.key]; });
+  if (!wtotal) out.weights = Object.assign({}, PRESETS[out.preset].weights);   // all-zero weights would score nothing; fall back to the preset
+  if (p.thresholds && typeof p.thresholds === 'object') {
+    Object.keys(DEFAULT_THRESHOLDS).forEach(function (k) {
+      var t = p.thresholds[k];
+      if (Array.isArray(t) && t.length === 2 && isFinite(Number(t[0])) && isFinite(Number(t[1])) && Number(t[0]) < Number(t[1])) out.thresholds[k] = [Number(t[0]), Number(t[1])];
+    });
+  }
+  if (p.budgets && typeof p.budgets === 'object') Object.keys(BUDGET_LABELS).forEach(function (k) { var b = Number(p.budgets[k]); if (isFinite(b) && b > 0) out.budgets[k] = b; });
+  if (p.answers && typeof p.answers === 'object' && !Array.isArray(p.answers)) out.answers = p.answers;
+  if (!out.name) out.name = PRESETS[out.preset].name;
+  return out;
 }
+function loadProfile() { profile = sanitizeProfile(store.getJSON(PROFILE_KEY, null)); }
 function saveProfile(p) {
   profile = p;
   store.setJSON(PROFILE_KEY, p);
@@ -1239,8 +1354,7 @@ function decodeProfile(str) {
   try {
     var b = String(str).replace(/-/g, '+').replace(/_/g, '/');
     while (b.length % 4) b += '=';
-    var p = JSON.parse(decodeURIComponent(escape(atob(b))));
-    return (p && (p.mode === 'standard' || (p.mode === 'custom' && p.weights))) ? p : null;
+    return sanitizeProfile(JSON.parse(decodeURIComponent(escape(atob(b)))));
   } catch (e) { return null; }
 }
 var ob = { step: 0, answers: null };
@@ -1260,7 +1374,7 @@ function renderOnboarding() {
   if (ob.step === 'weights') { renderWeightsEditor(box); return; }
   if (ob.step === 0) {
     box.appendChild(h('h2', { text: 'How should products be scored?' }));
-    box.appendChild(h('p', { class: 'muted', text: 'Every product gets a 0–100 score. Use the standard score, or tailor one to your own goals. You can change this any time in Settings.' }));
+    box.appendChild(h('p', { class: 'muted', text: 'Every product gets a 0–100 score. Use the standard score, or tailor one to your own goals. You can change this any time in Settings. Scores are a guide from public data, not medical advice.' }));
     box.appendChild(h('button', { class: 'ob-choice', type: 'button', id: 'obStandard', onclick: function () { saveProfile({ mode: 'standard', version: 1 }); closeOnboarding(); toast('Standard scoring on'); } },
       [h('b', {}, 'Standard'), h('span', { class: 'small muted', text: 'Nutritional quality via Nutri-Score (60%), additives weighed by risk level (30%) and organic certification (10%).' })]));
     box.appendChild(h('button', { class: 'ob-choice', type: 'button', id: 'obCustom', onclick: function () { ob.step = 1; renderOnboarding(); } },
@@ -1290,7 +1404,7 @@ function renderQuestion(box, q, qi) {
     q.fields.forEach(function (f) {
       var cur = a.budgets[f[0]];
       var inp = h('input', { type: 'text', inputmode: 'decimal', id: 'budget-' + f[0], placeholder: 'leave blank to skip', value: (cur !== undefined && cur !== null) ? String(cur) : '' });
-      inp.addEventListener('input', function () { var n = toNum(inp.value); a.budgets[f[0]] = (n !== null && n > 0) ? n : null; });
+      inp.addEventListener('input', function () { a.budgets[f[0]] = parseBudget(inp.value); });
       box.appendChild(h('div', { class: 'ob-field' }, [h('label', { for: 'budget-' + f[0], text: f[1] }), inp]));
     });
   }
@@ -1308,23 +1422,30 @@ function renderSummary(box) {
   METRICS.forEach(function (met) { var w = p.weights[met.key] || 0; if (!w) return; list.appendChild(h('div', { class: 'wrow' }, [h('span', { class: 'wl', text: met.label }), h('span', { class: 'wv', text: String(w) })])); });
   box.appendChild(list);
   var bk = Object.keys(p.budgets);
-  if (bk.length) box.appendChild(h('p', { class: 'small muted', text: 'Daily budgets: ' + bk.map(function (k) { return k.replace('Mg', '').replace('netCarbs', 'net carbs') + ' ' + p.budgets[k]; }).join(', ') + '.' }));
+  if (bk.length) box.appendChild(h('p', { class: 'small muted', text: 'Daily budgets: ' + bk.map(function (k) { return BUDGET_LABELS[k][0] + ' ' + fmtVal(p.budgets[k], BUDGET_LABELS[k][1]); }).join(', ') + '.' }));
   box.appendChild(h('div', { class: 'ob-nav' }, [
     h('button', { class: 'btn grow', type: 'button', id: 'obBack', onclick: function () { ob.step = QUESTIONS.length; renderOnboarding(); } }, 'Back'),
     h('button', { class: 'btn primary grow', type: 'button', id: 'obUse', onclick: function () { saveProfile(p); closeOnboarding(); toast('Custom scoring on'); } }, 'Use this profile')
   ]));
 }
 function renderWeightsEditor(box) {
-  if (!profile || profile.mode !== 'custom') { var base = answersToProfile({ goal: 'balanced' }); base.name = 'Balanced (adjusted)'; profile = base; }
+  if (!profile || profile.mode !== 'custom') { closeOnboarding(); return; }   // only custom profiles have weights
+  var draft = JSON.parse(JSON.stringify(profile));
   box.appendChild(h('h2', { text: 'Adjust weights' }));
-  box.appendChild(h('p', { class: 'muted small', text: '0 ignores a factor, 5 makes it count the most. Saved when you tap Done.' }));
+  box.appendChild(h('p', { class: 'muted small', text: '0 ignores a factor, 5 makes it count the most. Nothing changes until you tap Save.' }));
   METRICS.forEach(function (met) {
-    var val = h('span', { class: 'wv', text: String(profile.weights[met.key] || 0) });
-    var range = h('input', { type: 'range', min: '0', max: '5', step: '1', 'data-metric': met.key, value: String(profile.weights[met.key] || 0) });
-    range.addEventListener('input', function () { profile.weights[met.key] = parseInt(range.value, 10) || 0; val.textContent = range.value; if (profile.name && profile.name.indexOf('(adjusted)') < 0) profile.name += ' (adjusted)'; });
+    var val = h('span', { class: 'wv', text: String(draft.weights[met.key] || 0) });
+    var range = h('input', { type: 'range', min: '0', max: '5', step: '1', 'data-metric': met.key, value: String(draft.weights[met.key] || 0) });
+    range.addEventListener('input', function () { draft.weights[met.key] = parseInt(range.value, 10) || 0; val.textContent = range.value; });
     box.appendChild(h('div', { class: 'wrow' }, [h('span', { class: 'wl', text: met.label }), range, val]));
   });
-  box.appendChild(h('div', { class: 'ob-nav' }, [h('button', { class: 'btn primary grow', type: 'button', id: 'obDone', onclick: function () { saveProfile(profile); closeOnboarding(); } }, 'Done')]));
+  box.appendChild(h('div', { class: 'ob-nav' }, [
+    h('button', { class: 'btn grow', type: 'button', id: 'obCancel', onclick: closeOnboarding }, 'Cancel'),
+    h('button', { class: 'btn primary grow', type: 'button', id: 'obDone', onclick: function () {
+      if (JSON.stringify(draft.weights) !== JSON.stringify(profile.weights) && String(draft.name || '').indexOf('(adjusted)') < 0) draft.name = (draft.name || 'Custom') + ' (adjusted)';
+      saveProfile(draft); closeOnboarding(); toast('Weights saved');
+    } }, 'Save')
+  ]));
 }
 
 /* ------------------------------------------------------ result rendering */
@@ -1452,7 +1573,7 @@ function renderResult(res) {
   box.appendChild(card);
   var ml = clear($('missingLine'));
   if (m.missing.length) ml.appendChild(h('div', { class: 'missing', text: 'Missing fields: ' + m.missing.join(', ') }));
-  else ml.appendChild(h('div', { class: 'missing ok', text: 'Missing fields: none — all six tracked fields present.' }));
+  else ml.appendChild(h('div', { class: 'missing ok', text: 'Missing fields: none — all six tracked fields present (serving size, carbs, sugars, fiber, protein, ingredients).' }));
 }
 // After a lookup, bring the result into view. While the camera runs, keep the viewfinder on screen (scroll it to just
 // below the header so the card starts right under it); otherwise scroll the card itself into view.
@@ -1960,13 +2081,20 @@ function shareText(filename, text, mime) {
 }
 
 /* ------------------------------------------------------------- settings */
+// One link carries everything a fresh phone (or a purged one) needs: the USDA key and the scoring profile.
+function buildSeedLink() {
+  var parts = [], k = getUsdaKey();
+  if (k) parts.push('usda=' + encodeURIComponent(k));
+  if (profile) parts.push('profile=' + encodeProfile(profile));
+  return location.origin + location.pathname + (parts.length ? '#' + parts.join('&') : '');
+}
 function topWeights(p) {
   return METRICS.map(function (met) { return [met.label, (p.weights && p.weights[met.key]) || 0]; }).filter(function (x) { return x[1] > 0; })
     .sort(function (a, b) { return b[1] - a[1]; }).slice(0, 3).map(function (x) { return x[0].toLowerCase() + ' ' + x[1]; }).join(', ');
 }
 function renderSettings() {
   $('scoringInfo').textContent = 'Current: ' + profileName(profile) + (profile ? (profile.mode === 'custom' ? ' — top weights: ' + topWeights(profile) + '.' : ' — Nutri-Score 60%, additives 30%, organic 10%.') : ' — choose one to score products.');
-  $('btnWeights').classList.toggle('hidden', !profile);
+  $('btnWeights').classList.toggle('hidden', !(profile && profile.mode === 'custom'));
   $('btnCopyProfile').classList.toggle('hidden', !profile);
   var key = getUsdaKey();
   $('usdaKey').value = key;
@@ -2110,12 +2238,10 @@ function init() {
   $('btnWeights').addEventListener('click', function () { ob.answers = null; openOnboarding('weights'); });
   $('btnCopyProfile').addEventListener('click', function () {
     if (!profile) return;
-    var link = location.origin + location.pathname + '#profile=' + encodeProfile(profile);
-    copyText(link).then(function (ok) { toast(ok ? 'Profile link copied' : 'Copy failed'); });
+    copyText(buildSeedLink()).then(function (ok) { toast(ok ? 'Link copied (scoring profile' + (getUsdaKey() ? ' + key' : '') + ')' : 'Copy failed'); });
   });
   $('btnCopyLink').addEventListener('click', function () {
-    var link = location.origin + location.pathname + '#usda=' + encodeURIComponent(getUsdaKey());
-    copyText(link).then(function (ok) { toast(ok ? 'Link copied — open it, then Add to Home Screen' : 'Copy failed'); });
+    copyText(buildSeedLink()).then(function (ok) { toast(ok ? 'Link copied (key' + (profile ? ' + scoring profile' : '') + ') — open it, then Add to Home Screen' : 'Copy failed'); });
   });
   $('decoderPref').addEventListener('change', function () { store.set(LS.decoder, this.value); dbg('log', 'Decoder preference: ' + this.value); if (cam.scanning) { stopCamera('Decoder changed — tap Start camera.'); } });
   $('btnClearCache').addEventListener('click', function () {
@@ -2155,11 +2281,16 @@ function init() {
   }
 
   // A scoring profile can be shared/seeded the same way: …/#profile=<encoded>.
+  // Applied once per distinct link value, so a Home Screen bookmark seeds a profile (and re-seeds it after Safari purges
+  // storage) without overwriting adjustments made in Settings since.
   var pf = /[#&]profile=([^&]*)/.exec(location.hash || '');
   if (pf) {
-    var decoded = decodeProfile(pf[1]);
-    if (!decoded) dbg('warn', 'Ignoring an unreadable #profile= value');
-    else if (JSON.stringify(decoded) !== JSON.stringify(profile)) { saveProfile(decoded); toast('Scoring profile loaded from link'); }
+    if (pf[1] === store.get('fs.profile.seed', '') && profile) dbg('log', 'Profile link already applied; keeping the local profile');
+    else {
+      var decoded = decodeProfile(pf[1]);
+      if (!decoded) dbg('warn', 'Ignoring an unreadable #profile= value');
+      else { saveProfile(decoded); store.set('fs.profile.seed', pf[1]); toast('Scoring profile loaded from link'); }
+    }
   }
   if (!profile) openOnboarding(0);   // first run: choose Standard or Customize
 
@@ -2173,7 +2304,7 @@ window.FS = {
   version: APP_VERSION, lookup: lookup, handleCode: handleCode, candidateCodes: candidateCodes, upcEToUpcA: upcEToUpcA, gtinCheckOK: gtinCheckOK,
   readIsValid: readIsValid, normOFF: normOFF, normUSDA: normUSDA, mergeProduct: mergeProduct, toCSV: toCSV, decodeCanvas: decodeCanvasWithZXing,
   startCamera: startCamera, stopCamera: stopCamera, pickDecoder: pickDecoder,
-  scoreProduct: scoreProduct, computeNutriScore: computeNutriScore, answersToProfile: answersToProfile, additivesScore: additivesScore, encodeProfile: encodeProfile, decodeProfile: decodeProfile,
+  scoreProduct: scoreProduct, computeNutriScore: computeNutriScore, answersToProfile: answersToProfile, additivesScore: additivesScore, encodeProfile: encodeProfile, decodeProfile: decodeProfile, sanitizeProfile: sanitizeProfile, parseBudget: parseBudget, isBeverage: isBeverage, nutriKind: nutriKind, nutriScoreOf: nutriScoreOf, additiveLevel: additiveLevel, dedupeAdditives: dedupeAdditives,
   profile: function () { return profile; }, openOnboarding: openOnboarding,
   state: function () { return { cam: cam, tally: tally, log: scanLog, current: current }; },
   _setFrameSource: function (el) { cam.frameSource = el; }
