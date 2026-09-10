@@ -1,0 +1,1457 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0b6b46">
+<meta name="format-detection" content="telephone=no">
+<meta name="referrer" content="no-referrer">
+<title>FoodScanner</title>
+<style>
+:root {
+  --bg: #f3f6f4; --card: #ffffff; --text: #15201b; --muted: #5f6d66; --border: #d7dfda;
+  --accent: #0b6b46; --accent-ink: #ffffff; --danger: #b3261e; --warn: #8a5a00; --ok: #0b6b46;
+  --chip: #e6eee9; --input: #ffffff; --dbg-bg: #101613; --dbg-ink: #d7e2db;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0f1412; --card: #1a211d; --text: #e8ede9; --muted: #9aa8a0; --border: #2c3531;
+    --accent: #2fbf82; --accent-ink: #06281a; --danger: #ff7b70; --warn: #f0b34a; --ok: #2fbf82;
+    --chip: #26302b; --input: #121816; --dbg-bg: #050806; --dbg-ink: #c9d6cf;
+  }
+}
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body { margin: 0; padding: 0; }
+body {
+  background: var(--bg); color: var(--text);
+  font: 16px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  -webkit-text-size-adjust: 100%; min-height: 100vh; min-height: 100dvh;
+  padding-bottom: calc(84px + env(safe-area-inset-bottom));
+}
+button, input, select, textarea { font: inherit; color: inherit; }
+button { touch-action: manipulation; cursor: pointer; }
+a { color: var(--accent); }
+.top {
+  position: sticky; top: 0; z-index: 20; background: var(--accent); color: var(--accent-ink);
+  padding: calc(10px + env(safe-area-inset-top)) 16px 10px; display: flex; align-items: center; justify-content: space-between; gap: 8px;
+}
+.top h1 { margin: 0; font-size: 20px; font-weight: 700; letter-spacing: 0.2px; }
+.top .ver { font-size: 12px; opacity: 0.8; margin-left: 6px; font-weight: 400; }
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  min-height: 48px; padding: 10px 16px; border-radius: 12px; border: 1px solid var(--border);
+  background: var(--card); color: var(--text); font-weight: 600; font-size: 16px; text-decoration: none;
+}
+.btn:active { transform: scale(0.98); opacity: 0.9; }
+.btn.primary { background: var(--accent); color: var(--accent-ink); border-color: transparent; }
+.btn.danger { color: var(--danger); }
+.btn.small { min-height: 40px; padding: 6px 12px; font-size: 14px; border-radius: 10px; }
+.btn.block { width: 100%; }
+.btn[disabled] { opacity: 0.5; pointer-events: none; }
+.top .btn { min-height: 38px; padding: 4px 12px; font-size: 14px; background: rgba(255,255,255,0.14); color: var(--accent-ink); border-color: rgba(255,255,255,0.35); }
+.top .btn .badge { background: rgba(255,255,255,0.9); color: #15201b; border-radius: 999px; padding: 0 7px; font-size: 12px; min-width: 20px; text-align: center; }
+main { padding: 12px 16px; max-width: 640px; margin: 0 auto; }
+.tab { display: none; }
+.tab.active { display: block; }
+.card { background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 14px; margin: 0 0 12px; }
+.card h2 { margin: 0 0 10px; font-size: 17px; }
+.row { display: flex; gap: 10px; align-items: center; }
+.row.wrap { flex-wrap: wrap; }
+.row > .grow { flex: 1 1 auto; min-width: 0; }
+.stack > * + * { margin-top: 10px; }
+.muted { color: var(--muted); }
+.small { font-size: 14px; }
+.tiny { font-size: 12px; }
+.mono { font-family: var(--mono); }
+input[type=text], input[type=password], input[type=search], select, textarea {
+  width: 100%; min-height: 48px; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--border);
+  background: var(--input); font-size: 16px; /* 16px prevents iOS zoom-on-focus */
+  -webkit-appearance: none; appearance: none;
+}
+input.secret { -webkit-text-security: disc; }
+textarea { min-height: 120px; font-family: var(--mono); font-size: 12px; line-height: 1.35; }
+label.field { display: block; font-size: 14px; color: var(--muted); margin-bottom: 4px; }
+/* camera */
+.viewport { position: relative; width: 100%; aspect-ratio: 4 / 3; background: #000; border-radius: 16px; overflow: hidden; }
+.viewport video { width: 100%; height: 100%; object-fit: cover; display: block; }
+.viewport .guide {
+  position: absolute; left: 8%; right: 8%; top: 30%; bottom: 30%; border: 3px solid rgba(255,255,255,0.85);
+  border-radius: 12px; box-shadow: 0 0 0 9999px rgba(0,0,0,0.28); pointer-events: none; transition: border-color 0.15s, box-shadow 0.15s;
+}
+.viewport .guide.hit { border-color: #4be08e; box-shadow: 0 0 0 9999px rgba(20,120,60,0.35); }
+.viewport .placeholder {
+  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; text-align: center; padding: 20px;
+  color: #cfd8d2; font-size: 15px;
+}
+.viewport.live .placeholder { display: none; }
+.viewport .guide { display: none; }
+.viewport.live .guide { display: block; }
+.status { min-height: 22px; font-size: 14px; color: var(--muted); margin: 8px 2px 0; word-break: break-word; }
+.status.err { color: var(--danger); }
+.camctl { margin-top: 10px; }
+.camctl input[type=range] { width: 100%; }
+/* result card */
+.prod { display: flex; gap: 12px; align-items: flex-start; }
+.prod img { width: 84px; height: 84px; object-fit: contain; border-radius: 10px; background: #fff; border: 1px solid var(--border); flex: none; }
+.prod .noimg { width: 84px; height: 84px; border-radius: 10px; background: var(--chip); flex: none; display: flex; align-items: center; justify-content: center; color: var(--muted); font-size: 12px; }
+.prod .name { font-size: 18px; font-weight: 700; line-height: 1.25; word-break: break-word; }
+.prod .brand { color: var(--muted); margin-top: 2px; }
+table.nut { width: 100%; border-collapse: collapse; margin-top: 12px; font-size: 15px; }
+table.nut th, table.nut td { padding: 7px 4px; border-bottom: 1px solid var(--border); text-align: right; white-space: nowrap; }
+table.nut th:first-child, table.nut td:first-child { text-align: left; }
+table.nut th { font-weight: 600; color: var(--muted); font-size: 13px; }
+table.nut tr.calc td { color: var(--muted); }
+table.cov { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 6px; }
+table.cov th, table.cov td { padding: 4px 4px; border-bottom: 1px solid var(--border); text-align: center; }
+table.cov th:first-child, table.cov td:first-child { text-align: left; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.chip { background: var(--chip); border-radius: 999px; padding: 3px 10px; font-size: 13px; }
+.chip.ok { background: rgba(11,107,70,0.15); color: var(--ok); }
+.chip.bad { background: rgba(179,38,30,0.12); color: var(--danger); }
+.chip.warn { background: rgba(138,90,0,0.14); color: var(--warn); }
+.kv { margin-top: 10px; font-size: 15px; }
+.kv b { font-weight: 600; }
+.missing { margin: -4px 0 14px; padding: 10px 14px; border-radius: 12px; background: rgba(138,90,0,0.12); color: var(--warn); font-size: 15px; }
+.missing.ok { background: rgba(11,107,70,0.12); color: var(--ok); }
+.missing.bad { background: rgba(179,38,30,0.12); color: var(--danger); }
+details summary { cursor: pointer; font-weight: 600; padding: 6px 0; }
+.ingr { white-space: pre-wrap; font-size: 14px; line-height: 1.4; margin: 4px 0 0; word-break: break-word; }
+.nutri { display: inline-block; min-width: 26px; text-align: center; border-radius: 6px; padding: 1px 6px; font-weight: 700; color: #fff; }
+.nutri.a { background: #038141; } .nutri.b { background: #85bb2f; } .nutri.c { background: #fecb02; color: #15201b; } .nutri.d { background: #ee8100; } .nutri.e { background: #e63e11; }
+/* tally */
+.tally { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.tally .tile { background: var(--chip); border-radius: 12px; padding: 10px 8px; text-align: center; }
+.tally .tile .n { font-size: 24px; font-weight: 700; line-height: 1.1; }
+.tally .tile .l { font-size: 12px; color: var(--muted); margin-top: 2px; }
+.loglist { list-style: none; margin: 0; padding: 0; }
+.loglist li { padding: 10px 4px; border-bottom: 1px solid var(--border); display: flex; gap: 10px; align-items: center; cursor: pointer; }
+.loglist li .grow { flex: 1 1 auto; min-width: 0; }
+.loglist li .t { font-size: 12px; color: var(--muted); }
+.loglist li .nm { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.loglist li .bc { font-family: var(--mono); font-size: 13px; color: var(--muted); }
+.loglist li .flags { display: flex; gap: 4px; flex-wrap: wrap; justify-content: flex-end; }
+.loglist li .flags .chip { font-size: 11px; padding: 2px 7px; }
+/* bottom nav */
+nav.tabs {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 20; display: flex; background: var(--card); border-top: 1px solid var(--border);
+  padding-bottom: env(safe-area-inset-bottom);
+}
+nav.tabs button { flex: 1; min-height: 60px; border: 0; background: transparent; color: var(--muted); font-size: 13px; font-weight: 600; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; }
+nav.tabs button .ic { font-size: 22px; line-height: 1; }
+nav.tabs button.active { color: var(--accent); }
+/* debug panel */
+#dbgPanel {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 30; background: var(--dbg-bg); color: var(--dbg-ink);
+  max-height: 55vh; display: none; flex-direction: column; border-top: 2px solid var(--accent);
+  padding-bottom: env(safe-area-inset-bottom);
+}
+#dbgPanel.open { display: flex; }
+#dbgPanel .bar { display: flex; gap: 8px; align-items: center; padding: 8px 12px; border-bottom: 1px solid #2c3531; flex: none; }
+#dbgPanel .bar .btn { min-height: 36px; padding: 4px 10px; font-size: 13px; background: #1d2622; color: var(--dbg-ink); border-color: #3a4640; }
+#dbgLines { flex: 1 1 auto; overflow: auto; -webkit-overflow-scrolling: touch; padding: 6px 10px; font-family: var(--mono); font-size: 11px; line-height: 1.35; }
+#dbgLines div { white-space: pre-wrap; word-break: break-all; border-bottom: 1px solid rgba(255,255,255,0.05); padding: 2px 0; }
+#dbgLines .warn { color: #f0b34a; } #dbgLines .error { color: #ff7b70; } #dbgLines .net { color: #7cc4ff; } #dbgLines .log { color: var(--dbg-ink); }
+/* toast */
+#toast { position: fixed; left: 50%; bottom: calc(96px + env(safe-area-inset-bottom)); transform: translateX(-50%); background: #15201b; color: #fff; padding: 10px 16px; border-radius: 999px; font-size: 14px; z-index: 40; opacity: 0; transition: opacity 0.2s; pointer-events: none; max-width: 90vw; text-align: center; }
+#toast.show { opacity: 0.95; }
+.hidden { display: none !important; }
+</style>
+<script>
+/* ---------------------------------------------------------------------------
+   On-screen debug logger. Must be the very first script so that everything
+   that follows (including the CDN script tag) is captured.
+   --------------------------------------------------------------------------- */
+(function () {
+  var MAX_LINES = 700;
+  var lines = [];
+  var listeners = [];
+  function pad(n, w) { n = String(n); while (n.length < w) n = '0' + n; return n; }
+  function ts() { var d = new Date(); return pad(d.getHours(), 2) + ':' + pad(d.getMinutes(), 2) + ':' + pad(d.getSeconds(), 2) + '.' + pad(d.getMilliseconds(), 3); }
+  function fmt(a) {
+    if (a instanceof Error) return (a.name || 'Error') + ': ' + a.message + (a.stack ? '\n' + a.stack : '');
+    if (typeof a === 'string') return a;
+    if (a === undefined) return 'undefined';
+    try { return JSON.stringify(a); } catch (e) { return String(a); }
+  }
+  function redact(u) { return String(u).replace(/(api_key=)[^&]+/gi, '$1•••'); }
+  function push(level, args) {
+    var msg = Array.prototype.map.call(args, fmt).join(' ');
+    var line = { t: ts(), level: level, msg: msg };
+    lines.push(line);
+    if (lines.length > MAX_LINES) lines.splice(0, lines.length - MAX_LINES);
+    for (var i = 0; i < listeners.length; i++) { try { listeners[i](line); } catch (e) { /* ignore */ } }
+  }
+  var orig = {};
+  ['log', 'info', 'debug', 'warn', 'error'].forEach(function (k) {
+    var o = console[k] ? console[k] : console.log;
+    orig[k] = function () { try { o.apply(console, arguments); } catch (e) { /* ignore */ } };
+    console[k] = function () { orig[k].apply(null, arguments); push(k === 'warn' ? 'warn' : k === 'error' ? 'error' : 'log', arguments); };
+  });
+  // Uncaught errors (window.onerror equivalent) and failed resource loads (capture phase).
+  window.addEventListener('error', function (e) {
+    var t = e && e.target;
+    if (t && t !== window && (t.src || t.href)) {
+      push('error', ['Resource failed to load: ' + (t.src || t.href)]);
+      return;
+    }
+    var msg = 'Uncaught: ' + (e.message || 'unknown error') + ' @ ' + (e.filename || '?') + ':' + e.lineno + ':' + e.colno;
+    if (e.error && e.error.stack) msg += '\n' + e.error.stack;
+    push('error', [msg]);
+  }, true);
+  window.addEventListener('unhandledrejection', function (e) {
+    push('error', ['Unhandled rejection: ' + fmt(e && e.reason)]);
+  });
+  // Every fetch: URL (api_key redacted) and status.
+  var nativeFetch = window.fetch;
+  if (typeof nativeFetch === 'function') {
+    window.fetch = function (input, init) {
+      var url = (typeof input === 'string') ? input : (input && input.url) ? input.url : String(input);
+      var method = (init && init.method) || (input && input.method) || 'GET';
+      var t0 = (window.performance && performance.now) ? performance.now() : Date.now();
+      var dur = function () { return Math.round(((window.performance && performance.now) ? performance.now() : Date.now()) - t0) + 'ms'; };
+      push('net', ['→ ' + method + ' ' + redact(url)]);
+      var p;
+      try { p = nativeFetch.apply(window, arguments); } catch (err) { push('error', ['✗ ' + redact(url) + ' ' + fmt(err)]); throw err; }
+      return p.then(function (res) {
+        push(res.ok ? 'net' : 'warn', ['← ' + res.status + ' ' + redact(url) + ' (' + dur() + ')']);
+        return res;
+      }, function (err) {
+        push('error', ['✗ ' + redact(url) + ' ' + fmt(err) + ' (' + dur() + ')']);
+        throw err;
+      });
+    };
+  }
+  window.__dbg = {
+    lines: lines,
+    push: function (level, msg) { push(level, [msg]); },
+    subscribe: function (fn) { listeners.push(fn); },
+    redact: redact,
+    orig: orig
+  };
+  push('log', ['Debug logger ready — ' + navigator.userAgent]);
+})();
+</script>
+</head>
+<body>
+<header class="top">
+  <h1>FoodScanner <span class="ver" id="verLabel"></span></h1>
+  <button class="btn" id="dbgToggle" type="button" aria-label="Toggle debug log">Debug <span class="badge" id="dbgCount">0</span></button>
+</header>
+
+<main>
+  <!-- ============================== SCAN TAB ============================== -->
+  <section class="tab active" id="tab-scan">
+    <div class="card">
+      <div class="viewport" id="viewport">
+        <video id="video" playsinline muted autoplay></video>
+        <div class="guide" id="guide"></div>
+        <div class="placeholder" id="placeholder">Tap <b>&nbsp;Start camera&nbsp;</b> and point at a barcode</div>
+      </div>
+      <div class="status" id="camStatus">Camera off.</div>
+      <div class="row" style="margin-top:10px">
+        <button class="btn primary grow" id="btnStart" type="button">Start camera</button>
+        <button class="btn grow hidden" id="btnStop" type="button">Stop camera</button>
+      </div>
+      <div class="camctl hidden" id="camCtl">
+        <div class="row wrap">
+          <button class="btn small hidden" id="btnTorch" type="button">Torch</button>
+          <label class="grow hidden" id="zoomWrap"><span class="small muted">Zoom</span> <input type="range" id="zoom" min="1" max="1" step="0.1" value="1"></label>
+        </div>
+      </div>
+    </div>
+
+    <form class="card" id="manualForm" autocomplete="off">
+      <label class="field" for="manualCode">Manual barcode entry</label>
+      <div class="row">
+        <input class="grow" type="text" id="manualCode" inputmode="numeric" pattern="[0-9]*" placeholder="e.g. 049000028911" enterkeyhint="search">
+        <button class="btn primary" id="btnLookup" type="submit">Look up</button>
+      </div>
+      <div class="tiny muted" style="margin-top:6px">EAN-13, UPC-A (12), EAN-8 or UPC-E (8 digits). Cached lookups are instant.</div>
+    </form>
+
+    <div id="result"></div>
+    <div id="missingLine"></div>
+  </section>
+
+  <!-- ============================== LOG TAB ============================== -->
+  <section class="tab" id="tab-log">
+    <div class="card">
+      <h2>Coverage tally</h2>
+      <div class="tally" id="tally"></div>
+      <div class="tiny muted" style="margin-top:8px" id="tallyNote"></div>
+    </div>
+    <div class="card">
+      <div class="row wrap">
+        <button class="btn grow" id="btnExport" type="button">Export log (copy CSV)</button>
+        <button class="btn grow hidden" id="btnShare" type="button">Share CSV</button>
+      </div>
+      <textarea id="exportBox" class="hidden" readonly style="margin-top:10px" aria-label="CSV export"></textarea>
+    </div>
+    <div class="card">
+      <h2>Scan log <span class="muted small" id="logCount"></span></h2>
+      <ul class="loglist" id="logList"></ul>
+    </div>
+  </section>
+
+  <!-- ============================== SETTINGS TAB ============================== -->
+  <section class="tab" id="tab-settings">
+    <div class="card stack">
+      <h2>USDA FoodData Central</h2>
+      <div class="small muted">Optional second source. The key is stored only in this browser's localStorage and sent only to api.nal.usda.gov. <a href="https://fdc.nal.usda.gov/api-key-signup" target="_blank" rel="noopener noreferrer">Get a free API key</a>.</div>
+      <label class="field" for="usdaKey">USDA API key</label>
+      <div class="row">
+        <input class="grow secret" type="text" id="usdaKey" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="paste key">
+        <button class="btn small" id="btnShowKey" type="button">Show</button>
+      </div>
+      <div class="row wrap">
+        <button class="btn primary grow" id="btnSaveKey" type="button">Save key</button>
+        <button class="btn grow" id="btnTestKey" type="button">Test key</button>
+        <button class="btn danger" id="btnRemoveKey" type="button">Remove</button>
+      </div>
+      <div class="small" id="keyStatus"></div>
+    </div>
+
+    <div class="card stack">
+      <h2>Scanner</h2>
+      <label class="field" for="decoderPref">Barcode decoder</label>
+      <select id="decoderPref">
+        <option value="auto">Auto (native BarcodeDetector if available, else ZXing)</option>
+        <option value="zxing">ZXing only</option>
+      </select>
+      <div class="small muted" id="decoderInfo"></div>
+    </div>
+
+    <div class="card stack">
+      <h2>Storage</h2>
+      <div class="small muted" id="storageInfo"></div>
+      <div class="row wrap">
+        <button class="btn grow" id="btnClearCache" type="button">Clear cache</button>
+        <button class="btn grow danger" id="btnClearLog" type="button">Clear log &amp; tally</button>
+      </div>
+    </div>
+
+    <div class="card stack small muted">
+      <div><b>FoodScanner</b> v<span id="verLabel2"></span> &middot; data coverage tester (v1).</div>
+      <div>Sources: <a href="https://world.openfoodfacts.org" target="_blank" rel="noopener noreferrer">Open Food Facts</a> (ODbL) and <a href="https://fdc.nal.usda.gov" target="_blank" rel="noopener noreferrer">USDA FoodData Central</a>.</div>
+    </div>
+  </section>
+</main>
+
+<nav class="tabs" id="tabs">
+  <button type="button" data-tab="scan" class="active"><span class="ic">&#128247;</span>Scan</button>
+  <button type="button" data-tab="log"><span class="ic">&#128203;</span>Log</button>
+  <button type="button" data-tab="settings"><span class="ic">&#9881;&#65039;</span>Settings</button>
+</nav>
+
+<div id="dbgPanel" aria-label="Debug log">
+  <div class="bar">
+    <b class="small">Debug log</b>
+    <span class="grow"></span>
+    <button class="btn" id="dbgCopy" type="button">Copy log</button>
+    <button class="btn" id="dbgClear" type="button">Clear</button>
+    <button class="btn" id="dbgClose" type="button">Close</button>
+  </div>
+  <div id="dbgLines"></div>
+</div>
+<div id="toast" role="status"></div>
+
+<!-- ZXing fallback decoder (used when the native BarcodeDetector API is unavailable, i.e. iOS Safari).
+     Pinned UMD build; exposes the global `ZXingBrowser` and bundles @zxing/library. -->
+<script src="https://cdn.jsdelivr.net/npm/@zxing/browser@0.2.1/umd/zxing-browser.min.js"
+        onerror="window.__zxingLoadError = true; window.__dbg && window.__dbg.push('error', 'ZXing script failed to load from jsDelivr: ' + this.src)"></script>
+
+<script>
+(function () {
+'use strict';
+
+var APP_VERSION = '0.1.0';
+var OFF_BASE = 'https://world.openfoodfacts.org/api/v2/product/';
+var OFF_FIELDS = ['code', 'product_name', 'product_name_en', 'generic_name', 'brands', 'quantity', 'serving_size', 'serving_quantity',
+  'serving_quantity_unit', 'nutrition_data_per', 'nutriments', 'ingredients_text', 'ingredients_text_en', 'nova_group',
+  'nutriscore_grade', 'nutrition_grades', 'additives_tags', 'categories', 'categories_tags', 'image_front_small_url',
+  'image_front_thumb_url', 'image_small_url', 'image_url'].join(',');
+var USDA_BASE = 'https://api.nal.usda.gov/fdc/v1/foods/search';
+var ZXING_FALLBACK_URL = 'https://unpkg.com/@zxing/browser@0.2.1/umd/zxing-browser.min.js';
+var LS = { usdaKey: 'fs.usdaKey', decoder: 'fs.decoder', tally: 'fs.tally.v1', log: 'fs.log.v1', cachePrefix: 'fs.cache.v1.' };
+var NUT_KEYS = ['kcal', 'carbs', 'sugars', 'fiber', 'protein', 'fat', 'satFat', 'sodiumMg'];
+var NUT_ROWS = [['kcal', 'Calories', 'kcal'], ['carbs', 'Total carbs', 'g'], ['sugars', 'Sugars', 'g'], ['fiber', 'Fiber', 'g'],
+  ['netCarbs', 'Net carbs', 'g'], ['protein', 'Protein', 'g'], ['fat', 'Fat', 'g'], ['satFat', 'Saturated fat', 'g'], ['sodiumMg', 'Sodium', 'mg']];
+var MISSING_FIELDS = [['servingSize', 'serving size'], ['carbs', 'carbs'], ['sugars', 'sugars'], ['fiber', 'fiber'], ['protein', 'protein'], ['ingredients', 'ingredients']];
+var COVERAGE_FIELDS = [['name', 'Name'], ['brand', 'Brand'], ['image', 'Image'], ['servingSize', 'Serving size'], ['kcal', 'Calories'], ['carbs', 'Carbs'],
+  ['sugars', 'Sugars'], ['fiber', 'Fiber'], ['protein', 'Protein'], ['fat', 'Fat'], ['satFat', 'Sat. fat'], ['sodiumMg', 'Sodium'],
+  ['ingredients', 'Ingredients'], ['nova', 'NOVA'], ['nutriscore', 'Nutri-Score'], ['additives', 'Additives'], ['categories', 'Categories']];
+var DEDUPE_MS = 3000;          // ignore repeat reads of the same code within this window (sliding)
+var SCAN_INTERVAL_MS = 90;     // target time between decode attempts
+var CONFIRM_READS = 2;         // identical consecutive reads required before accepting a code
+var CONFIRM_WINDOW_MS = 1500;
+var FETCH_TIMEOUT_MS = 15000;
+var LOG_MAX = 2000;
+
+/* ------------------------------------------------------------------ utils */
+function $(id) { return document.getElementById(id); }
+function dbg(level, msg) { if (window.__dbg) window.__dbg.push(level, msg); }
+function h(tag, attrs, children) {
+  var el = document.createElement(tag);
+  if (attrs) {
+    Object.keys(attrs).forEach(function (k) {
+      var v = attrs[k];
+      if (v === null || v === undefined || v === false) return;
+      if (k === 'class') el.className = v;
+      else if (k === 'text') el.textContent = v;
+      else if (k === 'html') el.innerHTML = v;   // only used with trusted, app-authored markup
+      else if (k.indexOf('on') === 0) el.addEventListener(k.slice(2), v);
+      else el.setAttribute(k, v);
+    });
+  }
+  if (children !== undefined && children !== null) {
+    (Array.isArray(children) ? children : [children]).forEach(function (c) {
+      if (c === null || c === undefined || c === false) return;
+      el.appendChild(typeof c === 'string' ? document.createTextNode(c) : c);
+    });
+  }
+  return el;
+}
+function clear(el) { while (el.firstChild) el.removeChild(el.firstChild); return el; }
+function toNum(v) {
+  if (v === undefined || v === null || v === '') return null;
+  var n = (typeof v === 'number') ? v : parseFloat(String(v).replace(',', '.'));
+  return isFinite(n) ? n : null;
+}
+function firstNonNull() {
+  for (var i = 0; i < arguments.length; i++) {
+    var v = arguments[i];
+    if (v !== undefined && v !== null && v !== '' && !(Array.isArray(v) && !v.length)) return v;
+  }
+  return null;
+}
+function fmtVal(v, unit) {
+  if (v === null || v === undefined || !isFinite(v)) return '—';
+  var s;
+  if (unit === 'kcal' || unit === 'mg') s = String(Math.round(v));
+  else s = String(Math.round(v * 10) / 10);
+  return s + (unit === 'kcal' ? '' : ' ' + unit);
+}
+function digitsOnly(s) { return String(s || '').replace(/\D/g, ''); }
+function emptyNut() { var o = {}; NUT_KEYS.forEach(function (k) { o[k] = null; }); return o; }
+function now() { return Date.now(); }
+function isoNow() { return new Date().toISOString(); }
+function shortTime(iso) {
+  var d = new Date(iso);
+  if (isNaN(d.getTime())) return iso;
+  var mm = d.getMonth() + 1, dd = d.getDate(), hh = d.getHours(), mi = d.getMinutes();
+  return mm + '/' + dd + ' ' + (hh < 10 ? '0' : '') + hh + ':' + (mi < 10 ? '0' : '') + mi;
+}
+var toastTimer = null;
+function toast(msg) {
+  var t = $('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(function () { t.classList.remove('show'); }, 2200);
+}
+
+/* --------------------------------------------------------------- storage */
+var store = {
+  available: (function () { try { var k = '__fs_probe__'; localStorage.setItem(k, '1'); localStorage.removeItem(k); return true; } catch (e) { return false; } })(),
+  get: function (k, fallback) { try { var v = localStorage.getItem(k); return v === null ? fallback : v; } catch (e) { console.warn('localStorage.getItem failed for ' + k + ': ' + e.message); return fallback; } },
+  set: function (k, v) { try { localStorage.setItem(k, v); return true; } catch (e) { console.error('localStorage.setItem failed for ' + k + ': ' + e.name + ' ' + e.message); return false; } },
+  remove: function (k) { try { localStorage.removeItem(k); } catch (e) { /* ignore */ } },
+  getJSON: function (k, fallback) { var v = this.get(k, null); if (v === null) return fallback; try { return JSON.parse(v); } catch (e) { console.warn('Corrupt JSON in ' + k + '; ignoring'); return fallback; } },
+  setJSON: function (k, obj) { return this.set(k, JSON.stringify(obj)); },
+  keys: function (prefix) { var out = []; try { for (var i = 0; i < localStorage.length; i++) { var k = localStorage.key(i); if (k && k.indexOf(prefix) === 0) out.push(k); } } catch (e) { /* ignore */ } return out; },
+  bytes: function () { var n = 0; try { for (var i = 0; i < localStorage.length; i++) { var k = localStorage.key(i); n += (k.length + (localStorage.getItem(k) || '').length) * 2; } } catch (e) { /* ignore */ } return n; }
+};
+
+/* --------------------------------------------------------- barcode utils */
+// GTIN mod-10 check digit for an 7/11/12/13-digit body (the digit left of the check digit has weight 3).
+function computeCheckDigit(body) {
+  var sum = 0, w = 3;
+  for (var i = body.length - 1; i >= 0; i--) { sum += (body.charCodeAt(i) - 48) * w; w = 4 - w; }
+  return String((10 - (sum % 10)) % 10);
+}
+function gtinCheckOK(code) {
+  if (!/^\d{8}$|^\d{12,14}$/.test(code)) return false;
+  return computeCheckDigit(code.slice(0, -1)) === code.slice(-1);
+}
+// Expand a UPC-E (8 digits incl. number system + check, or 6 data digits) to a 12-digit UPC-A.
+function upcEToUpcA(e) {
+  var d = digitsOnly(e);
+  if (d.length === 6) d = '0' + d;
+  if (d.length === 8) d = d.slice(0, 7);
+  if (d.length !== 7) return null;
+  var ns = d.charAt(0);
+  if (ns !== '0' && ns !== '1') return null;
+  var x = d.slice(1), last = x.charAt(5), body;
+  if (last === '0' || last === '1' || last === '2') body = x.slice(0, 2) + last + '0000' + x.slice(2, 5);
+  else if (last === '3') body = x.slice(0, 3) + '00000' + x.slice(3, 5);
+  else if (last === '4') body = x.slice(0, 4) + '00000' + x.charAt(4);
+  else body = x.slice(0, 5) + '0000' + last;
+  var upca11 = ns + body;
+  return upca11 + computeCheckDigit(upca11);
+}
+// Does this read look like a valid barcode? (format from the decoder may be null for manual entry)
+function readIsValid(code, format) {
+  // For UPC-E the 8th digit is the check digit of the expanded UPC-A.
+  function upcEOK(c) { var a = upcEToUpcA(c); return !!a && (c.length !== 8 || a.slice(-1) === c.slice(-1)); }
+  if (format === 'upc_e') return upcEOK(code);
+  if (code.length === 8 && !format) return gtinCheckOK(code) || upcEOK(code);
+  return gtinCheckOK(code);
+}
+// Candidate code forms to try against the databases, in order. Records which one worked.
+function candidateCodes(code, format) {
+  var c = digitsOnly(code), out = [];
+  function add(x) { if (x && out.indexOf(x) < 0) out.push(x); }
+  if (format === 'upc_e' && c.length <= 8) { var a = upcEToUpcA(c); if (a) { add(a); add('0' + a); } add(c); return out; }
+  add(c);
+  if (c.length === 12) add('0' + c);
+  else if (c.length === 13 && c.charAt(0) === '0') add(c.slice(1));
+  else if (c.length === 14 && c.charAt(0) === '0') { add(c.slice(1)); if (c.charAt(1) === '0') add(c.slice(2)); }
+  else if (c.length === 8 && !format) { var u = upcEToUpcA(c); if (u) { add(u); add('0' + u); } }
+  return out;
+}
+function stripLeadingZeros(s) { return digitsOnly(s).replace(/^0+/, ''); }
+
+/* ------------------------------------------------------------ networking */
+function fetchJSON(url, init) {
+  var ctrl = (typeof AbortController === 'function') ? new AbortController() : null;
+  var timer = ctrl ? setTimeout(function () { ctrl.abort(); }, FETCH_TIMEOUT_MS) : null;
+  var opts = init || {};
+  if (ctrl) opts.signal = ctrl.signal;
+  return fetch(url, opts).then(function (res) {
+    return res.text().then(function (text) {
+      var json = null;
+      try { json = JSON.parse(text); } catch (e) { /* not JSON */ }
+      return { status: res.status, ok: res.ok, json: json, text: text };
+    });
+  }).then(function (r) { if (timer) clearTimeout(timer); return r; }, function (err) {
+    if (timer) clearTimeout(timer);
+    if (err && err.name === 'AbortError') throw new Error('Timed out after ' + (FETCH_TIMEOUT_MS / 1000) + 's');
+    throw err;
+  });
+}
+
+/* ------------------------------------------------------- Open Food Facts */
+function normOFF(p) {
+  var n = p.nutriments || {};
+  function g(k) { return toNum(n[k]); }
+  function nut(suffix) {
+    var kcal = g('energy-kcal' + suffix);
+    if (kcal === null) { var kj = g('energy-kj' + suffix); if (kj === null) kj = g('energy' + suffix); if (kj !== null) kcal = kj / 4.184; }
+    var sodium = g('sodium' + suffix); // OFF normalises to grams
+    if (sodium === null) { var salt = g('salt' + suffix); if (salt !== null) sodium = salt / 2.5; }
+    return { kcal: kcal, carbs: g('carbohydrates' + suffix), sugars: g('sugars' + suffix), fiber: g('fiber' + suffix), protein: g('proteins' + suffix),
+      fat: g('fat' + suffix), satFat: g('saturated-fat' + suffix), sodiumMg: sodium === null ? null : Math.round(sodium * 1000) };
+  }
+  var servingQty = toNum(p.serving_quantity);
+  var servingUnit = p.serving_quantity_unit ? String(p.serving_quantity_unit) : 'g';
+  var servingSize = (p.serving_size && String(p.serving_size).trim()) || (servingQty !== null ? servingQty + ' ' + servingUnit : null);
+  function stripLang(t) { return String(t).replace(/^[a-z]{2,3}:/, ''); }
+  return {
+    source: 'OFF',
+    name: firstNonNull(p.product_name, p.product_name_en, p.generic_name),
+    brand: p.brands || null,
+    image: firstNonNull(p.image_front_small_url, p.image_front_thumb_url, p.image_small_url, p.image_url),
+    quantity: p.quantity || null,
+    servingSize: servingSize,
+    servingGrams: (servingQty !== null && /^(g|ml)$/i.test(servingUnit)) ? servingQty : null,
+    per100: nut('_100g'),
+    perServing: nut('_serving'),
+    ingredients: firstNonNull(p.ingredients_text_en, p.ingredients_text),
+    nova: toNum(p.nova_group),
+    nutriscore: firstNonNull(p.nutriscore_grade, p.nutrition_grades),
+    additives: (p.additives_tags || []).map(stripLang),
+    categories: p.categories || ((p.categories_tags || []).map(stripLang).join(', ') || null),
+    nutritionDataPer: p.nutrition_data_per || null,
+    url: 'https://world.openfoodfacts.org/product/' + encodeURIComponent(p.code || '')
+  };
+}
+function lookupOFF(code, format) {
+  var cands = candidateCodes(code, format);
+  var tried = [];
+  function tryNext(i) {
+    if (i >= cands.length) return Promise.resolve({ status: 'not_found', tried: tried });
+    var c = cands[i];
+    tried.push(c);
+    var url = OFF_BASE + encodeURIComponent(c) + '.json?fields=' + OFF_FIELDS;
+    return fetchJSON(url, { headers: { 'Accept': 'application/json' } }).then(function (r) {
+      var j = r.json;
+      if (j && j.status === 1 && j.product) {
+        var codeUsed = (j.product.code && String(j.product.code)) || c;
+        if (codeUsed !== c) dbg('log', 'OFF returned code ' + codeUsed + ' for query ' + c);
+        return { status: 'found', codeUsed: c, storedCode: codeUsed, product: j.product, tried: tried };
+      }
+      if (r.status === 404 || (j && j.status === 0)) { dbg('log', 'OFF: ' + c + ' not found' + (i + 1 < cands.length ? ', retrying as ' + cands[i + 1] : '')); return tryNext(i + 1); }
+      if (r.status === 429) return { status: 'error', error: 'OFF rate limited (HTTP 429)', tried: tried };
+      return { status: 'error', error: 'OFF HTTP ' + r.status + (j && j.status_verbose ? ' ' + j.status_verbose : ''), tried: tried };
+    }, function (err) {
+      return { status: 'error', error: 'OFF ' + (err && err.message || err), tried: tried };
+    });
+  }
+  return tryNext(0);
+}
+
+/* --------------------------------------------------- USDA FoodData Central */
+function normUSDA(f) {
+  var per100 = emptyNut();
+  (f.foodNutrients || []).forEach(function (nu) {
+    var num = String(nu.nutrientNumber || ''), id = toNum(nu.nutrientId), unit = String(nu.unitName || '').toUpperCase();
+    var val = toNum(nu.value);
+    if (val === null) return;
+    var key = null;
+    if (num === '208' || id === 1008) { if (unit === 'KJ') val = val / 4.184; key = 'kcal'; }
+    else if (num === '205' || id === 1005) key = 'carbs';
+    else if (num === '269' || num === '269.3' || id === 2000 || id === 1063) key = 'sugars';
+    else if (num === '291' || id === 1079) key = 'fiber';
+    else if (num === '203' || id === 1003) key = 'protein';
+    else if (num === '204' || id === 1004) key = 'fat';
+    else if (num === '606' || id === 1258) key = 'satFat';
+    else if (num === '307' || id === 1093) { if (unit === 'G') val = val * 1000; else if (unit === 'UG') val = val / 1000; key = 'sodiumMg'; }
+    if (key && per100[key] === null) per100[key] = (key === 'sodiumMg') ? Math.round(val) : val;
+  });
+  var ss = toNum(f.servingSize);
+  var unit = String(f.servingSizeUnit || '').toLowerCase().trim();
+  var isMassOrVol = /^(g|grm|gm|gram|grams|ml|mlt|milliliter|millilitre|millilitre)$/.test(unit);
+  var servingGrams = (ss !== null && isMassOrVol) ? ss : null;
+  var household = f.householdServingFullText ? String(f.householdServingFullText).trim() : '';
+  var servingSize = ss !== null ? ((ss + ' ' + (unit || '')).trim() + (household ? ' (' + household + ')' : '')) : (household || null);
+  var perServing = emptyNut();
+  if (servingGrams !== null) NUT_KEYS.forEach(function (k) { if (per100[k] !== null) perServing[k] = per100[k] * servingGrams / 100; });
+  return {
+    source: 'USDA',
+    fdcId: f.fdcId,
+    name: f.description ? String(f.description).trim() : null,
+    brand: firstNonNull(f.brandName, f.brandOwner),
+    brandOwner: f.brandOwner || null,
+    image: null,
+    quantity: f.packageWeight || null,
+    servingSize: servingSize,
+    servingGrams: servingGrams,
+    per100: per100,
+    perServing: perServing,
+    ingredients: f.ingredients ? String(f.ingredients).trim() : null,
+    nova: null,
+    nutriscore: null,
+    additives: [],
+    categories: f.foodCategory || null,
+    gtinUpc: f.gtinUpc || null,
+    publishedDate: f.publishedDate || null,
+    url: 'https://fdc.nal.usda.gov/food-details/' + encodeURIComponent(f.fdcId) + '/nutrients'
+  };
+}
+function lookupUSDA(code, format, apiKey) {
+  if (!apiKey) return Promise.resolve({ status: 'skipped' });
+  var cands = candidateCodes(code, format);
+  var tried = [];
+  var want = stripLeadingZeros(code);
+  function pickBest(foods, c) {
+    var matches = foods.filter(function (f) { var g = stripLeadingZeros(f.gtinUpc); return g && (g === want || g === stripLeadingZeros(c)); });
+    if (!matches.length) return null;
+    matches.sort(function (a, b) { return String(b.publishedDate || '').localeCompare(String(a.publishedDate || '')); });
+    return matches[0];
+  }
+  function tryNext(i) {
+    if (i >= cands.length) return Promise.resolve({ status: 'not_found', tried: tried });
+    var c = cands[i];
+    tried.push(c);
+    var url = USDA_BASE + '?query=' + encodeURIComponent(c) + '&dataType=Branded&pageSize=25&api_key=' + encodeURIComponent(apiKey);
+    return fetchJSON(url, { headers: { 'Accept': 'application/json' } }).then(function (r) {
+      if (r.status === 401 || r.status === 403) return { status: 'error', error: 'USDA HTTP ' + r.status + ' — API key rejected?', tried: tried };
+      if (r.status === 429) return { status: 'error', error: 'USDA rate limited (HTTP 429)', tried: tried };
+      if (!r.ok || !r.json) return { status: 'error', error: 'USDA HTTP ' + r.status, tried: tried };
+      var foods = r.json.foods || [];
+      var best = pickBest(foods, c);
+      if (best) return { status: 'found', codeUsed: c, food: best, totalHits: r.json.totalHits, matches: foods.length, tried: tried };
+      dbg('log', 'USDA: ' + c + ' no gtinUpc match among ' + foods.length + ' hits' + (i + 1 < cands.length ? ', retrying as ' + cands[i + 1] : ''));
+      return tryNext(i + 1);
+    }, function (err) {
+      return { status: 'error', error: 'USDA ' + (err && err.message || err), tried: tried };
+    });
+  }
+  return tryNext(0);
+}
+
+/* ---------------------------------------------------------------- merge */
+function srcHas(src, field) {
+  if (!src) return false;
+  if (NUT_KEYS.indexOf(field) >= 0) return src.per100[field] !== null || src.perServing[field] !== null;
+  var v = src[field];
+  return v !== null && v !== undefined && v !== '' && !(Array.isArray(v) && !v.length);
+}
+function mergeProduct(entry) {
+  var srcs = [];
+  if (entry.off && entry.off.norm) srcs.push(entry.off.norm);
+  if (entry.usda && entry.usda.norm) srcs.push(entry.usda.norm);
+  function pick(field) {
+    for (var i = 0; i < srcs.length; i++) { if (srcHas(srcs[i], field) && NUT_KEYS.indexOf(field) < 0) return { v: srcs[i][field], from: srcs[i].source }; }
+    return { v: null, from: null };
+  }
+  var m = { barcode: entry.barcode, found: srcs.length > 0, sources: srcs.map(function (s) { return s.source; }) };
+  ['name', 'brand', 'image', 'quantity', 'servingSize', 'ingredients', 'nova', 'nutriscore', 'additives', 'categories'].forEach(function (f) { m[f] = pick(f); });
+  var per100 = emptyNut(), per100From = {};
+  NUT_KEYS.forEach(function (k) {
+    for (var i = 0; i < srcs.length; i++) { if (srcs[i].per100[k] !== null) { per100[k] = srcs[i].per100[k]; per100From[k] = srcs[i].source; break; } }
+  });
+  // Per-serving values are only taken from the source that defined the serving size, so they stay internally consistent.
+  var servSrc = null;
+  for (var i = 0; i < srcs.length; i++) { if (srcs[i].source === m.servingSize.from) servSrc = srcs[i]; }
+  var perServing = emptyNut(), perServingFrom = {};
+  if (servSrc) {
+    NUT_KEYS.forEach(function (k) {
+      if (servSrc.perServing[k] !== null) { perServing[k] = servSrc.perServing[k]; perServingFrom[k] = servSrc.source; }
+      else if (servSrc.servingGrams !== null && per100[k] !== null) { perServing[k] = per100[k] * servSrc.servingGrams / 100; perServingFrom[k] = per100From[k] + ' × serving'; }
+    });
+  }
+  [per100, perServing].forEach(function (t) { t.netCarbs = (t.carbs !== null && t.fiber !== null) ? Math.max(0, t.carbs - t.fiber) : null; });
+  m.per100 = per100; m.perServing = perServing; m.per100From = per100From; m.perServingFrom = perServingFrom;
+  m.coverage = COVERAGE_FIELDS.map(function (cf) { return { key: cf[0], label: cf[1], by: srcs.map(function (s) { return { source: s.source, has: srcHas(s, cf[0]) }; }) }; });
+  m.missing = MISSING_FIELDS.filter(function (mf) {
+    var k = mf[0];
+    if (k === 'servingSize') return !m.servingSize.v;
+    if (k === 'ingredients') return !m.ingredients.v;
+    return per100[k] === null && perServing[k] === null;
+  }).map(function (mf) { return mf[1]; });
+  m.urls = {};
+  srcs.forEach(function (s) { m.urls[s.source] = s.url; });
+  return m;
+}
+
+/* --------------------------------------------------------------- lookup */
+function getUsdaKey() { return (store.get(LS.usdaKey, '') || '').trim(); }
+function lookup(code, format, opts) {
+  opts = opts || {};
+  var cacheKey = LS.cachePrefix + code;
+  var apiKey = getUsdaKey();
+  var cached = opts.bypassCache ? null : store.getJSON(cacheKey, null);
+  if (cached && cached.barcode === code) {
+    dbg('log', 'Cache hit for ' + code + ' (fetched ' + cached.fetchedAt + ')');
+    // A record cached before a USDA key existed can be upgraded with a USDA query now.
+    if (apiKey && (!cached.usda || cached.usda.status === 'skipped')) {
+      dbg('log', 'Cached record has no USDA data and a key is now set — querying USDA');
+      return lookupUSDA(code, cached.format || format, apiKey).then(function (u) {
+        cached.usda = usdaSummary(u);
+        if (u.status !== 'error') store.setJSON(cacheKey, cached);
+        return { entry: cached, merged: mergeProduct(cached), fromCache: true };
+      });
+    }
+    return Promise.resolve({ entry: cached, merged: mergeProduct(cached), fromCache: true });
+  }
+  var t0 = now();
+  return Promise.all([lookupOFF(code, format), lookupUSDA(code, format, apiKey)]).then(function (res) {
+    var off = res[0], usda = res[1];
+    var entry = {
+      barcode: code, format: format || null, fetchedAt: isoNow(),
+      off: { status: off.status, codeUsed: off.codeUsed || null, storedCode: off.storedCode || null, error: off.error || null, tried: off.tried || [], norm: off.status === 'found' ? normOFF(off.product) : null },
+      usda: usdaSummary(usda)
+    };
+    dbg('log', 'Lookup ' + code + ' done in ' + (now() - t0) + 'ms: OFF=' + off.status + (off.codeUsed ? ' (as ' + off.codeUsed + ')' : '') + (off.error ? ' [' + off.error + ']' : '') +
+      ', USDA=' + usda.status + (usda.codeUsed ? ' (as ' + usda.codeUsed + ', fdcId ' + usda.food.fdcId + ')' : '') + (usda.error ? ' [' + usda.error + ']' : ''));
+    // Only cache definitive answers; a network error must not poison the cache.
+    if (off.status !== 'error' && usda.status !== 'error') store.setJSON(cacheKey, entry);
+    return { entry: entry, merged: mergeProduct(entry), fromCache: false };
+  });
+}
+function usdaSummary(u) {
+  return { status: u.status, codeUsed: u.codeUsed || null, error: u.error || null, tried: u.tried || [], totalHits: (u.totalHits === undefined ? null : u.totalHits),
+    fdcId: u.food ? u.food.fdcId : null, norm: u.status === 'found' ? normUSDA(u.food) : null };
+}
+
+/* ---------------------------------------------------------- tally & log */
+var tally = null, scanLog = null;
+function emptyTally() { return { total: 0, off: 0, usda: 0, neither: 0, incomplete: 0 }; }
+function loadPersisted() {
+  tally = store.getJSON(LS.tally, null) || emptyTally();
+  scanLog = store.getJSON(LS.log, null) || [];
+  if (!Array.isArray(scanLog)) scanLog = [];
+}
+function recordScan(result, origin) {
+  var e = result.entry, m = result.merged;
+  var foundOFF = e.off.status === 'found', foundUSDA = e.usda.status === 'found';
+  tally.total++;
+  if (foundOFF) tally.off++;
+  if (foundUSDA) tally.usda++;
+  if (!foundOFF && !foundUSDA) tally.neither++;
+  if ((foundOFF || foundUSDA) && m.missing.length) tally.incomplete++;
+  scanLog.unshift({
+    ts: isoNow(), barcode: e.barcode, format: e.format || '', name: m.name.v || '',
+    off: e.off.status, offCode: e.off.codeUsed || '', usda: e.usda.status, usdaCode: e.usda.codeUsed || '',
+    missing: m.missing.slice(), cached: !!result.fromCache, origin: origin
+  });
+  if (scanLog.length > LOG_MAX) scanLog.length = LOG_MAX;
+  store.setJSON(LS.tally, tally);
+  store.setJSON(LS.log, scanLog);
+  renderTally();
+  renderLog();
+}
+function toCSV(entries) {
+  var cols = ['timestamp', 'barcode', 'format', 'product_name', 'off_status', 'off_code_used', 'usda_status', 'usda_code_used', 'found', 'incomplete', 'missing_fields', 'cached', 'origin'];
+  function cell(v) { var s = (v === null || v === undefined) ? '' : String(v); return /[",\r\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; }
+  var lines = [cols.join(',')];
+  entries.forEach(function (e) {
+    var found = e.off === 'found' || e.usda === 'found';
+    lines.push([e.ts, e.barcode, e.format || '', e.name, e.off, e.offCode, e.usda, e.usdaCode, found ? 'yes' : 'no',
+      (found && e.missing && e.missing.length) ? 'yes' : 'no', (e.missing || []).join('; '), e.cached ? 'yes' : 'no', e.origin || ''].map(cell).join(','));
+  });
+  return lines.join('\r\n');
+}
+function renderTally() {
+  var t = tally, el = clear($('tally'));
+  var found = t.total - t.neither;
+  [['Scans', t.total], ['Found in OFF', t.off], ['Found in USDA', t.usda], ['Found in neither', t.neither], ['Found, incomplete', t.incomplete], ['Found, complete', Math.max(0, found - t.incomplete)]]
+    .forEach(function (x) { el.appendChild(h('div', { class: 'tile' }, [h('div', { class: 'n', text: String(x[1]) }), h('div', { class: 'l', text: x[0] })])); });
+  var uniq = {};
+  scanLog.forEach(function (e) { uniq[e.barcode] = 1; });
+  $('tallyNote').textContent = 'Every lookup counts as a scan (cached repeats included). Unique barcodes in log: ' + Object.keys(uniq).length + '. "Incomplete" = found but missing serving size, carbs, sugars, fiber, protein or ingredients.';
+}
+function renderLog() {
+  var ul = clear($('logList'));
+  $('logCount').textContent = scanLog.length ? '(' + scanLog.length + ')' : '';
+  if (!scanLog.length) { ul.appendChild(h('li', { class: 'muted small', text: 'No scans yet.' })); return; }
+  scanLog.slice(0, 200).forEach(function (e) {
+    var flags = h('div', { class: 'flags' });
+    flags.appendChild(h('span', { class: 'chip ' + (e.off === 'found' ? 'ok' : e.off === 'error' ? 'warn' : 'bad'), text: 'OFF ' + statusMark(e.off) }));
+    if (e.usda !== 'skipped') flags.appendChild(h('span', { class: 'chip ' + (e.usda === 'found' ? 'ok' : e.usda === 'error' ? 'warn' : 'bad'), text: 'USDA ' + statusMark(e.usda) }));
+    if ((e.off === 'found' || e.usda === 'found') && e.missing && e.missing.length) flags.appendChild(h('span', { class: 'chip warn', text: 'missing ' + e.missing.length }));
+    var li = h('li', { onclick: function () { showTab('scan'); handleCode(e.barcode, e.format || null, 'log'); } }, [
+      h('div', { class: 'grow' }, [
+        h('div', { class: 'nm', text: e.name || (e.off === 'found' || e.usda === 'found' ? '(unnamed)' : 'Not found') }),
+        h('div', { class: 'bc', text: e.barcode + (e.cached ? ' · cached' : '') }),
+        h('div', { class: 't', text: shortTime(e.ts) + (e.origin ? ' · ' + e.origin : '') })
+      ]),
+      flags
+    ]);
+    ul.appendChild(li);
+  });
+  if (scanLog.length > 200) ul.appendChild(h('li', { class: 'muted small', text: 'Showing the latest 200 of ' + scanLog.length + ' entries. Export includes all.' }));
+}
+function statusMark(s) { return s === 'found' ? '✓' : s === 'not_found' ? '✗' : s === 'error' ? '!' : '–'; }
+
+/* ------------------------------------------------------ result rendering */
+var current = null;
+function renderLoading(code) {
+  var box = clear($('result'));
+  clear($('missingLine'));
+  box.appendChild(h('div', { class: 'card' }, [h('div', { class: 'muted', text: 'Looking up ' + code + '…' })]));
+}
+function renderError(code, err) {
+  var box = clear($('result'));
+  clear($('missingLine'));
+  box.appendChild(h('div', { class: 'card' }, [
+    h('div', { class: 'status err', text: 'Lookup failed for ' + code + ': ' + (err && err.message || err) }),
+    h('div', { class: 'row', style: 'margin-top:10px' }, [h('button', { class: 'btn small', type: 'button', onclick: function () { handleCode(code, null, 'manual'); } }, 'Retry')])
+  ]));
+}
+function sourceLine(entry) {
+  var parts = [];
+  var o = entry.off, u = entry.usda;
+  parts.push(h('span', { class: 'chip ' + (o.status === 'found' ? 'ok' : o.status === 'error' ? 'warn' : 'bad'),
+    text: 'OFF ' + statusMark(o.status) + (o.status === 'found' ? ' as ' + o.codeUsed : o.status === 'not_found' ? ' (tried ' + (o.tried || []).join(', ') + ')' : o.status === 'error' ? ' ' + o.error : '') }));
+  if (u.status === 'skipped') parts.push(h('span', { class: 'chip', text: 'USDA – no key' }));
+  else parts.push(h('span', { class: 'chip ' + (u.status === 'found' ? 'ok' : u.status === 'error' ? 'warn' : 'bad'),
+    text: 'USDA ' + statusMark(u.status) + (u.status === 'found' ? ' as ' + u.codeUsed + ' (fdcId ' + u.fdcId + ')' : u.status === 'not_found' ? ' (tried ' + (u.tried || []).join(', ') + ')' : u.status === 'error' ? ' ' + u.error : '') }));
+  return h('div', { class: 'chips' }, parts);
+}
+function renderResult(res) {
+  current = res;
+  var e = res.entry, m = res.merged;
+  var box = clear($('result'));
+  var card = h('div', { class: 'card' });
+  if (!m.found) {
+    card.appendChild(h('div', { class: 'prod' }, [
+      h('div', { class: 'noimg', text: 'no data' }),
+      h('div', { class: 'grow' }, [
+        h('div', { class: 'name', text: 'Not found' }),
+        h('div', { class: 'brand mono', text: e.barcode + (e.format ? ' (' + e.format + ')' : '') }),
+        h('div', { class: 'tiny muted', text: (res.fromCache ? 'cached result · ' : '') + e.fetchedAt })
+      ])
+    ]));
+    card.appendChild(sourceLine(e));
+    card.appendChild(h('div', { class: 'row wrap', style: 'margin-top:12px' }, [
+      h('button', { class: 'btn small', type: 'button', onclick: function () { refetch(e); } }, 'Re-fetch (bypass cache)'),
+      h('a', { class: 'btn small', href: 'https://world.openfoodfacts.org/cgi/product.pl?type=add&code=' + encodeURIComponent(e.off.tried && e.off.tried.length ? e.off.tried[e.off.tried.length - 1] : e.barcode), target: '_blank', rel: 'noopener noreferrer' }, 'Add to OFF'),
+      h('button', { class: 'btn small', type: 'button', onclick: function () { copyText(JSON.stringify(e, null, 2)).then(function (ok) { toast(ok ? 'Copied JSON' : 'Copy failed'); }); } }, 'Copy JSON')
+    ]));
+    box.appendChild(card);
+    var ml = clear($('missingLine'));
+    ml.appendChild(h('div', { class: 'missing bad', text: 'Missing fields: everything — product not found in any source.' }));
+    return;
+  }
+  var head = h('div', { class: 'prod' });
+  if (m.image.v) head.appendChild(h('img', { src: m.image.v, alt: '', loading: 'lazy', referrerpolicy: 'no-referrer', onerror: function () { this.replaceWith(h('div', { class: 'noimg', text: 'no image' })); } }));
+  else head.appendChild(h('div', { class: 'noimg', text: 'no image' }));
+  head.appendChild(h('div', { class: 'grow' }, [
+    h('div', { class: 'name', text: m.name.v || '(no name)' }),
+    h('div', { class: 'brand', text: [m.brand.v, m.quantity.v].filter(Boolean).join(' · ') }),
+    h('div', { class: 'tiny muted mono', text: e.barcode + (e.format ? ' (' + e.format + ')' : '') + (res.fromCache ? ' · cached' : '') })
+  ]));
+  card.appendChild(head);
+  card.appendChild(h('div', { class: 'kv' }, [h('b', {}, 'Serving size: '), m.servingSize.v ? (m.servingSize.v + ' ') : '— ', m.servingSize.from ? h('span', { class: 'tiny muted', text: '(' + m.servingSize.from + ')' }) : null]));
+  // nutrients table
+  var tbl = h('table', { class: 'nut' });
+  tbl.appendChild(h('tr', {}, [h('th', { text: 'Nutrient' }), h('th', { text: 'Per serving' }), h('th', { text: 'Per 100 g' })]));
+  NUT_ROWS.forEach(function (r) {
+    var k = r[0];
+    var tr = h('tr', { class: k === 'netCarbs' ? 'calc' : null }, [
+      h('td', { text: r[1] + (k === 'netCarbs' ? ' (carbs − fiber)' : '') }),
+      h('td', { text: fmtVal(m.perServing[k], r[2]) }),
+      h('td', { text: fmtVal(m.per100[k], r[2]) })
+    ]);
+    tbl.appendChild(tr);
+  });
+  card.appendChild(tbl);
+  var provenance = [];
+  NUT_KEYS.forEach(function (k) { if (m.perServingFrom[k] && m.perServingFrom[k].indexOf('×') > 0) provenance.push(k); });
+  if (provenance.length) card.appendChild(h('div', { class: 'tiny muted', style: 'margin-top:4px', text: 'Per-serving values computed from per-100 g × serving weight for: ' + provenance.join(', ') + '.' }));
+  if (m.sources.length > 1) card.appendChild(h('div', { class: 'tiny muted', text: 'Per-100 g values come from ' + uniqueList(NUT_KEYS.map(function (k) { return m.per100From[k]; })).join(' + ') + '; per-serving from ' + (m.servingSize.from || '—') + '.' }));
+  // ingredients
+  var ingr = m.ingredients.v;
+  var det = h('details', { open: ingr && ingr.length < 240 ? '' : null }, [
+    h('summary', { text: 'Ingredients' + (ingr ? '' : ' — missing') + (m.ingredients.from ? ' (' + m.ingredients.from + ')' : '') }),
+    h('p', { class: 'ingr', text: ingr || 'No ingredients text in any source.' })
+  ]);
+  card.appendChild(det);
+  // badges
+  var kv = h('div', { class: 'kv' });
+  var novaLabels = { 1: 'unprocessed / minimally processed', 2: 'processed culinary ingredient', 3: 'processed', 4: 'ultra-processed' };
+  kv.appendChild(h('div', {}, [h('b', {}, 'NOVA group: '), m.nova.v !== null ? String(m.nova.v) + (novaLabels[m.nova.v] ? ' — ' + novaLabels[m.nova.v] : '') : '—']));
+  var ns = m.nutriscore.v ? String(m.nutriscore.v).toLowerCase() : null;
+  var nsNode = (ns && /^[a-e]$/.test(ns)) ? h('span', { class: 'nutri ' + ns, text: ns.toUpperCase() }) : (ns ? ns : '—');
+  kv.appendChild(h('div', {}, [h('b', {}, 'Nutri-Score: '), nsNode]));
+  var adds = m.additives.v || [];
+  kv.appendChild(h('div', {}, [h('b', {}, 'Additives: '), adds.length ? h('span', { class: 'chips', style: 'display:inline-flex' }, adds.map(function (a) { return h('span', { class: 'chip', text: a }); })) : (m.sources.indexOf('OFF') >= 0 ? 'none tagged' : '—')]));
+  kv.appendChild(h('div', {}, [h('b', {}, 'Categories: '), m.categories.v || '—']));
+  card.appendChild(kv);
+  // sources
+  card.appendChild(h('div', { class: 'kv' }, [h('b', {}, 'Sources')]));
+  card.appendChild(sourceLine(e));
+  // coverage table
+  var cov = h('table', { class: 'cov' });
+  cov.appendChild(h('tr', {}, [h('th', { text: 'Field' })].concat(m.sources.map(function (s) { return h('th', { text: s }); }))));
+  m.coverage.forEach(function (row) {
+    cov.appendChild(h('tr', {}, [h('td', { text: row.label })].concat(row.by.map(function (b) { return h('td', { text: b.has ? '✓' : '–', style: b.has ? 'color:var(--ok)' : 'color:var(--muted)' }); }))));
+  });
+  card.appendChild(h('details', {}, [h('summary', { text: 'Per-source coverage' }), cov]));
+  // actions
+  var actions = h('div', { class: 'row wrap', style: 'margin-top:12px' });
+  actions.appendChild(h('button', { class: 'btn small', type: 'button', onclick: function () { refetch(e); } }, 'Re-fetch'));
+  if (m.urls.OFF) actions.appendChild(h('a', { class: 'btn small', href: m.urls.OFF, target: '_blank', rel: 'noopener noreferrer' }, 'Open on OFF'));
+  if (m.urls.USDA) actions.appendChild(h('a', { class: 'btn small', href: m.urls.USDA, target: '_blank', rel: 'noopener noreferrer' }, 'Open on USDA'));
+  actions.appendChild(h('button', { class: 'btn small', type: 'button', onclick: function () { copyText(JSON.stringify({ entry: e, merged: m }, null, 2)).then(function (ok) { toast(ok ? 'Copied JSON' : 'Copy failed'); }); } }, 'Copy JSON'));
+  card.appendChild(actions);
+  box.appendChild(card);
+  var ml = clear($('missingLine'));
+  if (m.missing.length) ml.appendChild(h('div', { class: 'missing', text: 'Missing fields: ' + m.missing.join(', ') }));
+  else ml.appendChild(h('div', { class: 'missing ok', text: 'Missing fields: none — all six tracked fields present.' }));
+}
+function uniqueList(arr) { var out = []; arr.forEach(function (x) { if (x && out.indexOf(x) < 0) out.push(x); }); return out; }
+function refetch(entry) {
+  store.remove(LS.cachePrefix + entry.barcode);
+  handleCode(entry.barcode, entry.format || null, 'refetch');
+}
+
+/* ------------------------------------------------------------ handling */
+var lookupInFlight = false;
+function handleCode(code, format, origin) {
+  code = digitsOnly(code);
+  if (!code) return Promise.resolve();
+  if (lookupInFlight && origin === 'scan') return Promise.resolve();
+  lookupInFlight = true;
+  renderLoading(code);
+  return lookup(code, format, { bypassCache: origin === 'refetch' }).then(function (res) {
+    renderResult(res);
+    if (origin !== 'log') recordScan(res, origin);
+  }, function (err) {
+    console.error('Lookup failed for ' + code + ': ' + (err && err.stack || err));
+    renderError(code, err);
+  }).then(function () { lookupInFlight = false; });
+}
+
+/* -------------------------------------------------------------- camera */
+var cam = { stream: null, track: null, scanning: false, decoder: null, detector: null, zx: null, timer: null, rotate: false,
+  frames: 0, decodeMs: 0, nativeErrors: 0, lastCode: null, lastAt: 0, pending: { code: null, count: 0, at: 0 }, wakeLock: null, audio: null,
+  canvas: null, ctx: null, frameSource: null, torchOn: false };
+var video = null;
+function setCamStatus(msg, isErr) { var el = $('camStatus'); el.textContent = msg; el.className = 'status' + (isErr ? ' err' : ''); }
+function initAudio() {
+  try {
+    var AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return;
+    if (!cam.audio) cam.audio = new AC();
+    if (cam.audio.state === 'suspended') cam.audio.resume();
+  } catch (e) { dbg('warn', 'AudioContext unavailable: ' + e.message); }
+}
+function beep() {
+  try {
+    if (!cam.audio) return;
+    var o = cam.audio.createOscillator(), g = cam.audio.createGain();
+    o.type = 'square'; o.frequency.value = 1400; g.gain.value = 0.06;
+    o.connect(g); g.connect(cam.audio.destination);
+    var t = cam.audio.currentTime; o.start(t); o.stop(t + 0.07);
+  } catch (e) { /* ignore */ }
+}
+function flashGuide() {
+  var g = $('guide'); g.classList.add('hit');
+  setTimeout(function () { g.classList.remove('hit'); }, 350);
+}
+function ensureZXing() {
+  if (window.ZXingBrowser) return Promise.resolve(true);
+  return new Promise(function (resolve) {
+    dbg('warn', 'ZXingBrowser global missing; loading fallback from unpkg');
+    var s = document.createElement('script');
+    s.src = ZXING_FALLBACK_URL;
+    s.onload = function () { dbg('log', 'ZXing fallback loaded: ' + !!window.ZXingBrowser); resolve(!!window.ZXingBrowser); };
+    s.onerror = function () { dbg('error', 'ZXing fallback failed to load from unpkg'); resolve(false); };
+    document.head.appendChild(s);
+  });
+}
+function makeZXingReader() {
+  var Z = window.ZXingBrowser, BF = Z.BarcodeFormat;
+  // DecodeHintType is not exported by the @zxing/browser UMD bundle; its enum values are stable: POSSIBLE_FORMATS = 2, TRY_HARDER = 3.
+  var hints = new Map();
+  hints.set(2, [BF.EAN_13, BF.EAN_8, BF.UPC_A, BF.UPC_E]);
+  return new Z.BrowserMultiFormatOneDReader(hints, { delayBetweenScanAttempts: SCAN_INTERVAL_MS, delayBetweenScanSuccess: 300 });
+}
+function pickDecoder() {
+  var pref = store.get(LS.decoder, 'auto');
+  var tryNative = pref !== 'zxing' && typeof window.BarcodeDetector === 'function';
+  var p = Promise.resolve(null);
+  if (tryNative) {
+    p = Promise.resolve().then(function () { return window.BarcodeDetector.getSupportedFormats ? window.BarcodeDetector.getSupportedFormats() : ['ean_13', 'ean_8', 'upc_a', 'upc_e']; })
+      .then(function (fmts) {
+        var want = ['ean_13', 'ean_8', 'upc_a', 'upc_e'].filter(function (f) { return fmts.indexOf(f) >= 0; });
+        dbg('log', 'BarcodeDetector supported formats: ' + fmts.join(', '));
+        if (want.indexOf('ean_13') < 0) { dbg('warn', 'BarcodeDetector lacks ean_13; using ZXing'); return null; }
+        cam.detector = new window.BarcodeDetector({ formats: want });
+        return { kind: 'native', formats: want };
+      }, function (err) { dbg('warn', 'BarcodeDetector setup failed: ' + (err && err.message || err)); return null; });
+  } else if (pref !== 'zxing') {
+    dbg('log', 'BarcodeDetector API not available in this browser; using ZXing');
+  }
+  return p.then(function (d) {
+    if (d) return d;
+    return ensureZXing().then(function (ok) {
+      if (!ok) throw new Error('No barcode decoder available: BarcodeDetector unsupported and the ZXing script could not be loaded.');
+      if (!cam.zx) cam.zx = makeZXingReader();
+      return { kind: 'zxing', formats: ['ean_13', 'ean_8', 'upc_a', 'upc_e'] };
+    });
+  });
+}
+function startCamera() {
+  if (cam.scanning) return Promise.resolve();
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    setCamStatus('Camera API unavailable. Needs HTTPS and a modern Safari/Chrome.', true);
+    return Promise.resolve();
+  }
+  initAudio();                        // AudioContext must be created inside a user gesture on iOS
+  setCamStatus('Requesting camera…');
+  $('btnStart').disabled = true;
+  var constraints = { audio: false, video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } } };
+  dbg('log', 'getUserMedia ' + JSON.stringify(constraints.video));
+  return navigator.mediaDevices.getUserMedia(constraints).catch(function (err) {
+    dbg('warn', 'getUserMedia failed (' + err.name + ': ' + err.message + ')' + (err.name === 'OverconstrainedError' || err.name === 'NotFoundError' ? '; retrying with video:true' : ''));
+    if (err.name === 'OverconstrainedError' || err.name === 'NotFoundError') return navigator.mediaDevices.getUserMedia({ audio: false, video: true });
+    throw err;
+  }).then(function (stream) {
+    cam.stream = stream;
+    cam.track = stream.getVideoTracks()[0] || null;
+    video.srcObject = stream;
+    video.muted = true;
+    video.setAttribute('playsinline', '');
+    var playP = video.play();
+    if (playP && playP.catch) playP.catch(function (e) { dbg('warn', 'video.play() rejected: ' + e.name + ' ' + e.message); });
+    if (cam.track) {
+      try { dbg('log', 'Track: ' + cam.track.label + ' settings=' + JSON.stringify(cam.track.getSettings ? cam.track.getSettings() : {})); } catch (e) { /* ignore */ }
+      cam.track.addEventListener('ended', function () { dbg('warn', 'Camera track ended'); if (cam.scanning) stopCamera('Camera track ended (backgrounded or taken by another app). Tap Start camera.'); });
+    }
+    return waitForVideo(video, 6000);
+  }).then(function () {
+    $('viewport').classList.add('live');
+    return pickDecoder();
+  }).then(function (dec) {
+    cam.decoder = dec;
+    cam.scanning = true;
+    cam.frames = 0; cam.decodeMs = 0; cam.nativeErrors = 0; cam.rotate = false;
+    cam.pending = { code: null, count: 0, at: 0 };
+    if (!cam.canvas) { cam.canvas = document.createElement('canvas'); cam.ctx = cam.canvas.getContext('2d', { willReadFrequently: true }) || cam.canvas.getContext('2d'); }
+    $('btnStart').classList.add('hidden'); $('btnStop').classList.remove('hidden');
+    $('btnStart').disabled = false;
+    setupTrackControls();
+    requestWakeLock();
+    dbg('log', 'Scanning with ' + dec.kind + ' (' + dec.formats.join(',') + ') at ' + video.videoWidth + 'x' + video.videoHeight);
+    setCamStatus('Scanning (' + (dec.kind === 'native' ? 'native BarcodeDetector' : 'ZXing') + ')…');
+    scanLoop();
+  }).catch(function (err) {
+    $('btnStart').disabled = false;
+    var name = err && err.name || '', msg = err && err.message || String(err);
+    var hint = '';
+    if (name === 'NotAllowedError' || name === 'SecurityError') hint = ' Camera permission denied. On iPhone: Settings › Safari › Camera › Allow, or tap the "aA" menu › Website Settings.';
+    else if (name === 'NotReadableError') hint = ' Camera is busy in another app.';
+    console.error('Camera start failed: ' + name + ': ' + msg);
+    setCamStatus('Camera failed: ' + (name ? name + ' — ' : '') + msg + hint, true);
+    releaseStream();
+  });
+}
+function waitForVideo(v, timeoutMs) {
+  return new Promise(function (resolve) {
+    var done = false, t0 = now();
+    function finish() { done = true; v.removeEventListener('loadedmetadata', check); v.removeEventListener('playing', check); resolve(); }
+    function check() {
+      if (done) return;
+      if (v.readyState >= 2 && v.videoWidth > 0) { finish(); return; }
+      if (now() - t0 > timeoutMs) { dbg('warn', 'Video not ready after ' + timeoutMs + 'ms (readyState=' + v.readyState + ', ' + v.videoWidth + 'x' + v.videoHeight + '); continuing anyway'); finish(); return; }
+      setTimeout(check, 50);
+    }
+    v.addEventListener('loadedmetadata', check);
+    v.addEventListener('playing', check);
+    check();
+  });
+}
+function releaseStream() {
+  if (cam.stream) { try { cam.stream.getTracks().forEach(function (t) { t.stop(); }); } catch (e) { /* ignore */ } }
+  cam.stream = null; cam.track = null;
+  try { video.pause(); } catch (e) { /* ignore */ }
+  try { video.srcObject = null; } catch (e) { /* ignore */ }
+  $('viewport').classList.remove('live');
+}
+function stopCamera(statusMsg) {
+  cam.scanning = false;
+  clearTimeout(cam.timer);
+  releaseStream();
+  releaseWakeLock();
+  $('btnStart').classList.remove('hidden'); $('btnStop').classList.add('hidden');
+  $('camCtl').classList.add('hidden');
+  var fps = cam.frames && cam.decodeMs ? ' avg decode ' + Math.round(cam.decodeMs / cam.frames) + 'ms over ' + cam.frames + ' frames' : '';
+  dbg('log', 'Camera stopped.' + fps);
+  setCamStatus(statusMsg || 'Camera off.');
+}
+function scanLoop() {
+  if (!cam.scanning) return;
+  var t0 = now();
+  var p;
+  if (cam.decoder.kind === 'native') p = detectNative();
+  else p = new Promise(function (resolve) { resolve(decodeZXingFrame()); });
+  p.then(function (hit) {
+    cam.frames++; cam.decodeMs += now() - t0;
+    if (hit) onRead(hit);
+    if (cam.frames % 50 === 0) setCamStatus('Scanning (' + (cam.decoder.kind === 'native' ? 'native' : 'ZXing') + ') · ' + Math.round(cam.decodeMs / cam.frames) + ' ms/frame · ' + cam.frames + ' frames');
+  }, function (err) {
+    cam.frames++;
+    var msg = (err && (err.name + ': ' + err.message)) || String(err);
+    if (cam.decoder.kind === 'native') {
+      cam.nativeErrors++;
+      if (cam.nativeErrors <= 3 || cam.nativeErrors % 50 === 0) console.warn('BarcodeDetector.detect failed (' + cam.nativeErrors + '): ' + msg);
+      if (cam.nativeErrors >= 5) {
+        console.warn('Native BarcodeDetector keeps failing; switching to ZXing');
+        return ensureZXing().then(function (ok) {
+          if (ok) { if (!cam.zx) cam.zx = makeZXingReader(); cam.decoder = { kind: 'zxing', formats: ['ean_13', 'ean_8', 'upc_a', 'upc_e'] }; setCamStatus('Scanning (ZXing, after native failure)…'); }
+          else setCamStatus('Native decoder failed and ZXing is unavailable.', true);
+        });
+      }
+    } else {
+      console.error('ZXing decode error: ' + msg);
+    }
+  }).then(function () {
+    if (!cam.scanning) return;
+    var elapsed = now() - t0;
+    cam.timer = setTimeout(scanLoop, Math.max(20, SCAN_INTERVAL_MS - elapsed));
+  });
+}
+function detectNative() {
+  return cam.detector.detect(video).then(function (codes) {
+    if (!codes || !codes.length) return null;
+    var c = codes[0];
+    return { text: c.rawValue, format: String(c.format || '').toLowerCase() };
+  });
+}
+function isZXingSoftError(e) {
+  var kind = (e && e.constructor && e.constructor.kind) || (e && e.name) || '';
+  return /NotFoundException|ChecksumException|FormatException/.test(String(kind));
+}
+function zxFormatName(n) {
+  var BF = window.ZXingBrowser && window.ZXingBrowser.BarcodeFormat;
+  var name = BF && BF[n];
+  return String(name || n).toLowerCase();
+}
+// Draw the guide region of the current frame onto the work canvas and run ZXing on it. Alternate frames are rotated 90°
+// so vertical barcodes decode without ZXing's expensive TRY_HARDER mode. Returns a hit or null.
+function decodeZXingFrame() {
+  var src = cam.frameSource || video;
+  var vw = src.videoWidth || src.width || 0, vh = src.videoHeight || src.height || 0;
+  if (!vw || !vh) return null;
+  var canvas = cam.canvas, ctx = cam.ctx;
+  var rotate = cam.rotate; cam.rotate = !rotate;
+  var cw, ch, sx, sy;
+  if (!rotate) {
+    cw = Math.round(vw * 0.9); ch = Math.round(vh * 0.5); sx = Math.round((vw - cw) / 2); sy = Math.round((vh - ch) / 2);
+    if (canvas.width !== cw || canvas.height !== ch) { canvas.width = cw; canvas.height = ch; }
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.drawImage(src, sx, sy, cw, ch, 0, 0, cw, ch);
+  } else {
+    cw = Math.round(vw * 0.5); ch = Math.round(vh * 0.9); sx = Math.round((vw - cw) / 2); sy = Math.round((vh - ch) / 2);
+    if (canvas.width !== ch || canvas.height !== cw) { canvas.width = ch; canvas.height = cw; }
+    ctx.setTransform(0, 1, -1, 0, ch, 0);   // rotate 90° clockwise into a (ch × cw) canvas
+    ctx.drawImage(src, sx, sy, cw, ch, 0, 0, cw, ch);
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+  }
+  try {
+    var result = cam.zx.decodeFromCanvas(canvas);
+    return { text: result.getText(), format: zxFormatName(result.getBarcodeFormat()), rotated: rotate };
+  } catch (e) {
+    if (isZXingSoftError(e)) return null;
+    throw e;
+  }
+}
+function decodeCanvasWithZXing(canvas) {   // exposed for tests / desktop debugging
+  return ensureZXing().then(function (ok) {
+    if (!ok) throw new Error('ZXing unavailable');
+    if (!cam.zx) cam.zx = makeZXingReader();
+    try { var r = cam.zx.decodeFromCanvas(canvas); return { text: r.getText(), format: zxFormatName(r.getBarcodeFormat()) }; }
+    catch (e) { if (isZXingSoftError(e)) return null; throw e; }
+  });
+}
+function onRead(hit) {
+  var code = digitsOnly(hit.text);
+  if (!code) return;
+  var t = now();
+  if (!readIsValid(code, hit.format)) { dbg('warn', 'Read ' + code + ' (' + hit.format + ') fails check digit; ignored'); return; }
+  if (cam.pending.code === code && t - cam.pending.at < CONFIRM_WINDOW_MS) cam.pending.count++;
+  else cam.pending = { code: code, count: 1, at: t };
+  cam.pending.at = t;
+  if (cam.pending.count < CONFIRM_READS) { dbg('log', 'Read ' + code + ' (' + hit.format + (hit.rotated ? ', rotated' : '') + ') — waiting for a confirming read'); return; }
+  if (code === cam.lastCode && t - cam.lastAt < DEDUPE_MS) { cam.lastAt = t; return; }   // sliding 3 s window
+  cam.lastCode = code; cam.lastAt = t;
+  if (lookupInFlight) { dbg('log', 'Read ' + code + ' ignored: lookup in flight'); return; }
+  flashGuide(); beep();
+  console.log('Scanned ' + code + ' (' + hit.format + ', ' + cam.decoder.kind + (hit.rotated ? ', rotated frame' : '') + ')');
+  handleCode(code, hit.format, 'scan');
+}
+function setupTrackControls() {
+  var ctl = $('camCtl'), torchBtn = $('btnTorch'), zoomWrap = $('zoomWrap'), zoom = $('zoom');
+  torchBtn.classList.add('hidden'); zoomWrap.classList.add('hidden'); ctl.classList.add('hidden');
+  if (!cam.track || !cam.track.getCapabilities) { dbg('log', 'Track capabilities API unavailable'); return; }
+  var caps = {};
+  try { caps = cam.track.getCapabilities() || {}; } catch (e) { dbg('warn', 'getCapabilities failed: ' + e.message); return; }
+  try { dbg('log', 'Track capabilities: ' + JSON.stringify(caps)); } catch (e) { /* ignore */ }
+  var any = false;
+  if (caps.torch) {
+    any = true; torchBtn.classList.remove('hidden'); cam.torchOn = false; torchBtn.textContent = 'Torch on';
+    torchBtn.onclick = function () {
+      var on = !cam.torchOn;
+      cam.track.applyConstraints({ advanced: [{ torch: on }] }).then(function () { cam.torchOn = on; torchBtn.textContent = on ? 'Torch off' : 'Torch on'; },
+        function (e) { console.warn('Torch failed: ' + e.name + ' ' + e.message); toast('Torch not available'); });
+    };
+  }
+  if (caps.zoom && typeof caps.zoom.min === 'number' && typeof caps.zoom.max === 'number' && caps.zoom.max > caps.zoom.min) {
+    any = true; zoomWrap.classList.remove('hidden');
+    zoom.min = caps.zoom.min; zoom.max = caps.zoom.max; zoom.step = caps.zoom.step || 0.1;
+    var cur = (cam.track.getSettings && cam.track.getSettings().zoom) || caps.zoom.min;
+    zoom.value = cur;
+    zoom.oninput = function () {
+      var z = parseFloat(zoom.value);
+      cam.track.applyConstraints({ advanced: [{ zoom: z }] }).catch(function (e) { dbg('warn', 'Zoom failed: ' + e.name + ' ' + e.message); });
+    };
+  }
+  if (any) ctl.classList.remove('hidden');
+}
+function requestWakeLock() {
+  if (!('wakeLock' in navigator) || !navigator.wakeLock.request) return;
+  navigator.wakeLock.request('screen').then(function (wl) {
+    cam.wakeLock = wl;
+    wl.addEventListener('release', function () { dbg('log', 'Screen wake lock released'); });
+    dbg('log', 'Screen wake lock acquired');
+  }, function (e) { dbg('warn', 'Wake lock failed: ' + e.name + ' ' + e.message); });
+}
+function releaseWakeLock() {
+  if (cam.wakeLock) { try { cam.wakeLock.release(); } catch (e) { /* ignore */ } cam.wakeLock = null; }
+}
+
+/* ------------------------------------------------------------ clipboard */
+function legacyCopy(text) {
+  try {
+    var ta = document.createElement('textarea');
+    ta.value = text; ta.setAttribute('readonly', ''); ta.style.position = 'fixed'; ta.style.top = '-1000px'; ta.style.opacity = '0';
+    document.body.appendChild(ta); ta.focus(); ta.select(); ta.setSelectionRange(0, text.length);
+    var ok = document.execCommand('copy');
+    document.body.removeChild(ta);
+    return ok;
+  } catch (e) { return false; }
+}
+// Call synchronously from a user-gesture handler (iOS requires it).
+function copyText(text) {
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    return navigator.clipboard.writeText(text).then(function () { return true; }, function (e) {
+      dbg('warn', 'clipboard.writeText failed: ' + e.name + ' ' + e.message + '; trying execCommand');
+      return legacyCopy(text);
+    });
+  }
+  return Promise.resolve(legacyCopy(text));
+}
+function shareText(filename, text, mime) {
+  if (!navigator.share) return Promise.resolve(false);
+  var payload = { title: filename, text: text };
+  try {
+    if (typeof File === 'function' && navigator.canShare) {
+      var file = new File([text], filename, { type: mime });
+      if (navigator.canShare({ files: [file] })) payload = { files: [file], title: filename };
+    }
+  } catch (e) { /* fall back to text */ }
+  return navigator.share(payload).then(function () { return true; }, function (e) {
+    if (e && e.name === 'AbortError') return true;
+    console.warn('share failed: ' + e.name + ' ' + e.message);
+    return false;
+  });
+}
+
+/* ------------------------------------------------------------- settings */
+function renderSettings() {
+  var key = getUsdaKey();
+  $('usdaKey').value = key;
+  $('keyStatus').textContent = key ? 'Key saved (' + key.length + ' chars). USDA will be queried on every lookup.' : 'No key saved — USDA lookups are skipped.';
+  $('decoderPref').value = store.get(LS.decoder, 'auto');
+  var native = typeof window.BarcodeDetector === 'function';
+  $('decoderInfo').textContent = 'This browser ' + (native ? 'exposes' : 'does not expose') + ' BarcodeDetector. ZXing ' + (window.ZXingBrowser ? 'is loaded' : 'is NOT loaded') + '. Storage ' + (store.available ? 'OK' : 'UNAVAILABLE (private mode?)') + '.';
+  var cacheKeys = store.keys(LS.cachePrefix);
+  $('storageInfo').textContent = cacheKeys.length + ' cached product' + (cacheKeys.length === 1 ? '' : 's') + ', ' + scanLog.length + ' log entries, ~' + Math.round(store.bytes() / 1024) + ' KB used of ~5 MB.';
+}
+function testUsdaKey() {
+  var key = $('usdaKey').value.trim();
+  if (!key) { $('keyStatus').textContent = 'Enter a key first.'; return; }
+  $('keyStatus').textContent = 'Testing…';
+  var url = USDA_BASE + '?query=' + encodeURIComponent('049000028911') + '&dataType=Branded&pageSize=1&api_key=' + encodeURIComponent(key);
+  fetchJSON(url).then(function (r) {
+    if (r.ok && r.json) $('keyStatus').textContent = 'Key works ✓ (test query returned ' + (r.json.totalHits === undefined ? '?' : r.json.totalHits) + ' hits).';
+    else $('keyStatus').textContent = 'Key test failed: HTTP ' + r.status + ' ' + (r.json && r.json.error && (r.json.error.message || r.json.error.code) || r.text.slice(0, 120));
+  }, function (e) { $('keyStatus').textContent = 'Key test failed: ' + e.message; });
+}
+
+/* ---------------------------------------------------------- debug panel */
+function initDebugPanel() {
+  var panel = $('dbgPanel'), linesEl = $('dbgLines'), countEl = $('dbgCount');
+  var count = 0;
+  function addLine(line) {
+    count++;
+    countEl.textContent = String(Math.min(count, 999));
+    var div = h('div', { class: line.level, text: line.t + ' ' + line.level.toUpperCase().slice(0, 3) + ' ' + line.msg });
+    linesEl.appendChild(div);
+    while (linesEl.childNodes.length > 700) linesEl.removeChild(linesEl.firstChild);
+    if (panel.classList.contains('open')) linesEl.scrollTop = linesEl.scrollHeight;
+  }
+  if (window.__dbg) {
+    window.__dbg.lines.forEach(addLine);
+    window.__dbg.subscribe(addLine);
+  }
+  $('dbgToggle').addEventListener('click', function () { panel.classList.toggle('open'); if (panel.classList.contains('open')) linesEl.scrollTop = linesEl.scrollHeight; });
+  $('dbgClose').addEventListener('click', function () { panel.classList.remove('open'); });
+  $('dbgClear').addEventListener('click', function () { clear(linesEl); if (window.__dbg) window.__dbg.lines.length = 0; count = 0; countEl.textContent = '0'; });
+  $('dbgCopy').addEventListener('click', function () {
+    var header = ['FoodScanner v' + APP_VERSION, 'URL: ' + location.href, 'Time: ' + isoNow(), 'UA: ' + navigator.userAgent,
+      'BarcodeDetector: ' + (typeof window.BarcodeDetector === 'function'), 'ZXing loaded: ' + !!window.ZXingBrowser, 'Decoder: ' + (cam.decoder ? cam.decoder.kind : 'n/a'),
+      'localStorage: ' + (store.available ? 'ok' : 'unavailable'), 'Tally: ' + JSON.stringify(tally), '---'];
+    var body = (window.__dbg ? window.__dbg.lines : []).map(function (l) { return l.t + ' ' + l.level.toUpperCase() + ' ' + l.msg; });
+    copyText(header.concat(body).join('\n')).then(function (ok) { toast(ok ? 'Debug log copied' : 'Copy failed'); });
+  });
+}
+
+/* ----------------------------------------------------------------- tabs */
+function showTab(name) {
+  ['scan', 'log', 'settings'].forEach(function (t) {
+    $('tab-' + t).classList.toggle('active', t === name);
+  });
+  Array.prototype.forEach.call($('tabs').querySelectorAll('button'), function (b) { b.classList.toggle('active', b.getAttribute('data-tab') === name); });
+  if (name === 'settings') renderSettings();
+  if (name === 'log') { renderTally(); renderLog(); }
+  window.scrollTo(0, 0);
+}
+
+/* ----------------------------------------------------------------- init */
+function init() {
+  $('verLabel').textContent = 'v' + APP_VERSION;
+  $('verLabel2').textContent = APP_VERSION;
+  video = $('video');
+  initDebugPanel();
+  loadPersisted();
+  renderTally(); renderLog(); renderSettings();
+  dbg('log', 'App v' + APP_VERSION + ' init. BarcodeDetector=' + (typeof window.BarcodeDetector === 'function') + ' ZXing=' + !!window.ZXingBrowser +
+    ' localStorage=' + store.available + ' secureContext=' + window.isSecureContext + ' mediaDevices=' + !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia));
+  if (!window.ZXingBrowser) ensureZXing();
+  if (!store.available) toast('localStorage unavailable: cache, log and settings will not persist');
+
+  $('btnStart').addEventListener('click', function () { startCamera(); });
+  $('btnStop').addEventListener('click', function () { stopCamera(); });
+  $('manualForm').addEventListener('submit', function (ev) {
+    ev.preventDefault();
+    var input = $('manualCode');
+    var code = digitsOnly(input.value);
+    if (!code) { toast('Enter a barcode'); return; }
+    if (!(code.length === 8 || (code.length >= 12 && code.length <= 14))) toast('Unusual length (' + code.length + ' digits) — trying anyway');
+    else if (!readIsValid(code, null)) toast('Check digit does not match — trying anyway');
+    input.blur();
+    handleCode(code, null, 'manual');
+  });
+  Array.prototype.forEach.call($('tabs').querySelectorAll('button'), function (b) { b.addEventListener('click', function () { showTab(b.getAttribute('data-tab')); }); });
+
+  // Log tab
+  $('btnExport').addEventListener('click', function () {
+    var csv = toCSV(scanLog.slice().reverse());
+    var box = $('exportBox');
+    copyText(csv).then(function (ok) {
+      toast(ok ? 'CSV copied (' + scanLog.length + ' rows)' : 'Copy failed — select the text below');
+      box.value = csv; box.classList.remove('hidden');
+    });
+  });
+  if (navigator.share) {
+    $('btnShare').classList.remove('hidden');
+    $('btnShare').addEventListener('click', function () {
+      shareText('foodscanner-log.csv', toCSV(scanLog.slice().reverse()), 'text/csv').then(function (ok) { if (!ok) toast('Share failed'); });
+    });
+  }
+
+  // Settings tab
+  $('btnShowKey').addEventListener('click', function () { var i = $('usdaKey'); var hidden = i.classList.toggle('secret'); this.textContent = hidden ? 'Show' : 'Hide'; });
+  $('btnSaveKey').addEventListener('click', function () {
+    var k = $('usdaKey').value.trim();
+    if (!k) { store.remove(LS.usdaKey); } else { store.set(LS.usdaKey, k); }
+    dbg('log', k ? 'USDA key saved (' + k.length + ' chars)' : 'USDA key removed');
+    renderSettings(); toast(k ? 'Key saved' : 'Key removed');
+  });
+  $('btnRemoveKey').addEventListener('click', function () { store.remove(LS.usdaKey); $('usdaKey').value = ''; renderSettings(); toast('Key removed'); });
+  $('btnTestKey').addEventListener('click', testUsdaKey);
+  $('decoderPref').addEventListener('change', function () { store.set(LS.decoder, this.value); dbg('log', 'Decoder preference: ' + this.value); if (cam.scanning) { stopCamera('Decoder changed — tap Start camera.'); } });
+  $('btnClearCache').addEventListener('click', function () {
+    var keys = store.keys(LS.cachePrefix);
+    keys.forEach(store.remove.bind(store));
+    dbg('log', 'Cache cleared (' + keys.length + ' entries)');
+    renderSettings(); toast('Cleared ' + keys.length + ' cached lookups');
+  });
+  $('btnClearLog').addEventListener('click', function () {
+    if (!window.confirm('Clear the scan log and reset the tally?')) return;
+    scanLog = []; tally = emptyTally();
+    store.remove(LS.log); store.remove(LS.tally);
+    dbg('log', 'Log and tally cleared');
+    renderTally(); renderLog(); renderSettings(); toast('Log cleared');
+  });
+
+  document.addEventListener('visibilitychange', function () {
+    if (document.hidden && cam.scanning) { dbg('log', 'Page hidden — stopping camera'); stopCamera('Camera stopped while the page was in the background. Tap Start camera.'); }
+  });
+  window.addEventListener('pagehide', function () { if (cam.scanning) stopCamera(); });
+
+  // Support ?code=… for quick desktop testing / sharing.
+  var mq = /[?&]code=(\d+)/.exec(location.search);
+  if (mq) handleCode(mq[1], null, 'manual');
+}
+
+// Test / debugging hooks (harmless in production).
+window.FS = {
+  version: APP_VERSION, lookup: lookup, handleCode: handleCode, candidateCodes: candidateCodes, upcEToUpcA: upcEToUpcA, gtinCheckOK: gtinCheckOK,
+  readIsValid: readIsValid, normOFF: normOFF, normUSDA: normUSDA, mergeProduct: mergeProduct, toCSV: toCSV, decodeCanvas: decodeCanvasWithZXing,
+  startCamera: startCamera, stopCamera: stopCamera, pickDecoder: pickDecoder,
+  state: function () { return { cam: cam, tally: tally, log: scanLog, current: current }; },
+  _setFrameSource: function (el) { cam.frameSource = el; }
+};
+
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();
+})();
+</script>
+</body>
+</html>
