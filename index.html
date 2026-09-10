@@ -183,9 +183,9 @@ body.dbg-open #toast { bottom: calc(45vh + 96px + env(safe-area-inset-bottom)); 
     if (a === undefined) return 'undefined';
     try { return JSON.stringify(a); } catch (e) { return String(a); }
   }
-  function redact(u) { return String(u).replace(/(api_key=)[^&]+/gi, '$1•••'); }
+  function redact(u) { return String(u).replace(/(api_key=|usda=)[^&\s]+/gi, '$1•••'); }
   function push(level, args) {
-    var msg = Array.prototype.map.call(args, fmt).join(' ');
+    var msg = redact(Array.prototype.map.call(args, fmt).join(' '));
     var line = { t: ts(), level: level, msg: msg };
     lines.push(line);
     if (lines.length > MAX_LINES) lines.splice(0, lines.length - MAX_LINES);
@@ -319,6 +319,10 @@ body.dbg-open #toast { bottom: calc(45vh + 96px + env(safe-area-inset-bottom)); 
         <button class="btn danger" id="btnRemoveKey" type="button">Remove</button>
       </div>
       <div class="small" id="keyStatus"></div>
+      <div class="tiny muted" id="linkHint"></div>
+      <div class="row wrap">
+        <button class="btn grow hidden" id="btnCopyLink" type="button">Copy link with my key</button>
+      </div>
     </div>
 
     <div class="card stack">
@@ -1564,6 +1568,10 @@ function renderSettings() {
   var key = getUsdaKey();
   $('usdaKey').value = key;
   $('keyStatus').textContent = key ? 'Key saved (' + key.length + ' chars). USDA will be queried on every lookup.' : 'No key saved — USDA lookups are skipped.';
+  $('btnCopyLink').classList.toggle('hidden', !key);
+  $('linkHint').textContent = key
+    ? 'To set this key automatically on this or another phone, open the copied link once and add that page to the Home Screen. The link contains your key, so keep it to yourself.'
+    : 'Tip: opening the app as …/#usda=YOURKEY saves the key automatically — handy as a Home Screen bookmark.';
   $('decoderPref').value = store.get(LS.decoder, 'auto');
   var native = typeof window.BarcodeDetector === 'function';
   $('decoderInfo').textContent = 'This browser ' + (native ? 'exposes' : 'does not expose') + ' BarcodeDetector. ZXing ' + (window.ZXingBrowser ? 'is loaded' : 'is NOT loaded') + '. Storage ' + (store.available ? 'OK' : 'UNAVAILABLE (private mode?)') + '.';
@@ -1608,7 +1616,7 @@ function initDebugPanel() {
   $('dbgClose').addEventListener('click', function () { setOpen(false); });
   $('dbgClear').addEventListener('click', function () { clear(linesEl); if (window.__dbg) window.__dbg.lines.length = 0; count = 0; countEl.textContent = '0'; });
   $('dbgCopy').addEventListener('click', function () {
-    var header = ['FoodScanner v' + APP_VERSION, 'URL: ' + location.href, 'Time: ' + isoNow(), 'UA: ' + navigator.userAgent,
+    var header = ['FoodScanner v' + APP_VERSION, 'URL: ' + (window.__dbg ? window.__dbg.redact(location.href) : location.href), 'Time: ' + isoNow(), 'UA: ' + navigator.userAgent,
       'BarcodeDetector: ' + (typeof window.BarcodeDetector === 'function'), 'ZXing loaded: ' + !!window.ZXingBrowser, 'Decoder: ' + (cam.decoder ? cam.decoder.kind : 'n/a'),
       'localStorage: ' + (store.available ? 'ok' : 'unavailable'), 'Tally: ' + JSON.stringify(tally), '---'];
     var body = (window.__dbg ? window.__dbg.lines : []).map(function (l) { return l.t + ' ' + l.level.toUpperCase() + ' ' + l.msg; });
@@ -1694,6 +1702,10 @@ function init() {
   });
   $('btnRemoveKey').addEventListener('click', function () { store.remove(LS.usdaKey); $('usdaKey').value = ''; renderSettings(); toast('Key removed'); });
   $('btnTestKey').addEventListener('click', testUsdaKey);
+  $('btnCopyLink').addEventListener('click', function () {
+    var link = location.origin + location.pathname + '#usda=' + encodeURIComponent(getUsdaKey());
+    copyText(link).then(function (ok) { toast(ok ? 'Link copied — open it, then Add to Home Screen' : 'Copy failed'); });
+  });
   $('decoderPref').addEventListener('change', function () { store.set(LS.decoder, this.value); dbg('log', 'Decoder preference: ' + this.value); if (cam.scanning) { stopCamera('Decoder changed — tap Start camera.'); } });
   $('btnClearCache').addEventListener('click', function () {
     var keys = store.keys(LS.cachePrefix);
@@ -1713,6 +1725,23 @@ function init() {
     if (document.hidden && (cam.scanning || cam.stream)) { dbg('log', 'Page hidden — stopping camera'); stopCamera('Camera stopped while the page was in the background. Tap Start camera.'); }
   });
   window.addEventListener('pagehide', function () { if (cam.scanning || cam.stream) stopCamera(); });
+
+  // A USDA key can be seeded from the URL fragment, e.g. …/#usda=KEY. Opened once and added to the Home Screen, every
+  // launch re-saves the key, so Safari's 7-day storage purge cannot lose it. The fragment never leaves the phone (it is
+  // not sent to any server) and is left in the address bar so "Add to Home Screen" keeps it.
+  var frag = /[#&]usda=([^&]*)/.exec(location.hash || '');
+  if (frag) {
+    var seeded = '';
+    try { seeded = decodeURIComponent(frag[1]).trim(); } catch (e) { seeded = String(frag[1]).trim(); }
+    if (seeded && seeded !== getUsdaKey()) {
+      store.set(LS.usdaKey, seeded);
+      dbg('log', 'USDA key saved from the link (' + seeded.length + ' chars)');
+      toast('USDA key saved from link');
+      renderSettings();
+    } else if (seeded) {
+      dbg('log', 'USDA key in the link matches the saved key');
+    }
+  }
 
   // Support ?code=… for quick desktop testing / sharing.
   var mq = /[?&]code=(\d+)/.exec(location.search);

@@ -29,7 +29,9 @@ pinned `@zxing/browser` barcode decoder loaded from a CDN, used when the browser
    sheet. Tap a log entry to reopen its result.
 6. **Settings** tab: paste a USDA FoodData Central API key (free, from
    https://fdc.nal.usda.gov/api-key-signup) to add USDA as a second source. The key is stored only in this
-   browser's localStorage and is never sent anywhere except api.nal.usda.gov. Also: decoder preference,
+   browser's localStorage and is never sent anywhere except api.nal.usda.gov. To make it automatic, tap
+   **Copy link with my key**, open that link once in Safari and add the page to the Home Screen: the link ends in
+   `#usda=YOURKEY`, and every launch from that icon re-saves the key (see Notes). Also: decoder preference,
    **Clear cache** and **Clear log & tally**.
 7. **Debug** button (top right): an on-screen log of everything (console output, uncaught errors, every fetch
    with its status code). **Copy log** copies it so you can paste it into an issue or a chat.
@@ -42,6 +44,10 @@ pinned `@zxing/browser` barcode decoder loaded from a CDN, used when the browser
   the log.
 - With a USDA key saved, `https://api.nal.usda.gov/fdc/v1/foods/search` is queried with `dataType=Branded` and
   the result is matched on `gtinUpc`. USDA is never called without a key.
+- Opening the app as `https://bkbolnick.github.io/FoodScanner/#usda=YOURKEY` saves that key on load. The part after
+  `#` is never sent to any server, so the key stays off GitHub and off GitHub Pages, but the link itself contains
+  it, so don't share it. Because a Home Screen icon made from that link re-saves the key on every launch, it also
+  survives Safari's 7-day storage purge.
 - Every lookup that Open Food Facts answered (found or not found) is cached in localStorage keyed by barcode, so
   repeat scans are instant and offline. Open Food Facts network errors are not cached; a failed or skipped USDA
   query is retried on a later lookup of the same code. **Re-fetch** on a card bypasses the cache.
