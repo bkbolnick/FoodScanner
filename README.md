@@ -43,28 +43,28 @@ pinned `@zxing/browser` barcode decoder loaded from a CDN, used when the browser
 On first open the app asks how products should be scored. Both choices can be changed later under Settings ›
 **Scoring**.
 
-- **Standard**: a 0–100 composite of nutritional quality (60 points, from the product's Nutri-Score; when Open Food
+- **Standard**: a 0–100 composite of nutritional quality (50 points, from the product's Nutri-Score; when Open Food
   Facts has no grade it is estimated from the nutrients with the 2023 algorithm, using the beverage, fats/oils/nuts and
   cheese variants where the category calls for them, and skipped when Open Food Facts says the Nutri-Score is not
-  applicable), additives (30 points, the riskiest additive sets the ceiling and each extra one costs a little) and organic
-  certification (10 points). Components without data are left out and the score is rescaled with a note; if nutrition is
-  among them the score is shown as **low confidence**, and no score is shown when only the organic label is known.
-- **Custom**: six questions, each about one thing, all answered by tapping: (1) which nutrients you want less of
+  applicable), additives (25 points, the riskiest additive sets the ceiling and each extra one costs a little),
+  processing (15 points from the NOVA group: 1 → 15, 2 → 12, 3 → 8, 4 → 2) and organic certification (10 points).
+  Components without data are left out and the score is rescaled with a note; if nutrition is among them the score is
+  shown as **low confidence**, and no score is shown when only the organic label is known.
+- **Custom**: five questions, each about one thing, all answered by tapping: (1) which nutrients you want less of
   (sugar, net carbs, calories, saturated fat, total fat, sodium), (2) which you want more of (fiber, protein, and,
   for high-fat or weight-gain plans, total fat and calories; anything chosen in question 1 is not offered again),
-  (3) which of those picks matter most, tapped in order: the first weighs 5, each next one a little less down to 1,
-  unranked picks sit one step below the last ranked one, and with no ranking every pick weighs 3, (4) how strict the
-  cut-offs are (relaxed: limits 1.5× the guideline and targets, i.e. fiber, protein and anything wanted more of, ⅔ of
-  it; typical; or strict: half the limits and 1.5× the targets),
-  (5) processing and additives (ignored, moderate weight, or the highest weight) and (6) anything to avoid or look
-  for. Each of eleven factors (net carbs, sugars, fiber, protein, saturated fat, total fat, sodium, calories, NOVA
+  (3) how strict each pick is: relaxed (weight 2; only clearly high amounts lose points, cut-offs 1.5× the guideline
+  and targets, i.e. fiber, protein and anything wanted more of, ⅔ of it), typical (weight 3, standard front-of-pack
+  guideline cut-offs) or strict (weight 5, half the limits and 1.5× the targets), with a row that sets all picks at
+  once, (4) processing and additives (ignored, moderate weight, or the highest weight) and (5) anything to avoid or
+  look for. Each of eleven factors (net carbs, sugars, fiber, protein, saturated fat, total fat, sodium, calories, NOVA
   processing, additives, organic) gets a weight from 0 to 5 and a 0–100 sub-score from its per-100 g value against
   the chosen cut-offs (drinks, whose data is per 100 ml, use the roughly half-size FSA drink cut-offs, scaled by the
   same strictness); the score is
   the weighted average over the factors that have data, and is withheld when less than half of the weighted factors
   have data. The card lists the three factors that moved the score most. Weights can be fine-tuned under **Adjust
   weights** (custom profiles only).
-- **Avoid list** (question 6): allergens (milk, eggs, gluten, peanuts, tree nuts, soy, fish, shellfish, sesame,
+- **Avoid list** (question 5): allergens (milk, eggs, gluten, peanuts, tree nuts, soy, fish, shellfish, sesame,
   celery, mustard, lupin, sulphites), non-vegan or non-vegetarian ingredients and palm oil never change the score.
   Instead the card shows a red warning when a product contains one, an amber note when it may contain it or the
   status is unknown, and a green "Clear" chip when everything on the list is confirmed absent; the log and the CSV

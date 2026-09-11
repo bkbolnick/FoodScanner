@@ -187,8 +187,14 @@ body.ob-open { overflow: hidden; }
 .ob-opt .tick { float: right; color: var(--accent); font-weight: 700; }
 .ob-opt b { display: block; }
 .ob-opt .desc { display: block; margin-top: 2px; }
-.ob-opt .rank-no { display: inline-block; min-width: 26px; height: 26px; line-height: 26px; border-radius: 50%; background: var(--accent); color: var(--accent-ink); text-align: center; font-weight: 700; font-size: 14px; margin-right: 10px; vertical-align: middle; }
-.ob-opt .rank-no.empty { background: transparent; border: 2px solid var(--border); line-height: 22px; }
+.ob-row { padding: 10px 0; border-bottom: 1px solid var(--border); }
+.ob-row .wl { display: block; font-size: 16px; margin-bottom: 6px; }
+.ob-row.all { border-bottom: 2px solid var(--border); }
+.ob-row.all .wl { font-size: 14px; }
+.seg { display: flex; border: 2px solid var(--border); border-radius: 12px; overflow: hidden; background: var(--card); }
+.seg-btn { flex: 1 1 0; background: var(--card); color: var(--text); border: 0; padding: 11px 6px; font-size: 15px; cursor: pointer; }
+.seg-btn + .seg-btn { border-left: 2px solid var(--border); }
+.seg-btn.on { background: var(--accent); color: var(--accent-ink); font-weight: 700; }
 .ob-group { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; margin: 16px 0 -4px; }
 .avoid { margin-top: 10px; }
 .avoid .chips { margin-top: 4px; }
@@ -1178,8 +1184,9 @@ function linScore(v, th, dir) {
   if (dir === 'low') { if (v <= lo) return 100; if (v >= hi) return 0; return Math.round(100 * (hi - v) / (hi - lo)); }
   if (v >= hi) return 100; if (v <= lo) return 0; return Math.round(100 * (v - lo) / (hi - lo));
 }
-// Standard score: nutritional quality 60 (Nutri-Score), additives 30 (by risk level), organic 10. Rescaled over the
-// components that have data.
+// Standard score: nutritional quality 50 (Nutri-Score), additives 25 (by risk level), processing 15 (NOVA group),
+// organic 10. Rescaled over the components that have data.
+var NOVA_LABELS = { 1: 'unprocessed / minimally processed', 2: 'processed culinary ingredient', 3: 'processed', 4: 'ultra-processed' };
 function standardScore(m, e) {
   var comps = [];
   var ns = nutriScoreOf(m, e);
@@ -1188,9 +1195,11 @@ function standardScore(m, e) {
   if (ns && ns.notApplicable) { nsText = 'Nutri-Score not applicable to this category (per Open Food Facts)'; ns = null; }
   else if (ns) nsText = 'Nutri-Score ' + ns.grade.toUpperCase() + (ns.estimated ? ' (estimated from the nutrients' + (ns.kind === 'fat' ? ', fats/oils table' : ns.kind === 'cheese' ? ', cheese rule' : ns.kind === 'beverage' ? ', beverage table' : '') + (ns.sweetenerFromText ? ', sweetener found in the ingredients' : '') + ')' : '');
   else nsText = 'not enough nutrition data' + (needs.length ? ' (needs ' + needs.join(', ') + ')' : ' (needs total fat for oils and nuts)');
-  comps.push({ key: 'nutrition', label: 'Nutritional quality', max: 60, score: ns ? nutritionPoints60(ns) : null, text: nsText });
+  comps.push({ key: 'nutrition', label: 'Nutritional quality', max: 50, score: ns ? Math.round(nutritionPoints60(ns) * 50 / 60) : null, text: nsText });
   var ad = additivesScore(m, e);
-  comps.push({ key: 'additives', label: 'Additives', max: 30, score: ad ? Math.round(ad.score * 0.3) : null, text: ad ? ad.text : 'no additive analysis (Open Food Facts only)' });
+  comps.push({ key: 'additives', label: 'Additives', max: 25, score: ad ? Math.round(ad.score * 0.25) : null, text: ad ? ad.text : 'no additive analysis (Open Food Facts only)' });
+  var nova = m.nova.v, novaKnown = nova !== null && nova !== undefined && NOVA_SCORE[nova] !== undefined;
+  comps.push({ key: 'processing', label: 'Processing', max: 15, score: novaKnown ? Math.round(NOVA_SCORE[nova] * 0.15) : null, text: novaKnown ? 'NOVA ' + nova + ' (' + NOVA_LABELS[nova] + ')' : 'NOVA group unknown (Open Food Facts only)' });
   var org = organicOf(e);
   comps.push({ key: 'organic', label: 'Organic', max: 10, score: org === null ? null : (org ? 10 : 0), text: org === null ? 'unknown' : (org ? 'organic label' : 'no organic label') });
   var have = comps.filter(function (c) { return c.score !== null; });
@@ -1202,9 +1211,9 @@ function standardScore(m, e) {
   var why = have.map(function (c) { return { positive: c.score / c.max >= 0.5, text: c.label + ': ' + c.text + ' (' + c.score + '/' + c.max + ')', weight: Math.abs(c.score / c.max - 0.5) * c.max }; })
     .sort(function (a, b) { return b.weight - a.weight; });
   return { mode: 'standard', score: score, band: bandOf(score), components: comps, why: why,
-    coverageNote: have.length < 3 ? 'based on ' + have.length + ' of 3 components' : '', lowConfidence: max > 0 && max < 60,
+    coverageNote: have.length < comps.length ? 'based on ' + have.length + ' of ' + comps.length + ' components' : '', lowConfidence: score !== null && comps[0].score === null,
     missingNote: comps.filter(function (c) { return c.score === null; }).map(function (c) { return c.label.toLowerCase() + ' unknown'; }).join(', '),
-    reason: score !== null ? '' : (max ? 'only the organic label is known' : 'no nutrition, additive or organic data') };
+    reason: score !== null ? '' : (max ? 'only the organic label is known' : 'no nutrition, additive, processing or organic data') };
 }
 // A profile can flip a nutrient's direction (prof.dirs), e.g. total fat or calories as something to get more of.
 function metricDir(prof, met) { var d = prof && prof.dirs && prof.dirs[met.key]; return (d === 'low' || d === 'high') && (met.dir === 'low' || met.dir === 'high') ? d : met.dir; }
@@ -1425,14 +1434,16 @@ function renderScore(sc) {
 }
 
 /* ------------------------------------------------- scoring profile & setup */
-// Six questions, one dimension each: nutrients to limit, nutrients to get more of, their order of importance, how strict
-// the cut-offs are, processing and additives, and ingredients or labels to avoid or look for. Nothing has to be typed.
+// Five questions, one dimension each: nutrients to limit, nutrients to get more of, how strict each pick is (which also
+// sets its weight), processing and additives, and ingredients or labels to avoid or look for. Nothing has to be typed.
 var NUTRIENT_OPTS = {
   limit: [['sugars', 'Sugar'], ['netCarbs', 'Net carbs'], ['kcal', 'Calories'], ['satFat', 'Saturated fat'], ['fat', 'Total fat'], ['sodiumMg', 'Sodium (salt)']],
   more: [['fiber', 'Fiber'], ['protein', 'Protein'], ['fat', 'Total fat'], ['kcal', 'Calories']]   // fat and calories can be goals too (keto, weight gain)
 };
-// Multiplier on the per-100 g cut-offs: 'low' metrics scale down when strict, 'high' metrics (fiber, protein) scale up.
-var STRICTNESS = { relaxed: { low: 1.5, high: 1 / 1.5, label: 'Relaxed' }, typical: { low: 1, high: 1, label: 'Typical' }, strict: { low: 0.5, high: 1.5, label: 'Strict' } };
+// Each picked nutrient is relaxed, typical or strict: the level sets both its weight and how its cut-offs are scaled
+// ('low' metrics scale down when strict, 'high' metrics such as fiber and protein scale up).
+var STRICTNESS = { relaxed: { low: 1.5, high: 1 / 1.5, weight: 2, label: 'Relaxed' }, typical: { low: 1, high: 1, weight: 3, label: 'Typical' }, strict: { low: 0.5, high: 1.5, weight: 5, label: 'Strict' } };
+var STRICT_LEVELS = ['relaxed', 'typical', 'strict'];
 var AVOID_OPTS = [
   { group: 'Allergens and intolerances', items: [['milk', 'Milk / dairy'], ['eggs', 'Eggs'], ['gluten', 'Gluten'], ['peanuts', 'Peanuts'], ['nuts', 'Tree nuts'], ['soybeans', 'Soy'], ['fish', 'Fish'], ['shellfish', 'Shellfish'], ['sesame', 'Sesame'], ['celery', 'Celery'], ['mustard', 'Mustard'], ['lupin', 'Lupin'], ['sulphites', 'Sulphites']] },
   { group: 'Diet', items: [['vegan', 'Non-vegan ingredients'], ['vegetarian', 'Non-vegetarian ingredients']] },
@@ -1444,11 +1455,7 @@ AVOID_OPTS.forEach(function (g) { g.items.forEach(function (it) { AVOID_LABEL[it
 var QUESTIONS = [
   { id: 'limit', title: 'What do you want less of?', hint: 'Pick any, or none. Each pick is scored against a per-100 g cut-off.', type: 'multi', options: NUTRIENT_OPTS.limit },
   { id: 'more', title: 'What do you want more of?', hint: 'Pick any, or none. Total fat and calories appear here for high-fat or weight-gain plans, unless you chose to limit them in the previous question.', type: 'multi', options: NUTRIENT_OPTS.more },
-  { id: 'rank', title: 'Which of your picks matter most?', hint: 'Tap them in order of importance: the first weighs 5, each next one a little less, down to 1. Unranked picks weigh one step below your last ranked one (never less than 1); rank nothing to weigh them all equally.', type: 'rank' },
-  { id: 'strict', title: 'How strict should the cut-offs be?', type: 'single', options: [
-    ['relaxed', 'Relaxed', 'Only clearly high amounts lose points: limits 1.5× the usual guideline; targets (fiber, protein and anything you want more of) ⅔ of it.'],
-    ['typical', 'Typical', 'Standard front-of-pack guideline cut-offs, e.g. sugar 5–22.5 g, saturated fat 1.5–5 g, sodium 120–600 mg per 100 g.'],
-    ['strict', 'Strict', 'For keto, diabetes, low-sodium or similar plans: limits half the usual guideline; targets (fiber, protein and anything you want more of) 1.5×.']] },
+  { id: 'strict', title: 'How strict is each pick?', hint: 'Strict: half the usual guideline cut-off (targets 1.5×) and the highest weight, 5 — for keto, diabetes, low-sodium or similar plans. Typical: standard front-of-pack guideline cut-offs (e.g. sugar 5–22.5 g per 100 g), weight 3. Relaxed: only clearly high amounts lose points (cut-offs 1.5× the guideline, targets ⅔), weight 2.', type: 'strictness' },
   { id: 'processing', title: 'Processing and additives?', type: 'single', options: [
     ['ok', 'Do not mind', 'NOVA group and additives are ignored.'],
     ['prefer', 'Prefer less processed food', 'Moderate weight on the NOVA group and on additives.'],
@@ -1464,9 +1471,12 @@ function normAnswers(a) {
   var out = { limit: list(a.limit, NUTRIENT_OPTS.limit.map(function (o) { return o[0]; })) };
   out.more = list(a.more, NUTRIENT_OPTS.more.map(function (o) { return o[0]; })).filter(function (k) { return out.limit.indexOf(k) < 0; });   // a nutrient is limited or wanted, never both
   var picked = out.limit.concat(out.more);
-  out.rank = list(a.rank, NUTRIENT_KEYS).filter(function (k) { return picked.indexOf(k) >= 0; });
-  out.strict = /^(relaxed|typical|strict)$/.test(String(a.strict)) ? String(a.strict) : null;
-  out.processing = /^(ok|prefer|avoid)$/.test(String(a.processing)) ? String(a.processing) : null;
+  // one level per picked nutrient; a bare string (the previous questionnaire's single answer) applies to all picks
+  var perPick = (a.strict && typeof a.strict === 'object' && !Array.isArray(a.strict)) ? a.strict : null;
+  var legacy = (typeof a.strict === 'string' && STRICT_LEVELS.indexOf(a.strict) >= 0) ? a.strict : null;
+  out.strict = {};
+  picked.forEach(function (k) { var v = perPick ? (Object.prototype.hasOwnProperty.call(perPick, k) ? perPick[k] : undefined) : legacy; out.strict[k] = (typeof v === 'string' && STRICT_LEVELS.indexOf(v) >= 0) ? v : 'typical'; });   // never coerce stored values: an object with a bogus toString would throw
+  out.processing = (typeof a.processing === 'string' && /^(ok|prefer|avoid)$/.test(a.processing)) ? a.processing : null;
   out.avoid = list(a.avoid, AVOID_KEYS);
   return out;
 }
@@ -1478,27 +1488,27 @@ function profileDirs(a) {   // nutrients picked as "more of" whose built-in dire
   a.more.forEach(function (k) { METRICS.forEach(function (met) { if (met.key === k && met.dir === 'low') dirs[k] = 'high'; }); });
   return dirs;
 }
-function scaleThresholds(strict, dirs) {
-  var f = Object.prototype.hasOwnProperty.call(STRICTNESS, strict) ? STRICTNESS[strict] : STRICTNESS.typical, th = {};
+function scaleThresholds(strict, dirs) {   // strict: { metricKey: 'relaxed' | 'typical' | 'strict' }
+  var th = {};
   METRICS.forEach(function (met) {
     var d = DEFAULT_THRESHOLDS[met.key];
     if (!d) return;
+    var lv = strict && STRICT_LEVELS.indexOf(String(strict[met.key])) >= 0 ? String(strict[met.key]) : 'typical', f = STRICTNESS[lv];
     var k = metricDir({ dirs: dirs }, met) === 'high' ? f.high : f.low;
     th[met.key] = [Math.round(d[0] * k * 1000) / 1000, Math.round(d[1] * k * 1000) / 1000];
   });
   return th;
 }
-// Ranked picks weigh 5, 4, 3… (never below 1); unranked picks tie one step below the last ranked one; no ranking = all 3.
-function rankWeights(a) {
-  var w = {}, picked = pickedNutrients(a);
-  if (!a.rank.length) { picked.forEach(function (k) { w[k] = 3; }); return w; }
-  a.rank.forEach(function (k, i) { w[k] = Math.max(1, 5 - i); });
-  var rest = Math.max(1, 5 - a.rank.length);
-  picked.forEach(function (k) { if (w[k] === undefined) w[k] = rest; });
+// Strict picks weigh 5, typical 3, relaxed 2.
+function pickWeights(a) {
+  var w = {};
+  pickedNutrients(a).forEach(function (k) { w[k] = STRICTNESS[a.strict[k] || 'typical'].weight; });
   return w;
 }
+function metricIndex(k) { for (var i = 0; i < METRICS.length; i++) { if (METRICS[i].key === k) return i; } return METRICS.length; }
 function profileNameFor(a) {
-  var order = a.rank.concat(pickedNutrients(a).filter(function (k) { return a.rank.indexOf(k) < 0; }));
+  var w = pickWeights(a);
+  var order = pickedNutrients(a).sort(function (x, y) { return (w[y] - w[x]) || (metricIndex(x) - metricIndex(y)); });   // heaviest first
   var parts = order.slice(0, 2).map(function (k) { return nutrientPhrase(a, k); });
   if (!parts.length) parts.push(a.processing === 'ok' ? 'custom' : 'less processed');
   var name = parts.join(', ');
@@ -1508,8 +1518,8 @@ function answersToProfile(a) {
   a = normAnswers(a);
   var w = {};
   METRICS.forEach(function (met) { w[met.key] = 0; });
-  var rw = rankWeights(a);
-  Object.keys(rw).forEach(function (k) { w[k] = rw[k]; });
+  var pw = pickWeights(a);
+  Object.keys(pw).forEach(function (k) { w[k] = pw[k]; });
   if (a.processing === 'avoid') { w.additives = 5; w.processing = 4; }
   else if (a.processing === 'prefer') { w.additives = 2; w.processing = 2; }
   w.organic = a.avoid.indexOf('organic') >= 0 ? 2 : 0;
@@ -1537,7 +1547,7 @@ function sanitizeProfile(p) {
   if (Array.isArray(p.avoid)) out.avoid = p.avoid.filter(function (k, i) { return typeof k === 'string' && k !== 'organic' && AVOID_KEYS.indexOf(k) >= 0 && p.avoid.indexOf(k) === i; });
   return out;
 }
-function loadProfile() { profile = sanitizeProfile(store.getJSON(PROFILE_KEY, null)); }
+function loadProfile() { try { profile = sanitizeProfile(store.getJSON(PROFILE_KEY, null)); } catch (e) { profile = null; dbg('error', 'Stored profile unreadable, ignored: ' + (e && e.message || e)); } }   // a corrupt profile must never stop the app from starting
 function saveProfile(p) {
   profile = p;
   store.setJSON(PROFILE_KEY, p);
@@ -1570,9 +1580,9 @@ function renderOnboarding() {
     box.appendChild(h('h2', { text: 'How should products be scored?' }));
     box.appendChild(h('p', { class: 'muted', text: 'Every product gets a 0–100 score. Use the standard score, or tailor one to your own goals. You can change this any time in Settings. Scores are a guide from public data, not medical advice.' }));
     box.appendChild(h('button', { class: 'ob-choice', type: 'button', id: 'obStandard', onclick: function () { saveProfile({ mode: 'standard', version: 1 }); closeOnboarding(); toast('Standard scoring on'); } },
-      [h('b', {}, 'Standard'), h('span', { class: 'small muted', text: 'Nutritional quality via Nutri-Score (60%), additives weighed by risk level (30%) and organic certification (10%).' })]));
+      [h('b', {}, 'Standard'), h('span', { class: 'small muted', text: 'Nutritional quality via Nutri-Score (50%), additives weighed by risk level (25%), NOVA processing (15%) and organic certification (10%).' })]));
     box.appendChild(h('button', { class: 'ob-choice', type: 'button', id: 'obCustom', onclick: function () { ob.step = 1; renderOnboarding(); } },
-      [h('b', {}, 'Customize'), h('span', { class: 'small muted', text: 'Six quick questions — what to limit, what to get more of, what matters most, how strict, processing, and what to avoid — build a personal score. Nothing to type.' })]));
+      [h('b', {}, 'Customize'), h('span', { class: 'small muted', text: 'Five quick questions — what to limit, what to get more of, how strict each pick is, processing, and what to avoid — build a personal score. Nothing to type.' })]));
     if (profile) box.appendChild(h('button', { class: 'btn block', type: 'button', id: 'obKeep', onclick: closeOnboarding }, 'Keep current: ' + profileName(profile)));
     return;
   }
@@ -1585,51 +1595,56 @@ function renderQuestion(box, q, qi) {
   box.appendChild(h('div', { class: 'ob-progress', text: 'Question ' + (qi + 1) + ' of ' + QUESTIONS.length }));
   box.appendChild(h('h2', { text: q.title }));
   if (q.hint) box.appendChild(h('p', { class: 'muted small', text: q.hint }));
-  // opt = [value, label, description?]; badge = rank number ('' = unranked slot); the tick comes first so it floats beside the label
-  function optNode(opt, selected, badge, onTap) {
-    var attrs = { class: 'ob-opt' + (selected ? ' selected' : ''), type: 'button', 'data-opt': opt[0], 'aria-pressed': String(selected), onclick: function () {
-      onTap();   // re-renders the question; put keyboard / VoiceOver focus back on the same option
-      var nb = $('obInner').querySelector('[data-opt="' + opt[0] + '"]');
-      if (nb) { try { nb.focus({ preventScroll: true }); } catch (e) { nb.focus(); } }
-    } };
-    if (badge !== null) attrs['aria-label'] = opt[1] + (badge ? ', ranked ' + badge : ', not ranked');
-    return h('button', attrs, [
-      (selected && badge === null) ? h('span', { class: 'tick', text: '✓' }) : null,
-      badge !== null ? h('span', { class: 'rank-no' + (badge ? '' : ' empty'), text: badge, 'aria-hidden': 'true' }) : null,
+  function refocus(optValue) {   // after a re-render, put keyboard / VoiceOver focus back on the same control
+    var nb = $('obInner').querySelector('[data-opt="' + optValue + '"]');
+    if (nb) { try { nb.focus({ preventScroll: true }); } catch (e) { nb.focus(); } }
+  }
+  // opt = [value, label, description?]; the tick comes first so it floats beside the label
+  function optNode(opt, selected, onTap) {
+    return h('button', { class: 'ob-opt' + (selected ? ' selected' : ''), type: 'button', 'data-opt': opt[0], 'aria-pressed': String(selected), onclick: function () { onTap(); refocus(opt[0]); } }, [
+      selected ? h('span', { class: 'tick', text: '✓' }) : null,
       opt[2] ? h('b', { text: opt[1] }) : opt[1],
       opt[2] ? h('span', { class: 'small muted desc', text: opt[2] }) : null
     ]);
   }
   if (q.type === 'single') {
-    q.options.forEach(function (opt) { box.appendChild(optNode(opt, a[q.id] === opt[0], null, function () { a[q.id] = opt[0]; renderOnboarding(); })); });
+    q.options.forEach(function (opt) { box.appendChild(optNode(opt, a[q.id] === opt[0], function () { a[q.id] = opt[0]; renderOnboarding(); })); });
   } else if (q.type === 'multi') {
     var items = q.id === 'more' ? q.options.filter(function (o) { return a.limit.indexOf(o[0]) < 0; }) : q.options;   // limited nutrients are not offered as "more of"
     (q.groups || [{ items: items }]).forEach(function (g) {
       if (g.group) box.appendChild(h('div', { class: 'ob-group', text: g.group }));
       g.items.forEach(function (opt) {
-        box.appendChild(optNode(opt, a[q.id].indexOf(opt[0]) >= 0, null, function () {
+        box.appendChild(optNode(opt, a[q.id].indexOf(opt[0]) >= 0, function () {
           var i = a[q.id].indexOf(opt[0]);
           if (i >= 0) a[q.id].splice(i, 1); else a[q.id].push(opt[0]);
           if (q.id === 'limit') a.more = a.more.filter(function (k) { return a.limit.indexOf(k) < 0; });
-          a.rank = a.rank.filter(function (k) { return pickedNutrients(a).indexOf(k) >= 0; });   // un-picking a nutrient drops it from the ranking
+          var picked = pickedNutrients(a), strict = {};   // new picks start as typical; un-picked ones lose their level
+          picked.forEach(function (k) { strict[k] = a.strict[k] || 'typical'; });
+          a.strict = strict;
           renderOnboarding();
         }));
       });
     });
-  } else if (q.type === 'rank') {
+  } else if (q.type === 'strictness') {
     var picked = pickedNutrients(a);
-    a.rank = a.rank.filter(function (k) { return picked.indexOf(k) >= 0; });
     if (!picked.length) box.appendChild(h('p', { class: 'small', style: 'color:var(--warn)', text: 'You have not picked any nutrients. Go back to pick some, or continue to score on processing and additives only.' }));
-    picked.forEach(function (k) {
-      var pos = a.rank.indexOf(k);
-      var phrase = nutrientPhrase(a, k);
-      box.appendChild(optNode([k, phrase.charAt(0).toUpperCase() + phrase.slice(1)], pos >= 0, pos >= 0 ? String(pos + 1) : '', function () {
-        if (pos >= 0) a.rank.splice(pos, 1); else a.rank.push(k);
-        renderOnboarding();
-      }));
-    });
-    if (a.rank.length) box.appendChild(h('button', { class: 'btn small', type: 'button', id: 'obRankReset', onclick: function () { a.rank = []; renderOnboarding(); } }, 'Clear order'));
-    if (picked.length) { var rw = rankWeights(a); box.appendChild(h('p', { class: 'tiny muted', text: 'Weights: ' + picked.map(function (k) { return nutrientLabel(k).toLowerCase() + ' ' + rw[k]; }).join(', ') + '.' })); }
+    else {
+      // one relaxed / typical / strict control per pick, plus a row that sets them all at once
+      function seg(key, label, cur, onPick) {
+        return h('div', { class: 'seg', role: 'group', 'aria-label': label }, STRICT_LEVELS.map(function (lv) {
+          var on = cur === lv;
+          return h('button', { class: 'seg-btn' + (on ? ' on' : ''), type: 'button', 'data-opt': key + ':' + lv, 'aria-pressed': String(on), onclick: function () { onPick(lv); renderOnboarding(); refocus(key + ':' + lv); } }, STRICTNESS[lv].label);
+        }));
+      }
+      var allSame = picked.every(function (k) { return (a.strict[k] || 'typical') === (a.strict[picked[0]] || 'typical'); });
+      box.appendChild(h('div', { class: 'ob-row all' }, [h('span', { class: 'wl small muted', text: 'Set all picks to' }), seg('all', 'All picks', allSame ? (a.strict[picked[0]] || 'typical') : null, function (lv) { picked.forEach(function (k) { a.strict[k] = lv; }); })]));
+      picked.forEach(function (k) {
+        var phrase = nutrientPhrase(a, k);
+        box.appendChild(h('div', { class: 'ob-row' }, [h('span', { class: 'wl', text: phrase.charAt(0).toUpperCase() + phrase.slice(1) }), seg(k, phrase, a.strict[k] || 'typical', function (lv) { a.strict[k] = lv; })]));
+      });
+      var pw = pickWeights(a);
+      box.appendChild(h('p', { class: 'tiny muted', text: 'Weights: ' + picked.map(function (k) { return nutrientLabel(k).toLowerCase() + ' ' + pw[k]; }).join(', ') + '.' }));
+    }
   }
   var canNext = q.type !== 'single' || !!a[q.id];
   box.appendChild(h('div', { class: 'ob-nav' }, [
@@ -1648,13 +1663,13 @@ function renderSummary(box) {
   METRICS.forEach(function (met) { var w = p.weights[met.key] || 0; total += w; if (met.key !== 'organic') informative += w; });   // an organic label alone never gives a score
   box.appendChild(h('h2', { text: 'Your scoring profile: ' + p.name }));
   if (!informative) box.appendChild(h('p', { class: 'small', style: 'color:var(--warn)', text: 'Nothing that can be scored is weighted yet' + (total ? ' (an organic label alone gives no score)' : '') + '. Go back and pick at least one nutrient or a processing preference.' }));
-  else box.appendChild(h('p', { class: 'muted small', text: 'Products are scored 0–100 on these factors, weighted 0–5 (' + STRICTNESS[p.answers.strict || 'typical'].label.toLowerCase() + ' cut-offs). Fine-tune the weights later under Settings › Adjust weights.' }));
+  else box.appendChild(h('p', { class: 'muted small', text: 'Products are scored 0–100 on these factors. Strict picks weigh 5, typical 3, relaxed 2. Fine-tune the weights later under Settings › Adjust weights.' }));
   var list = h('div');
   METRICS.slice().sort(function (x, y) { return (p.weights[y.key] || 0) - (p.weights[x.key] || 0); }).forEach(function (met) {   // heaviest first
     var w = p.weights[met.key] || 0;
     if (!w) return;
-    var dir = metricDir(p, met), tt = thresholdText(met, p.thresholds, dir);
-    list.appendChild(h('div', { class: 'wrow' }, [h('span', { class: 'wl' }, [met.label + (dir !== met.dir ? ' (more is better)' : ''), tt ? h('span', { class: 'tiny muted', text: ' — ' + tt }) : null]), h('span', { class: 'wv', text: String(w) })]));
+    var dir = metricDir(p, met), tt = thresholdText(met, p.thresholds, dir), lv = p.answers.strict[met.key];
+    list.appendChild(h('div', { class: 'wrow' }, [h('span', { class: 'wl' }, [met.label + (dir !== met.dir ? ' (more is better)' : ''), tt ? h('span', { class: 'tiny muted', text: ' — ' + (lv ? STRICTNESS[lv].label.toLowerCase() + ' · ' : '') + tt }) : null]), h('span', { class: 'wv', text: String(w) })]));
   });
   box.appendChild(list);
   if (p.avoid.length) box.appendChild(h('p', { class: 'small muted', text: 'Warnings for: ' + p.avoid.map(function (k) { return AVOID_LABEL[k].toLowerCase(); }).join(', ') + '. These do not change the score.' }));
@@ -1788,8 +1803,7 @@ function renderResult(res) {
   card.appendChild(det);
   // badges
   var kv = h('div', { class: 'kv' });
-  var novaLabels = { 1: 'unprocessed / minimally processed', 2: 'processed culinary ingredient', 3: 'processed', 4: 'ultra-processed' };
-  kv.appendChild(h('div', {}, [h('b', {}, 'NOVA group: '), m.nova.v !== null ? String(m.nova.v) + (novaLabels[m.nova.v] ? ' — ' + novaLabels[m.nova.v] : '') : '—']));
+  kv.appendChild(h('div', {}, [h('b', {}, 'NOVA group: '), m.nova.v !== null ? String(m.nova.v) + (NOVA_LABELS[m.nova.v] ? ' — ' + NOVA_LABELS[m.nova.v] : '') : '—']));
   var ns = (m.nutriscore.v && /^[a-e]$/i.test(String(m.nutriscore.v))) ? String(m.nutriscore.v).toLowerCase() : null;
   var nsNote = (e.off.norm && e.off.norm.nutriscoreNote) ? String(e.off.norm.nutriscoreNote).replace(/-/g, ' ') : null;
   var nsNode = ns ? h('span', { class: 'nutri ' + ns, text: ns.toUpperCase() }) : (nsNote ? h('span', { class: 'muted', text: nsNote + ' (no grade)' }) : '—');
@@ -2338,7 +2352,7 @@ function topWeights(p) {
     .sort(function (a, b) { return b[1] - a[1]; }).slice(0, 3).map(function (x) { return x[0].toLowerCase() + ' ' + x[1]; }).join(', ');
 }
 function renderSettings() {
-  $('scoringInfo').textContent = 'Current: ' + profileName(profile) + (profile ? (profile.mode === 'custom' ? ' — top weights: ' + topWeights(profile) + '.' + (profile.avoid && profile.avoid.length ? ' Warnings for ' + profile.avoid.map(function (k) { return AVOID_LABEL[k].toLowerCase(); }).join(', ') + '.' : '') : ' — Nutri-Score 60%, additives 30%, organic 10%.') : ' — choose one to score products.');
+  $('scoringInfo').textContent = 'Current: ' + profileName(profile) + (profile ? (profile.mode === 'custom' ? ' — top weights: ' + topWeights(profile) + '.' + (profile.avoid && profile.avoid.length ? ' Warnings for ' + profile.avoid.map(function (k) { return AVOID_LABEL[k].toLowerCase(); }).join(', ') + '.' : '') : ' — Nutri-Score 50%, additives 25%, processing 15%, organic 10%.') : ' — choose one to score products.');
   $('btnWeights').classList.toggle('hidden', !(profile && profile.mode === 'custom'));
   $('btnCopyProfile').classList.toggle('hidden', !profile);
   var key = getUsdaKey();
