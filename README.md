@@ -20,7 +20,8 @@ pinned `@zxing/browser` barcode decoder loaded from a CDN, used when the browser
    The same code is ignored while it stays in view and for 3 seconds after.
 3. Or type a barcode into the field under the camera and tap **Look up**. While the camera is running, tap
    **Type a barcode** to bring the field back; scanning pauses while you type.
-4. The result card shows the score (see **Scoring** below), product name, brand, image, serving size, and
+4. The result card shows the score (see **Scoring** below), any warnings from your avoid list, product name, brand,
+   image, serving size, and
    per-serving / per-100 g values for calories, carbs, sugars, fiber, net carbs (carbs − fiber), protein, fat,
    saturated fat and sodium, plus ingredients, NOVA group, Nutri-Score, additive tags, categories, which source(s)
    found the product and a per-source coverage table. Below the card, **Missing fields** lists whichever of serving
@@ -48,19 +49,35 @@ On first open the app asks how products should be scored. Both choices can be ch
   applicable), additives (30 points, the riskiest additive sets the ceiling and each extra one costs a little) and organic
   certification (10 points). Components without data are left out and the score is rescaled with a note; if nutrition is
   among them the score is shown as **low confidence**, and no score is shown when only the organic label is known.
-- **Custom**: six questions (main goal, extra things you watch, carb counting, additives and processing, organic,
-  optional daily budgets) build a profile from a preset (Balanced, Keto / low-carb, Low sugar, Heart health, High
-  protein, Weight loss, Clean label). Each of ten factors (net carbs, sugars, fiber, protein, saturated fat, sodium,
-  calories, NOVA processing, additives, organic) gets a weight from 0 to 5 and a 0–100 sub-score from its per-100 g
-  value against goal-specific thresholds (drinks, whose data is per 100 ml, use the roughly half-size FSA drink
-  cut-offs); the score is the weighted average over the factors that have data, and is withheld when less than half of
-  the weighted factors have data. The card lists the three factors that moved the score most, and with a daily budget
-  set it shows what share of that budget one serving uses when the serving size is known. Weights can be fine-tuned
-  under **Adjust weights** (custom profiles only).
+- **Custom**: six questions, each about one thing, all answered by tapping: (1) which nutrients you want less of
+  (sugar, net carbs, calories, saturated fat, total fat, sodium), (2) which you want more of (fiber, protein, and,
+  for high-fat or weight-gain plans, total fat and calories; anything chosen in question 1 is not offered again),
+  (3) which of those picks matter most, tapped in order: the first weighs 5, each next one a little less down to 1,
+  unranked picks sit one step below the last ranked one, and with no ranking every pick weighs 3, (4) how strict the
+  cut-offs are (relaxed: limits 1.5× the guideline and targets, i.e. fiber, protein and anything wanted more of, ⅔ of
+  it; typical; or strict: half the limits and 1.5× the targets),
+  (5) processing and additives (ignored, moderate weight, or the highest weight) and (6) anything to avoid or look
+  for. Each of eleven factors (net carbs, sugars, fiber, protein, saturated fat, total fat, sodium, calories, NOVA
+  processing, additives, organic) gets a weight from 0 to 5 and a 0–100 sub-score from its per-100 g value against
+  the chosen cut-offs (drinks, whose data is per 100 ml, use the roughly half-size FSA drink cut-offs, scaled by the
+  same strictness); the score is
+  the weighted average over the factors that have data, and is withheld when less than half of the weighted factors
+  have data. The card lists the three factors that moved the score most. Weights can be fine-tuned under **Adjust
+  weights** (custom profiles only).
+- **Avoid list** (question 6): allergens (milk, eggs, gluten, peanuts, tree nuts, soy, fish, shellfish, sesame,
+  celery, mustard, lupin, sulphites), non-vegan or non-vegetarian ingredients and palm oil never change the score.
+  Instead the card shows a red warning when a product contains one, an amber note when it may contain it or the
+  status is unknown, and a green "Clear" chip when everything on the list is confirmed absent; the log and the CSV
+  export's `avoid_warnings` column carry the red warnings. The checks use Open Food Facts allergen tags and
+  ingredient analysis, plus any "Contains: …" statement in either source's ingredient list; when Open Food Facts has
+  no allergen analysis for the product (for example products only USDA knows), the ingredient list itself is scanned
+  for the allergens as well, and "May contain …" or "made in a facility that also processes …" advisories become
+  amber notes. "Prefer organic", also on that question, is the exception:
+  it adds the organic label to the score.
 - Bands: Excellent 75–100, Good 50–74, Poor 25–49, Bad 0–24. A "low confidence" note appears when much of the weighted
   data is missing.
 - **Copy link with my profile** (and **Copy link with my key**) produce one link carrying the USDA key and the
-  scoring profile, including questionnaire answers and daily budgets. Opening it seeds the profile once; changes made in
+  scoring profile, including the questionnaire answers and avoid list. Opening it seeds the profile once; changes made in
   Settings afterwards are kept, and after Safari has cleared storage the same link seeds it again. Copy a fresh link to
   pick up later edits.
 - Scores are a guide computed from public data, not medical advice. The additive risk levels are this app's own
