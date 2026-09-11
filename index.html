@@ -185,6 +185,13 @@ body.ob-open { overflow: hidden; }
 .ob-choice b { display: block; font-size: 18px; margin-bottom: 4px; }
 .ob-opt.selected { border-color: var(--accent); background: rgba(11,107,70,0.08); }
 .ob-opt .tick { float: right; color: var(--accent); font-weight: 700; }
+.ob-opt b { display: block; }
+.ob-opt .desc { display: block; margin-top: 2px; }
+.ob-opt .rank-no { display: inline-block; min-width: 26px; height: 26px; line-height: 26px; border-radius: 50%; background: var(--accent); color: var(--accent-ink); text-align: center; font-weight: 700; font-size: 14px; margin-right: 10px; vertical-align: middle; }
+.ob-opt .rank-no.empty { background: transparent; border: 2px solid var(--border); line-height: 22px; }
+.ob-group { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; margin: 16px 0 -4px; }
+.avoid { margin-top: 10px; }
+.avoid .chips { margin-top: 4px; }
 .ob-nav { display: flex; gap: 10px; margin-top: 16px; }
 .ob-field { margin: 10px 0; }
 .ob-field label { display: block; font-size: 14px; color: var(--muted); margin-bottom: 4px; }
@@ -423,15 +430,16 @@ body.dbg-open #toast { bottom: calc(45vh + 96px + env(safe-area-inset-bottom)); 
 (function () {
 'use strict';
 
-var APP_VERSION = '0.2.0';
+var APP_VERSION = '0.3.0';
 var OFF_BASE = 'https://world.openfoodfacts.org/api/v2/product/';
 var OFF_FIELDS = ['code', 'product_name', 'product_name_en', 'generic_name', 'brands', 'quantity', 'serving_size', 'serving_quantity',
   'serving_quantity_unit', 'nutrition_data_per', 'nutriments', 'ingredients_text', 'ingredients_text_en', 'nova_group',
-  'nutriscore_grade', 'nutrition_grades', 'nutriscore_score', 'labels_tags', 'additives_tags', 'additives_n', 'categories', 'categories_tags', 'image_front_small_url',
+  'nutriscore_grade', 'nutrition_grades', 'nutriscore_score', 'labels_tags', 'additives_tags', 'additives_n', 'allergens_tags', 'traces_tags',
+  'ingredients_analysis_tags', 'categories', 'categories_tags', 'image_front_small_url',
   'image_front_thumb_url', 'image_small_url', 'image_url'].join(',');
 var USDA_BASE = 'https://api.nal.usda.gov/fdc/v1/foods/search';
 var ZXING_FALLBACK_URL = 'https://unpkg.com/@zxing/browser@0.2.1/umd/zxing-browser.min.js';
-var LS = { usdaKey: 'fs.usdaKey', decoder: 'fs.decoder', tally: 'fs.tally.v1', log: 'fs.log.v1', cachePrefix: 'fs.cache.v3.', oldCachePrefixes: ['fs.cache.v1.', 'fs.cache.v2.'] };
+var LS = { usdaKey: 'fs.usdaKey', decoder: 'fs.decoder', tally: 'fs.tally.v1', log: 'fs.log.v1', cachePrefix: 'fs.cache.v4.', oldCachePrefixes: ['fs.cache.v1.', 'fs.cache.v2.', 'fs.cache.v3.'] };
 var NUT_KEYS = ['kcal', 'carbs', 'sugars', 'fiber', 'protein', 'fat', 'satFat', 'sodiumMg'];
 var NUT_ROWS = [['kcal', 'Calories', 'kcal'], ['carbs', 'Total carbs', 'g'], ['sugars', 'Sugars', 'g'], ['fiber', 'Fiber', 'g'],
   ['netCarbs', 'Net carbs', 'g'], ['protein', 'Protein', 'g'], ['fat', 'Fat', 'g'], ['satFat', 'Saturated fat', 'g'], ['sodiumMg', 'Sodium', 'mg']];
@@ -641,6 +649,9 @@ function normOFF(p) {
     nutriscoreNote: (ns && !/^[a-e]$/.test(ns)) ? ns : null,     // 'unknown' / 'not-applicable'
     additives: (p.additives_tags || []).map(stripLang),
     additivesAnalysed: p.additives_n !== undefined && p.additives_n !== null,
+    allergens: Array.isArray(p.allergens_tags) ? p.allergens_tags.map(stripLang) : null,   // canonical allergen tags; [] once the ingredients were analysed
+    traces: Array.isArray(p.traces_tags) ? p.traces_tags.map(stripLang) : [],               // 'may contain'
+    analysis: Array.isArray(p.ingredients_analysis_tags) ? p.ingredients_analysis_tags.map(stripLang) : null,   // vegan / vegetarian / palm oil status
     categories: catTags.length ? catTags.join(', ') : catText,
     basis: (/^ml$/i.test(servingUnit) || p.nutrition_data_per === '100ml') ? 'ml' : 'g',
     nutritionDataPer: p.nutrition_data_per || null,
@@ -924,9 +935,11 @@ function recordScan(result, origin) {
   if (!foundOFF && !foundUSDA) { if (errored) tally.errors = (tally.errors || 0) + 1; else tally.neither++; }   // a failed request says nothing about coverage
   if ((foundOFF || foundUSDA) && m.missing.length) tally.incomplete++;
   var sc = m.found ? scoreProduct(m, e, profile || { mode: 'standard' }) : null;
+  var av = m.found ? avoidFlags(m, e, profile) : null;
   scanLog.unshift({
     ts: isoNow(), barcode: e.barcode, format: e.format || '', name: m.name.v || '',
     score: (sc && sc.score !== null) ? sc.score : null, scoreMode: sc ? sc.mode : '', lowConfidence: !!(sc && sc.score !== null && sc.lowConfidence),
+    warnings: av ? av.warn.slice() : [],
     off: e.off.status, offCode: e.off.codeUsed || '', usda: e.usda.status, usdaCode: e.usda.codeUsed || '',
     missing: (foundOFF || foundUSDA) ? m.missing.slice() : [],   // only meaningful for products that were found
     cached: !!result.fromCache, origin: origin
@@ -938,7 +951,7 @@ function recordScan(result, origin) {
   renderLog();
 }
 function toCSV(entries) {
-  var cols = ['timestamp', 'barcode', 'format', 'product_name', 'off_status', 'off_code_used', 'usda_status', 'usda_code_used', 'found', 'incomplete', 'missing_fields', 'cached', 'origin', 'score', 'score_mode', 'score_confidence'];
+  var cols = ['timestamp', 'barcode', 'format', 'product_name', 'off_status', 'off_code_used', 'usda_status', 'usda_code_used', 'found', 'incomplete', 'missing_fields', 'cached', 'origin', 'score', 'score_mode', 'score_confidence', 'avoid_warnings'];
   function cell(v) { var s = (v === null || v === undefined) ? '' : String(v); return /[",\r\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; }
   var lines = [cols.join(',')];
   entries.forEach(function (e) {
@@ -946,7 +959,7 @@ function toCSV(entries) {
     var errored = !found && (e.off === 'error' || e.usda === 'error');
     lines.push([e.ts, e.barcode, e.format || '', e.name, e.off, e.offCode, e.usda, e.usdaCode, found ? 'yes' : (errored ? 'error' : 'no'),
       (found && e.missing && e.missing.length) ? 'yes' : 'no', (e.missing || []).join('; '), e.cached ? 'yes' : 'no', e.origin || '',
-      (e.score === null || e.score === undefined) ? '' : e.score, e.scoreMode || '', (e.score === null || e.score === undefined) ? '' : (e.lowConfidence ? 'low' : 'ok')].map(cell).join(','));
+      (e.score === null || e.score === undefined) ? '' : e.score, e.scoreMode || '', (e.score === null || e.score === undefined) ? '' : (e.lowConfidence ? 'low' : 'ok'), (e.warnings || []).join('; ')].map(cell).join(','));
   });
   return lines.join('\r\n');
 }
@@ -968,12 +981,14 @@ function renderLog() {
     if (e.usda !== 'skipped') flags.appendChild(h('span', { class: 'chip ' + (e.usda === 'found' ? 'ok' : e.usda === 'error' ? 'warn' : 'bad'), text: 'USDA ' + statusMark(e.usda) }));
     var hasMissing = (e.off === 'found' || e.usda === 'found') && e.missing && e.missing.length;
     if (hasMissing) flags.appendChild(h('span', { class: 'chip warn', text: 'missing ' + e.missing.length }));
+    if (e.warnings && e.warnings.length) flags.appendChild(h('span', { class: 'chip bad', text: '⚠ ' + e.warnings.length }));
     if (e.score !== null && e.score !== undefined) { var sb = bandOf(e.score); flags.appendChild(h('span', { class: e.lowConfidence ? 'chip warn' : 'chip sc-' + sb.key, text: (e.scoreMode === 'custom' ? 'custom ' : 'std ') + e.score + (e.lowConfidence ? '?' : '') })); }
     var li = h('li', { onclick: function () { showTab('scan'); handleCode(e.barcode, e.format || null, 'log'); } }, [
       h('div', { class: 'grow' }, [
         h('div', { class: 'nm', text: e.name || (e.off === 'found' || e.usda === 'found' ? '(unnamed)' : (e.off === 'error' || e.usda === 'error') ? 'Lookup failed' : 'Not found') }),
         h('div', { class: 'bc', text: e.barcode + (e.cached ? ' · cached' : '') }),
         hasMissing ? h('div', { class: 't', style: 'color:var(--warn)', text: 'missing: ' + e.missing.join(', ') }) : null,
+        (e.warnings && e.warnings.length) ? h('div', { class: 't', style: 'color:var(--danger)', text: e.warnings.join(' · ') }) : null,
         h('div', { class: 't', text: shortTime(e.ts) + (e.origin ? ' · ' + e.origin : '') })
       ]),
       flags,
@@ -995,6 +1010,7 @@ var METRICS = [
   { key: 'fiber', label: 'Fiber', unit: 'g', dir: 'high' },
   { key: 'protein', label: 'Protein', unit: 'g', dir: 'high' },
   { key: 'satFat', label: 'Saturated fat', unit: 'g', dir: 'low' },
+  { key: 'fat', label: 'Total fat', unit: 'g', dir: 'low' },
   { key: 'sodiumMg', label: 'Sodium', unit: 'mg', dir: 'low' },
   { key: 'kcal', label: 'Calories', unit: 'kcal', dir: 'low' },
   { key: 'processing', label: 'Processing (NOVA)', unit: '', dir: 'flag' },
@@ -1002,23 +1018,17 @@ var METRICS = [
   { key: 'organic', label: 'Organic label', unit: '', dir: 'flag' }
 ];
 // Per-100 g thresholds: a 'low' metric scores 100 at or below the first value and 0 at or above the second; 'high' metrics
-// the reverse. Sugar, saturated fat and sodium follow the UK FSA front-of-pack cut-offs for foods; the rest are common
-// guidance. Products whose data is per 100 ml get the FSA drink cut-offs instead (about half), see DRINK_THRESHOLDS.
-var DEFAULT_THRESHOLDS = { netCarbs: [15, 50], sugars: [5, 22.5], fiber: [1.5, 6], protein: [3, 15], satFat: [1.5, 5], sodiumMg: [120, 600], kcal: [150, 450] };
-// FSA drink criteria per 100 ml (sugars 2.5/11.25 g, saturates 0.75/2.5 g, salt 0.3/0.75 g = sodium 120/300 mg); calories
+// the reverse. Sugar, fat, saturated fat and sodium follow the UK FSA front-of-pack cut-offs for foods; the rest are common
+// guidance. The questionnaire's strictness answer scales them (see STRICTNESS). Products whose data is per 100 ml get the
+// FSA drink cut-offs instead (about half), see DRINK_THRESHOLDS.
+var DEFAULT_THRESHOLDS = { netCarbs: [15, 50], sugars: [5, 22.5], fiber: [1.5, 6], protein: [3, 15], satFat: [1.5, 5], fat: [3, 17.5], sodiumMg: [120, 600], kcal: [150, 450] };
+// FSA drink criteria per 100 ml (sugars 2.5/11.25 g, fat 1.5/8.75 g, saturates 0.75/2.5 g, salt 0.3/0.75 g = sodium 120/300 mg); calories
 // from the Nutri-Score beverage energy scale (30–390 kJ); net carbs halved like sugars. Liquid foods (soups, sauces, oils,
 // dressings, syrups) keep the food cut-offs.
-var DRINK_THRESHOLDS = { sugars: [2.5, 11.25], satFat: [0.75, 2.5], sodiumMg: [120, 300], kcal: [7, 93], netCarbs: [7.5, 25] };
+var DRINK_THRESHOLDS = { sugars: [2.5, 11.25], fat: [1.5, 8.75], satFat: [0.75, 2.5], sodiumMg: [120, 300], kcal: [7, 93], netCarbs: [7.5, 25] };
 var LIQUID_FOOD = /soup|sauce|\boil|vinegar|dressing|syrup|honey|cream\b/i;
-var PRESETS = {
-  balanced: { name: 'Balanced', weights: { sugars: 3, satFat: 2, sodiumMg: 2, kcal: 1, netCarbs: 0, fiber: 2, protein: 2, processing: 2, additives: 2, organic: 0 } },
-  keto: { name: 'Keto / low-carb', weights: { netCarbs: 5, sugars: 4, satFat: 0, sodiumMg: 1, kcal: 0, fiber: 2, protein: 2, processing: 2, additives: 2, organic: 0 }, thresholds: { netCarbs: [3, 12] } },
-  lowsugar: { name: 'Low sugar', weights: { sugars: 5, netCarbs: 2, fiber: 2, protein: 1, satFat: 1, sodiumMg: 1, kcal: 1, processing: 2, additives: 2, organic: 0 }, thresholds: { sugars: [2.5, 15] } },
-  heart: { name: 'Heart health', weights: { satFat: 5, sodiumMg: 4, fiber: 3, sugars: 2, kcal: 1, protein: 1, netCarbs: 0, processing: 2, additives: 1, organic: 0 } },
-  protein: { name: 'High protein', weights: { protein: 5, sugars: 2, satFat: 1, sodiumMg: 1, kcal: 1, fiber: 1, netCarbs: 0, processing: 1, additives: 1, organic: 0 } },
-  weight: { name: 'Weight loss', weights: { kcal: 4, sugars: 3, fiber: 3, protein: 3, satFat: 1, sodiumMg: 1, netCarbs: 0, processing: 2, additives: 1, organic: 0 } },
-  clean: { name: 'Clean label', weights: { additives: 5, processing: 5, organic: 3, sugars: 1, satFat: 1, sodiumMg: 1, kcal: 0, fiber: 0, protein: 0, netCarbs: 0 } }
-};
+// Used only when a stored or linked custom profile carries no usable weights at all (never offered as a choice).
+var FALLBACK_WEIGHTS = { sugars: 3, satFat: 2, sodiumMg: 2, kcal: 1, fiber: 2, protein: 2, processing: 2, additives: 2 };
 var NOVA_SCORE = { 1: 100, 2: 80, 3: 50, 4: 10 };
 // Editorial additive risk levels (0 none, 1 limited, 2 moderate, 3 high), informed by public EFSA and regulatory opinions
 // and widely used consumer classifications. Not medical advice. Additives not listed count as 'unrated' (a small penalty).
@@ -1196,6 +1206,8 @@ function standardScore(m, e) {
     missingNote: comps.filter(function (c) { return c.score === null; }).map(function (c) { return c.label.toLowerCase() + ' unknown'; }).join(', '),
     reason: score !== null ? '' : (max ? 'only the organic label is known' : 'no nutrition, additive or organic data') };
 }
+// A profile can flip a nutrient's direction (prof.dirs), e.g. total fat or calories as something to get more of.
+function metricDir(prof, met) { var d = prof && prof.dirs && prof.dirs[met.key]; return (d === 'low' || d === 'high') && (met.dir === 'low' || met.dir === 'high') ? d : met.dir; }
 // Custom score: weighted average (weights 0–5) of per-factor sub-scores over the factors that have data.
 function customScore(m, e, prof) {
   var rows = [], wsum = 0, acc = 0, missW = 0, totalW = 0;
@@ -1203,18 +1215,19 @@ function customScore(m, e, prof) {
   var drink = m.basis === 'ml' && !LIQUID_FOOD.test(String(m.categories.v || ''));
   if (drink) {
     Object.keys(DRINK_THRESHOLDS).forEach(function (k) {
-      var cur = th[k], def = DEFAULT_THRESHOLDS[k];
-      th[k] = (cur && def && (cur[0] !== def[0] || cur[1] !== def[1])) ? [cur[0] / 2, cur[1] / 2] : DRINK_THRESHOLDS[k];   // goal-specific cut-offs halve like the FSA's
+      var cur = th[k], def = DEFAULT_THRESHOLDS[k], dk = DRINK_THRESHOLDS[k];
+      var r = (cur && def && (cur[0] !== def[0] || cur[1] !== def[1])) ? cur[1] / def[1] : 1;   // the profile's scaling of the food cut-offs carries over (one factor, so the pair cannot cross)
+      th[k] = (isFinite(r) && r > 0) ? [dk[0] * r, dk[1] * r] : dk;
     });
   }
   METRICS.forEach(function (met) {
     var w = Number(prof.weights && prof.weights[met.key]) || 0;
     if (w <= 0) return;
     totalW += w;
-    var v, s = null, text = '';
+    var v, s = null, text = '', dir = metricDir(prof, met), label = met.label + (dir !== met.dir ? (dir === 'high' ? ' (more is better)' : ' (less is better)') : '');
     if (met.dir === 'low' || met.dir === 'high') {
       v = m.per100[met.key];
-      if (v !== null && v !== undefined) { s = linScore(v, th[met.key], met.dir); text = fmtVal(v, met.unit) + '/100 ' + (m.basis || 'g'); }
+      if (v !== null && v !== undefined) { s = linScore(v, th[met.key], dir); text = fmtVal(v, met.unit) + '/100 ' + (m.basis || 'g'); }
     } else if (met.key === 'processing') {
       var nova = m.nova.v;
       if (nova !== null && nova !== undefined && NOVA_SCORE[nova] !== undefined) { s = NOVA_SCORE[nova]; text = 'NOVA ' + nova; }
@@ -1225,9 +1238,9 @@ function customScore(m, e, prof) {
       var org = organicOf(e);
       if (org !== null) { s = org ? 100 : 0; text = org ? 'organic label' : 'no organic label'; }
     }
-    if (s === null) { missW += w; rows.push({ key: met.key, label: met.label, w: w, s: null, text: 'no data' }); return; }
+    if (s === null) { missW += w; rows.push({ key: met.key, label: label, w: w, s: null, text: 'no data' }); return; }
     wsum += w; acc += w * s;
-    rows.push({ key: met.key, label: met.label, w: w, s: s, text: text });
+    rows.push({ key: met.key, label: label, w: w, s: s, text: text });
   });
   var informative = rows.some(function (r) { return r.s !== null && r.key !== 'organic'; });
   var enoughWeight = totalW > 0 && wsum / totalW >= 0.5;     // at least half of your weighted factors must have data
@@ -1242,24 +1255,148 @@ function customScore(m, e, prof) {
     lowConfidence: totalW > 0 && missW / totalW > 0.4, missingNote: missing.length ? 'no data for ' + missing.join(', ') : '',
     reason: score !== null ? '' : (!wsum ? 'none of your weighted factors has data' : !informative ? 'only the organic label is known' : 'too little data for your weighted factors' + (missing.length ? ' (no data for ' + missing.join(', ') + ')' : '')) };
 }
-function budgetLines(m, prof) {
-  var out = [];
-  if (!prof || prof.mode !== 'custom' || !prof.budgets) return out;
-  var unknown = [];
-  Object.keys(BUDGET_LABELS).forEach(function (k) {
-    var b = toNum(prof.budgets[k]), v = m.perServing[k];
-    if (b === null || b <= 0) return;
-    if (v === null || v === undefined) { unknown.push(BUDGET_LABELS[k][0]); return; }
-    out.push('One serving = ' + Math.round(v / b * 100) + '% of your daily ' + BUDGET_LABELS[k][0] + ' (' + fmtVal(v, BUDGET_LABELS[k][1]) + ' of ' + fmtVal(b, BUDGET_LABELS[k][1]) + ')');
-  });
-  if (unknown.length) out.push('Daily ' + unknown.join(', ') + ' budget: no per-serving share, the serving size' + (m.servingSize.v ? ' has no weight' : ' is unknown') + '.');
-  return out;
-}
 function scoreProduct(m, e, prof) {
   if (!m || !m.found) return null;
-  var sc = (prof && prof.mode === 'custom') ? customScore(m, e, prof) : standardScore(m, e);
-  sc.budgets = budgetLines(m, prof);
-  return sc;
+  return (prof && prof.mode === 'custom') ? customScore(m, e, prof) : standardScore(m, e);
+}
+// Allergens: our keys → Open Food Facts allergen taxonomy tags, plus words for US-style "Contains: …" statements.
+var ALLERGENS = {
+  milk: { name: 'milk', tags: ['milk'], words: /\b(buttermilk|butterfat|milk(fat)?|dairy|whey|casein(ate)?s?|lactose|ghee|butter|cream|cheese|yogh?urt)\b/i },
+  eggs: { name: 'eggs', tags: ['eggs'], words: /\beggs?\b/i },
+  gluten: { name: 'gluten', tags: ['gluten'], words: /\b(wheat|gluten|barley|rye|spelt|kamut|malt(ed)?|triticale)\b/i },
+  peanuts: { name: 'peanuts', tags: ['peanuts'], words: /\bpeanuts?\b/i },
+  nuts: { name: 'tree nuts', tags: ['nuts'], words: /\b(tree ?nuts?|nuts?|almonds?|walnuts?|pecans?|cashews?|hazelnuts?|pistachios?|macadamias?|brazil nuts?)\b/i },
+  soybeans: { name: 'soy', tags: ['soybeans'], words: /\bsoy(a|beans?)?\b/i },
+  fish: { name: 'fish', tags: ['fish'], words: /\b((?!shellfish\b|crayfish\b|crawfish\b|cuttlefish\b)[a-z]*fish|anchov(y|ies)|cod|salmon|tuna|tilapia|pollock|haddock|halibut|mackerel|herring|sardines?|trout|bass|flounder|snapper)\b/i },   // US labels declare fish by species
+  shellfish: { name: 'shellfish', tags: ['crustaceans', 'molluscs'], words: /\b(shellfish|crustaceans?|crayfish|crawfish|crawdads?|cuttlefish|shrimps?|prawns?|crabs?|lobsters?|molluscs?|mollusks?|clams?|oysters?|mussels?|scallops?|squid|calamari|octopus)\b/i },
+  sesame: { name: 'sesame', tags: ['sesame-seeds'], words: /\bsesame\b/i },
+  celery: { name: 'celery', tags: ['celery'], words: /\bcelery\b/i },
+  mustard: { name: 'mustard', tags: ['mustard'], words: /\bmustard\b/i },
+  lupin: { name: 'lupin', tags: ['lupin'], words: /\blupine?\b/i },
+  sulphites: { name: 'sulphites', tags: ['sulphur-dioxide-and-sulphites'], words: /\b([a-z]*sul(ph|f)ites?|sul(ph|f)ur dioxide)\b/i }   // sodium bisulfite, metabisulphite…
+};
+// Phrases that mention an allergen word without being that allergen; removed before the words are tested.
+var NOT_DAIRY = /\b(cocoa|cacao|shea|peanut|almond|cashew|hazelnut|pecan|walnut|pistachio|macadamia|pumpkin|sunflower|seed|nut|coconut|apple|mango|cookie|biscuit)\s+butter\b|\b(coconut|almond|oat|soy|soya|rice|cashew|hemp|pea|hazelnut|macadamia|walnut|pistachio|flax|potato|nut)[\s-]+(milk|cream)\b|\bcream of (tartar|coconut)\b|\bcream[- ]style\b|\bbutter beans?\b/gi;
+var NOT_SHELLFISH = /\boyster\s+(mushrooms?|crackers?)\b/gi;
+var SOY_OIL = /\bsoy(a|bean)?s?\b(?:\s*(?:,|and|or|and\/or|&)\s*[a-z]+){0,3}\s+oils?\b/gi;   // highly refined soybean oil is exempt from allergen labelling
+// Statement keywords; a chunk runs to the next full stop / semicolon, the next keyword or a facility advisory, and may span
+// balanced parentheses ("Contains: tree nuts (almonds), milk").
+var KW = 'may (?:also )?contain|may be present|contains';
+var STATEMENT_RE = new RegExp('\\b(' + KW + ')\\b\\s*(:?)\\s*((?:(?!\\b(?:' + KW + ')\\b|\\b(?:manufactured|made|produced|processed|packaged|packed|prepared|mfd\\.?|mfg\\.?)\\s+(?:in|on|at|using)\\b)[^.;()\\n]|\\([^()\\n]*\\))*)', 'gi');
+var SKIP_CHUNK_RE = /^(\d|less\b|one\b|two\b|no\b|a\b|an\b|the\b(?!\s+following)|only\b|about\b|up to\b|ingredients?\b|bioengineered)/i;   // "contains 2% or less of", "contains no …", "contains a bioengineered…"
+// "Manufactured in a facility that also processes …", "made using shared equipment with …": advisories, like "may contain".
+var ADVISORY_RE = new RegExp('\\b(manufactured|made|produced|processed|packaged|packed|prepared|mfd\\.?|mfg\\.?)\\s+(in|on|at|with|using)\\s+(an?\\s+|the\\s+)?(same\\s+|shared\\s+|common\\s+)?(facilit(y|ies)|factory|factories|site|environment|equipment|kitchen|bakery|premises|(?:plant|lines?)(?=\\s+(?:that|which|where|also|handling|processing|used)))(?:(?!\\b(?:' + KW + ')\\b)[^.;\\n])*', 'gi');
+var ALLERGEN_WORD = '(?:gluten|wheat|dairy|milk|lactose|eggs?|peanuts?|tree ?nuts?|nuts?|soya?|fish|shellfish|sesame|celery|mustard|lupin|sul(?:ph|f)ites?)';
+var COMPOUND_FREE_RE = new RegExp('\\b(?:' + ALLERGEN_WORD + '\\s*,\\s*)*' + ALLERGEN_WORD + '\\s*(?:and|&|\\/|or)\\s*' + ALLERGEN_WORD + '[- ]free\\b', 'gi');   // "peanut and tree nut free"
+var NEGATION_RE = new RegExp('\\b(free (?:of|from)|does not contain|not contain|contains no|without|not suitable for)\\b(?:(?!\\b(?:' + KW + ')\\b)[^.;)\\n])*', 'gi');
+// Decodes HTML entities, joins a statement wrapped after a comma, and drops "X free" / "free from X" / "contains no X" /
+// "no X added" claims so their allergen words are not read as ingredients. Negations stop at the next statement keyword.
+function cleanIngredientText(text) {
+  return String(text || '')
+    .replace(/&(amp|#38|#x26);/gi, '&').replace(/&(nbsp|#160);/gi, ' ').replace(/&(#44|#x2c);/gi, ',').replace(/&(quot|#34);/gi, '"').replace(/&(apos|#39);/gi, "'").replace(/&(lt|gt|#60|#62);/gi, ' ')
+    .replace(/([,&]|\band)[ \t]*\r?\n[ \t]*/gi, '$1 ')
+    .replace(COMPOUND_FREE_RE, ' ')
+    .replace(/\b[a-z]+[- ]free\b/gi, ' ')
+    .replace(/\bnon[- ]dairy\b/gi, ' ')
+    .replace(NEGATION_RE, ' ')
+    .replace(/\bno\s+added\b[^.;,)\n]*/gi, ' ')
+    .replace(/\bno\s+(?:[a-z]+\s+){1,3}added\b/gi, ' ');
+}
+function allergenHits(chunk) {
+  chunk = chunk.replace(/\boils?\s*\(([^()]*)\)/gi, function (w, inner) { return ' oil (' + inner.replace(/\bsoy(a|bean)?s?\b/gi, ' ') + ')'; }).replace(SOY_OIL, ' ');
+  var dairyProbe = chunk.replace(NOT_DAIRY, ' '), shellProbe = chunk.replace(NOT_SHELLFISH, ' ');
+  return Object.keys(ALLERGENS).filter(function (k) { return ALLERGENS[k].words.test(k === 'milk' ? dairyProbe : k === 'shellfish' ? shellProbe : chunk); });
+}
+function isAdvisory(kw, chunk) { return /^may/i.test(kw) || /^(traces?|trace amounts?)\b/i.test(chunk); }   // "contains traces of nuts" is an advisory
+// Parses the allergen statements of an ingredient list (US labels carry them). `declared` is true only when a "Contains"
+// statement was found; "may contain", "contains traces of" and facility advisories only feed `may`. Returns null when there
+// is no statement at all, so the caller can say "not listed" rather than "none". A statement only counts when the keyword
+// is followed by a colon or an allergen is named, so "contains 2% or less of", "contains caffeine" and "(contains salt)" are ignored.
+function allergensFromText(text) {
+  var str = cleanIngredientText(text), mt, out = { contains: [], may: [], declared: false };
+  STATEMENT_RE.lastIndex = 0;
+  while ((mt = STATEMENT_RE.exec(str))) {
+    var chunk = mt[3].trim();
+    if (!chunk || SKIP_CHUNK_RE.test(chunk)) continue;
+    var hits = allergenHits(chunk);
+    if (!hits.length && !mt[2]) continue;
+    var isMay = isAdvisory(mt[1], chunk);
+    if (!isMay) out.declared = true;
+    var into = isMay ? out.may : out.contains;
+    hits.forEach(function (k) { if (into.indexOf(k) < 0) into.push(k); });
+  }
+  ADVISORY_RE.lastIndex = 0;
+  while ((mt = ADVISORY_RE.exec(str))) { allergenHits(mt[0]).forEach(function (k) { if (out.may.indexOf(k) < 0) out.may.push(k); }); }
+  return (out.declared || out.may.length) ? out : null;
+}
+// Allergens named in the ingredient list itself ("wheat flour", "sodium bisulfite", "peanuts"), with advisories and claims
+// removed. Used when no source has analysed the allergens: a US "Contains" statement never lists sulphites, celery, mustard,
+// lupin or molluscs, and a label may declare an allergen by the ingredient name alone.
+function allergensNamed(text) {
+  var str = cleanIngredientText(text).replace(STATEMENT_RE, function (whole, kw, colon, chunk) { return isAdvisory(kw, chunk.trim()) ? ' ' : whole; }).replace(ADVISORY_RE, ' ');
+  return allergenHits(str);
+}
+// Checks a product against the profile's avoid list. warn = present, caution = may contain / unknown, ok = confirmed absent.
+function avoidFlags(m, e, prof) {
+  var list = (prof && prof.mode === 'custom' && Array.isArray(prof.avoid)) ? prof.avoid : [];
+  if (!list.length || !m || !m.found) return null;
+  var off = e.off && e.off.norm, usda = e.usda && e.usda.norm;
+  var warn = [], caution = [], ok = [], notListed = [];
+  // OFF's tags come from the allergens field as well as the ingredient analysis, so a non-empty list counts even without
+  // ingredient text; an empty list only counts once the ingredients were analysed. Traces are cautions either way.
+  var trusted = !!(off && Array.isArray(off.allergens) && (off.allergens.length || off.ingredients));
+  var allergens = trusted ? off.allergens.slice() : null, traces = (off && Array.isArray(off.traces)) ? off.traces.slice() : [];
+  var stated = [], named = [], namedUsda = [];
+  // Explicit statements in any source's text add to the lists. Without an analysed list the ingredient text itself is
+  // scanned too; with one, an allergen that only USDA's text names becomes a caution rather than a red warning.
+  var texts = [];
+  if (off && off.ingredients) texts.push(off.ingredients);
+  if (usda && usda.ingredients) texts.push(usda.ingredients);
+  if (!texts.length && m.ingredients.v) texts.push(m.ingredients.v);
+  texts.forEach(function (t) {
+    var p = allergensFromText(t);
+    if (p) {
+      if (p.declared) { if (!allergens) allergens = []; p.contains.forEach(function (k) { if (allergens.indexOf(k) < 0) allergens.push(k); if (stated.indexOf(k) < 0) stated.push(k); }); }
+      p.may.forEach(function (k) { if (traces.indexOf(k) < 0) traces.push(k); });
+    }
+    var into = !trusted ? named : (off && t === off.ingredients) ? null : namedUsda;
+    if (into) allergensNamed(t).forEach(function (k) { if (into.indexOf(k) < 0) into.push(k); });
+  });
+  var analysis = (off && Array.isArray(off.analysis)) ? off.analysis : null;
+  function has(arr, keys) { return (arr || []).some(function (t) { return keys.indexOf(String(t).toLowerCase().replace(/^[a-z]{2,3}:/, '')) >= 0; }); }
+  list.forEach(function (k) {
+    var al = ALLERGENS[k];
+    if (al) {
+      var keys = al.tags.concat([k]);
+      if (has(allergens, keys)) warn.push('Contains ' + al.name + (!trusted && stated.indexOf(k) >= 0 ? ' (from the allergen statement)' : ''));
+      else if (named.indexOf(k) >= 0) warn.push('Contains ' + al.name + ' (named in the ingredients)');
+      else if (namedUsda.indexOf(k) >= 0) caution.push(al.name.charAt(0).toUpperCase() + al.name.slice(1) + ' named in the USDA ingredients, not in the Open Food Facts allergens');
+      else if (has(traces, keys)) caution.push('May contain ' + al.name);
+      else if (allergens) ok.push('no ' + al.name + (trusted ? '' : ' in the ingredients or the allergen statement'));
+      else notListed.push(al.name);
+    } else if (k === 'vegan' || k === 'vegetarian') {
+      if (!analysis) { caution.push(k.charAt(0).toUpperCase() + k.slice(1) + ' status unknown'); return; }
+      if (analysis.indexOf('non-' + k) >= 0) warn.push('Not ' + k);
+      else if (analysis.indexOf('maybe-' + k) >= 0) caution.push('May not be ' + k);
+      else if (analysis.indexOf(k) >= 0) ok.push(k);
+      else caution.push(k.charAt(0).toUpperCase() + k.slice(1) + ' status unknown');
+    } else if (k === 'palm-oil') {
+      if (!analysis) { caution.push('Palm oil unknown'); return; }
+      if (analysis.indexOf('palm-oil') >= 0) warn.push('Contains palm oil');
+      else if (analysis.indexOf('may-contain-palm-oil') >= 0) caution.push('May contain palm oil');
+      else if (analysis.indexOf('palm-oil-free') >= 0) ok.push('palm oil free');
+      else caution.push('Palm oil unknown');
+    }
+  });
+  if (notListed.length) caution.push('Allergens not listed' + (m.ingredients.v ? ' (no allergen analysis or "Contains" statement)' : ' (no ingredients)') + ': ' + notListed.join(', '));
+  return { warn: warn, caution: caution, ok: ok };
+}
+function renderAvoid(av) {
+  var chips = [];
+  av.warn.forEach(function (t) { chips.push(h('span', { class: 'chip bad', text: '⚠ ' + t })); });
+  av.caution.forEach(function (t) { chips.push(h('span', { class: 'chip warn', text: t })); });
+  if (!chips.length) chips.push(h('span', { class: 'chip ok', text: 'Clear: ' + av.ok.join(', ') }));
+  return h('div', { class: 'avoid' }, [h('div', { class: 'tiny muted', text: 'Your avoid list (does not change the score)' }), h('div', { class: 'chips' }, chips)]);
 }
 function renderScore(sc) {
   var wrap = h('div', { class: 'scorewrap' });
@@ -1273,7 +1410,6 @@ function renderScore(sc) {
     h('div', { class: 'grow' }, [h('div', { class: 'scoreband', text: (sc.lowConfidence ? 'Low confidence' : sc.band.label) + ' (' + sc.score + '/100)' }), h('div', { class: 'tiny muted', text: label + (sc.coverageNote ? ' · ' + sc.coverageNote : '') })])
   ]));
   if (sc.why && sc.why.length) wrap.appendChild(h('div', { class: 'why' }, sc.why.slice(0, 3).map(function (w) { return h('div', { class: 'small ' + (w.positive ? 'pos' : 'neg'), text: (w.positive ? '+ ' : '− ') + w.text }); })));
-  (sc.budgets || []).forEach(function (b) { wrap.appendChild(h('div', { class: 'small', style: 'margin-top:4px;color:var(--accent)', text: b })); });
   if (sc.lowConfidence) wrap.appendChild(h('div', { class: 'tiny', style: 'margin-top:4px;color:var(--warn)', text: 'Low confidence — ' + (sc.missingNote || 'key data is missing') + '.' }));
   var tbl = h('table', { class: 'sc' });
   if (sc.mode === 'standard') {
@@ -1289,56 +1425,116 @@ function renderScore(sc) {
 }
 
 /* ------------------------------------------------- scoring profile & setup */
-var QUESTIONS = [
-  { id: 'goal', title: 'What matters most to you?', type: 'single', options: [['balanced', 'Balanced eating'], ['keto', 'Keto / low-carb'], ['lowsugar', 'Less sugar, steadier blood sugar'], ['heart', 'Heart health: less salt and saturated fat'], ['protein', 'More protein'], ['weight', 'Weight loss'], ['clean', 'Fewer additives, less processing']] },
-  { id: 'focus', title: 'Anything else you watch closely?', hint: 'Pick any, or none.', type: 'multi', options: [['sugars', 'Sugar'], ['sodiumMg', 'Salt / sodium'], ['satFat', 'Saturated fat'], ['kcal', 'Calories']] },
-  { id: 'carbs', title: 'Do you count carbs?', type: 'single', options: [['none', 'No'], ['moderate', 'Somewhat — I prefer lower-carb foods'], ['strict', 'Strictly — keto or diabetes']] },
-  { id: 'additives', title: 'Additives and ultra-processed food?', type: 'single', options: [['avoid', 'Avoid strictly'], ['prefer', 'Prefer to avoid'], ['ok', 'Do not mind']] },
-  { id: 'organic', title: 'Does an organic label matter to you?', type: 'single', options: [['yes', 'Yes, it counts'], ['no', 'No']] },
-  { id: 'budgets', title: 'Daily budgets (optional)', hint: 'If you set one, each card shows what share of it one serving uses, when the serving size is known.', type: 'budgets', fields: [['netCarbs', 'Net carbs per day (g)'], ['sugars', 'Sugar per day (g)'], ['sodiumMg', 'Sodium per day (mg)'], ['kcal', 'Calories per day']] }
+// Six questions, one dimension each: nutrients to limit, nutrients to get more of, their order of importance, how strict
+// the cut-offs are, processing and additives, and ingredients or labels to avoid or look for. Nothing has to be typed.
+var NUTRIENT_OPTS = {
+  limit: [['sugars', 'Sugar'], ['netCarbs', 'Net carbs'], ['kcal', 'Calories'], ['satFat', 'Saturated fat'], ['fat', 'Total fat'], ['sodiumMg', 'Sodium (salt)']],
+  more: [['fiber', 'Fiber'], ['protein', 'Protein'], ['fat', 'Total fat'], ['kcal', 'Calories']]   // fat and calories can be goals too (keto, weight gain)
+};
+// Multiplier on the per-100 g cut-offs: 'low' metrics scale down when strict, 'high' metrics (fiber, protein) scale up.
+var STRICTNESS = { relaxed: { low: 1.5, high: 1 / 1.5, label: 'Relaxed' }, typical: { low: 1, high: 1, label: 'Typical' }, strict: { low: 0.5, high: 1.5, label: 'Strict' } };
+var AVOID_OPTS = [
+  { group: 'Allergens and intolerances', items: [['milk', 'Milk / dairy'], ['eggs', 'Eggs'], ['gluten', 'Gluten'], ['peanuts', 'Peanuts'], ['nuts', 'Tree nuts'], ['soybeans', 'Soy'], ['fish', 'Fish'], ['shellfish', 'Shellfish'], ['sesame', 'Sesame'], ['celery', 'Celery'], ['mustard', 'Mustard'], ['lupin', 'Lupin'], ['sulphites', 'Sulphites']] },
+  { group: 'Diet', items: [['vegan', 'Non-vegan ingredients'], ['vegetarian', 'Non-vegetarian ingredients']] },
+  { group: 'Ingredients', items: [['palm-oil', 'Palm oil']] },
+  { group: 'Labels (this one counts toward the score)', items: [['organic', 'Prefer organic']] }
 ];
-// '1,800' is a thousands separator here, not a European decimal comma.
-function parseBudget(v) {
-  var str = String(v === null || v === undefined ? '' : v).trim();
-  if (/^\d{1,3}(,\d{3})+(\.\d+)?$/.test(str)) str = str.replace(/,/g, '');
-  var n = toNum(str);
-  return (n !== null && n > 0) ? n : null;
+var AVOID_LABEL = {};
+AVOID_OPTS.forEach(function (g) { g.items.forEach(function (it) { AVOID_LABEL[it[0]] = it[1]; }); });
+var QUESTIONS = [
+  { id: 'limit', title: 'What do you want less of?', hint: 'Pick any, or none. Each pick is scored against a per-100 g cut-off.', type: 'multi', options: NUTRIENT_OPTS.limit },
+  { id: 'more', title: 'What do you want more of?', hint: 'Pick any, or none. Total fat and calories appear here for high-fat or weight-gain plans, unless you chose to limit them in the previous question.', type: 'multi', options: NUTRIENT_OPTS.more },
+  { id: 'rank', title: 'Which of your picks matter most?', hint: 'Tap them in order of importance: the first weighs 5, each next one a little less, down to 1. Unranked picks weigh one step below your last ranked one (never less than 1); rank nothing to weigh them all equally.', type: 'rank' },
+  { id: 'strict', title: 'How strict should the cut-offs be?', type: 'single', options: [
+    ['relaxed', 'Relaxed', 'Only clearly high amounts lose points: limits 1.5× the usual guideline; targets (fiber, protein and anything you want more of) ⅔ of it.'],
+    ['typical', 'Typical', 'Standard front-of-pack guideline cut-offs, e.g. sugar 5–22.5 g, saturated fat 1.5–5 g, sodium 120–600 mg per 100 g.'],
+    ['strict', 'Strict', 'For keto, diabetes, low-sodium or similar plans: limits half the usual guideline; targets (fiber, protein and anything you want more of) 1.5×.']] },
+  { id: 'processing', title: 'Processing and additives?', type: 'single', options: [
+    ['ok', 'Do not mind', 'NOVA group and additives are ignored.'],
+    ['prefer', 'Prefer less processed food', 'Moderate weight on the NOVA group and on additives.'],
+    ['avoid', 'Avoid ultra-processed food and risky additives', 'Highest weight on additives, high weight on the NOVA group.']] },
+  { id: 'avoid', title: 'Anything to avoid or look for?', hint: 'Pick any, or none. A product that contains something on this list gets a warning; the score does not change. Organic is the exception: it counts toward the score.', type: 'multi', groups: AVOID_OPTS }
+];
+var NUTRIENT_KEYS = NUTRIENT_OPTS.limit.concat(NUTRIENT_OPTS.more).map(function (o) { return o[0]; }).filter(function (k, i, arr) { return arr.indexOf(k) === i; });
+var AVOID_KEYS = Object.keys(AVOID_LABEL);
+// Answers from storage, a link or the UI are reduced to known values only (old questionnaire answers are dropped).
+function normAnswers(a) {
+  a = (a && typeof a === 'object' && !Array.isArray(a)) ? a : {};
+  function list(v, allowed) { return Array.isArray(v) ? v.filter(function (x, i) { return typeof x === 'string' && allowed.indexOf(x) >= 0 && v.indexOf(x) === i; }) : []; }
+  var out = { limit: list(a.limit, NUTRIENT_OPTS.limit.map(function (o) { return o[0]; })) };
+  out.more = list(a.more, NUTRIENT_OPTS.more.map(function (o) { return o[0]; })).filter(function (k) { return out.limit.indexOf(k) < 0; });   // a nutrient is limited or wanted, never both
+  var picked = out.limit.concat(out.more);
+  out.rank = list(a.rank, NUTRIENT_KEYS).filter(function (k) { return picked.indexOf(k) >= 0; });
+  out.strict = /^(relaxed|typical|strict)$/.test(String(a.strict)) ? String(a.strict) : null;
+  out.processing = /^(ok|prefer|avoid)$/.test(String(a.processing)) ? String(a.processing) : null;
+  out.avoid = list(a.avoid, AVOID_KEYS);
+  return out;
 }
-var BUDGET_LABELS = { netCarbs: ['net carbs', 'g'], sugars: ['sugar', 'g'], sodiumMg: ['sodium', 'mg'], kcal: ['calories', 'kcal'] };
+function pickedNutrients(a) { return NUTRIENT_KEYS.filter(function (k) { return a.limit.indexOf(k) >= 0 || a.more.indexOf(k) >= 0; }); }
+function nutrientPhrase(a, k) { return (a.limit.indexOf(k) >= 0 ? (k === 'kcal' ? 'fewer ' : 'less ') : 'more ') + nutrientLabel(k).toLowerCase(); }
+function nutrientLabel(k) { var o = NUTRIENT_OPTS.limit.concat(NUTRIENT_OPTS.more).filter(function (x) { return x[0] === k; })[0]; return o ? o[1] : k; }
+function profileDirs(a) {   // nutrients picked as "more of" whose built-in direction is "less of" get flipped
+  var dirs = {};
+  a.more.forEach(function (k) { METRICS.forEach(function (met) { if (met.key === k && met.dir === 'low') dirs[k] = 'high'; }); });
+  return dirs;
+}
+function scaleThresholds(strict, dirs) {
+  var f = Object.prototype.hasOwnProperty.call(STRICTNESS, strict) ? STRICTNESS[strict] : STRICTNESS.typical, th = {};
+  METRICS.forEach(function (met) {
+    var d = DEFAULT_THRESHOLDS[met.key];
+    if (!d) return;
+    var k = metricDir({ dirs: dirs }, met) === 'high' ? f.high : f.low;
+    th[met.key] = [Math.round(d[0] * k * 1000) / 1000, Math.round(d[1] * k * 1000) / 1000];
+  });
+  return th;
+}
+// Ranked picks weigh 5, 4, 3… (never below 1); unranked picks tie one step below the last ranked one; no ranking = all 3.
+function rankWeights(a) {
+  var w = {}, picked = pickedNutrients(a);
+  if (!a.rank.length) { picked.forEach(function (k) { w[k] = 3; }); return w; }
+  a.rank.forEach(function (k, i) { w[k] = Math.max(1, 5 - i); });
+  var rest = Math.max(1, 5 - a.rank.length);
+  picked.forEach(function (k) { if (w[k] === undefined) w[k] = rest; });
+  return w;
+}
+function profileNameFor(a) {
+  var order = a.rank.concat(pickedNutrients(a).filter(function (k) { return a.rank.indexOf(k) < 0; }));
+  var parts = order.slice(0, 2).map(function (k) { return nutrientPhrase(a, k); });
+  if (!parts.length) parts.push(a.processing === 'ok' ? 'custom' : 'less processed');
+  var name = parts.join(', ');
+  return name.charAt(0).toUpperCase() + name.slice(1);
+}
 function answersToProfile(a) {
-  a = a || {};
-  var preset = PRESETS[a.goal] || PRESETS.balanced;
-  var w = Object.assign({}, preset.weights), th = Object.assign({}, DEFAULT_THRESHOLDS, preset.thresholds || {});
-  (a.focus || []).forEach(function (k) { if (w[k] !== undefined) w[k] = Math.min(5, (w[k] || 0) + 2); });
-  if (a.carbs === 'strict') { w.netCarbs = 5; th.netCarbs = [3, 12]; }
-  else if (a.carbs === 'moderate') { w.netCarbs = Math.max(w.netCarbs || 0, 3); th.netCarbs = [8, 30]; }
-  if (a.additives === 'avoid') { w.additives = 5; w.processing = Math.max(w.processing || 0, 4); }
-  else if (a.additives === 'prefer') { w.additives = Math.max(w.additives || 0, 2); w.processing = Math.max(w.processing || 0, 2); }
-  else if (a.additives === 'ok') { w.additives = 0; w.processing = 0; }
-  if (a.organic === 'yes') w.organic = Math.max(w.organic || 0, 2); else if (a.organic === 'no') w.organic = 0;
-  var budgets = {};
-  Object.keys(a.budgets || {}).forEach(function (k) { if (!BUDGET_LABELS[k]) return; var n = parseBudget(a.budgets[k]); if (n !== null) budgets[k] = n; });
-  return { mode: 'custom', version: 1, preset: PRESETS[a.goal] ? a.goal : 'balanced', name: preset.name, weights: w, thresholds: th, budgets: budgets, answers: a };
+  a = normAnswers(a);
+  var w = {};
+  METRICS.forEach(function (met) { w[met.key] = 0; });
+  var rw = rankWeights(a);
+  Object.keys(rw).forEach(function (k) { w[k] = rw[k]; });
+  if (a.processing === 'avoid') { w.additives = 5; w.processing = 4; }
+  else if (a.processing === 'prefer') { w.additives = 2; w.processing = 2; }
+  w.organic = a.avoid.indexOf('organic') >= 0 ? 2 : 0;
+  var dirs = profileDirs(a);
+  return { mode: 'custom', version: 2, name: profileNameFor(a), weights: w, dirs: dirs, thresholds: scaleThresholds(a.strict, dirs),
+    avoid: a.avoid.filter(function (k) { return k !== 'organic'; }), answers: a };
 }
 function profileName(p) { if (!p) return 'not chosen'; return p.mode === 'standard' ? 'Standard' : 'Custom · ' + (p.name || 'custom'); }
-// Anything read from storage or a link is normalised to a safe shape (weights 0–5, valid thresholds, positive budgets).
+// Anything read from storage or a link is normalised to a safe shape (weights 0–5, valid thresholds, known avoid keys).
 function sanitizeProfile(p) {
   if (!p || typeof p !== 'object' || Array.isArray(p)) return null;
   if (p.mode === 'standard') return { mode: 'standard', version: 1 };
   if (p.mode !== 'custom' || !p.weights || typeof p.weights !== 'object' || Array.isArray(p.weights)) return null;
-  var out = { mode: 'custom', version: 1, preset: PRESETS[p.preset] ? p.preset : 'balanced', name: (typeof p.name === 'string' && p.name.trim()) ? p.name.trim().slice(0, 60) : null, weights: {}, thresholds: {}, budgets: {}, answers: {} };
+  var out = { mode: 'custom', version: 2, name: (typeof p.name === 'string' && p.name.trim()) ? p.name.trim().slice(0, 60) : 'Custom', weights: {}, dirs: {}, thresholds: {}, avoid: [], answers: normAnswers(p.answers) };
   var wtotal = 0;
   METRICS.forEach(function (met) { var v = Number(p.weights[met.key]); out.weights[met.key] = isFinite(v) ? Math.max(0, Math.min(5, Math.round(v))) : 0; wtotal += out.weights[met.key]; });
-  if (!wtotal) out.weights = Object.assign({}, PRESETS[out.preset].weights);   // all-zero weights would score nothing; fall back to the preset
+  if (!wtotal) Object.keys(FALLBACK_WEIGHTS).forEach(function (k) { out.weights[k] = FALLBACK_WEIGHTS[k]; });   // all-zero weights would score nothing
   if (p.thresholds && typeof p.thresholds === 'object') {
     Object.keys(DEFAULT_THRESHOLDS).forEach(function (k) {
       var t = p.thresholds[k];
       if (Array.isArray(t) && t.length === 2 && isFinite(Number(t[0])) && isFinite(Number(t[1])) && Number(t[0]) < Number(t[1])) out.thresholds[k] = [Number(t[0]), Number(t[1])];
     });
   }
-  if (p.budgets && typeof p.budgets === 'object') Object.keys(BUDGET_LABELS).forEach(function (k) { var b = Number(p.budgets[k]); if (isFinite(b) && b > 0) out.budgets[k] = b; });
-  if (p.answers && typeof p.answers === 'object' && !Array.isArray(p.answers)) out.answers = p.answers;
-  if (!out.name) out.name = PRESETS[out.preset].name;
+  if (p.dirs && typeof p.dirs === 'object') METRICS.forEach(function (met) { if (met.dir === 'low' && p.dirs[met.key] === 'high') out.dirs[met.key] = 'high'; });   // only the flip the questionnaire can make
+  if (Array.isArray(p.avoid)) out.avoid = p.avoid.filter(function (k, i) { return typeof k === 'string' && k !== 'organic' && AVOID_KEYS.indexOf(k) >= 0 && p.avoid.indexOf(k) === i; });
   return out;
 }
 function loadProfile() { profile = sanitizeProfile(store.getJSON(PROFILE_KEY, null)); }
@@ -1360,9 +1556,7 @@ function decodeProfile(str) {
 var ob = { step: 0, answers: null };
 function openOnboarding(step) {
   ob.step = step || 0;
-  if (!ob.answers) ob.answers = (profile && profile.answers) ? JSON.parse(JSON.stringify(profile.answers)) : {};
-  if (!Array.isArray(ob.answers.focus)) ob.answers.focus = [];
-  if (!ob.answers.budgets || typeof ob.answers.budgets !== 'object') ob.answers.budgets = {};
+  if (!ob.answers) ob.answers = normAnswers(profile && profile.answers);
   renderOnboarding();
   $('onboard').classList.add('open');
   document.body.classList.add('ob-open');
@@ -1378,7 +1572,7 @@ function renderOnboarding() {
     box.appendChild(h('button', { class: 'ob-choice', type: 'button', id: 'obStandard', onclick: function () { saveProfile({ mode: 'standard', version: 1 }); closeOnboarding(); toast('Standard scoring on'); } },
       [h('b', {}, 'Standard'), h('span', { class: 'small muted', text: 'Nutritional quality via Nutri-Score (60%), additives weighed by risk level (30%) and organic certification (10%).' })]));
     box.appendChild(h('button', { class: 'ob-choice', type: 'button', id: 'obCustom', onclick: function () { ob.step = 1; renderOnboarding(); } },
-      [h('b', {}, 'Customize'), h('span', { class: 'small muted', text: 'Six quick questions about your goals build a personal score, with optional daily budgets.' })]));
+      [h('b', {}, 'Customize'), h('span', { class: 'small muted', text: 'Six quick questions — what to limit, what to get more of, what matters most, how strict, processing, and what to avoid — build a personal score. Nothing to type.' })]));
     if (profile) box.appendChild(h('button', { class: 'btn block', type: 'button', id: 'obKeep', onclick: closeOnboarding }, 'Keep current: ' + profileName(profile)));
     return;
   }
@@ -1391,41 +1585,82 @@ function renderQuestion(box, q, qi) {
   box.appendChild(h('div', { class: 'ob-progress', text: 'Question ' + (qi + 1) + ' of ' + QUESTIONS.length }));
   box.appendChild(h('h2', { text: q.title }));
   if (q.hint) box.appendChild(h('p', { class: 'muted small', text: q.hint }));
-  if (q.type === 'single' || q.type === 'multi') {
-    q.options.forEach(function (opt) {
-      var selected = q.type === 'single' ? a[q.id] === opt[0] : a[q.id].indexOf(opt[0]) >= 0;
-      box.appendChild(h('button', { class: 'ob-opt' + (selected ? ' selected' : ''), type: 'button', 'data-opt': opt[0], 'aria-pressed': String(selected), onclick: function () {
-        if (q.type === 'single') a[q.id] = opt[0];
-        else { var i = a[q.id].indexOf(opt[0]); if (i >= 0) a[q.id].splice(i, 1); else a[q.id].push(opt[0]); }
+  // opt = [value, label, description?]; badge = rank number ('' = unranked slot); the tick comes first so it floats beside the label
+  function optNode(opt, selected, badge, onTap) {
+    var attrs = { class: 'ob-opt' + (selected ? ' selected' : ''), type: 'button', 'data-opt': opt[0], 'aria-pressed': String(selected), onclick: function () {
+      onTap();   // re-renders the question; put keyboard / VoiceOver focus back on the same option
+      var nb = $('obInner').querySelector('[data-opt="' + opt[0] + '"]');
+      if (nb) { try { nb.focus({ preventScroll: true }); } catch (e) { nb.focus(); } }
+    } };
+    if (badge !== null) attrs['aria-label'] = opt[1] + (badge ? ', ranked ' + badge : ', not ranked');
+    return h('button', attrs, [
+      (selected && badge === null) ? h('span', { class: 'tick', text: '✓' }) : null,
+      badge !== null ? h('span', { class: 'rank-no' + (badge ? '' : ' empty'), text: badge, 'aria-hidden': 'true' }) : null,
+      opt[2] ? h('b', { text: opt[1] }) : opt[1],
+      opt[2] ? h('span', { class: 'small muted desc', text: opt[2] }) : null
+    ]);
+  }
+  if (q.type === 'single') {
+    q.options.forEach(function (opt) { box.appendChild(optNode(opt, a[q.id] === opt[0], null, function () { a[q.id] = opt[0]; renderOnboarding(); })); });
+  } else if (q.type === 'multi') {
+    var items = q.id === 'more' ? q.options.filter(function (o) { return a.limit.indexOf(o[0]) < 0; }) : q.options;   // limited nutrients are not offered as "more of"
+    (q.groups || [{ items: items }]).forEach(function (g) {
+      if (g.group) box.appendChild(h('div', { class: 'ob-group', text: g.group }));
+      g.items.forEach(function (opt) {
+        box.appendChild(optNode(opt, a[q.id].indexOf(opt[0]) >= 0, null, function () {
+          var i = a[q.id].indexOf(opt[0]);
+          if (i >= 0) a[q.id].splice(i, 1); else a[q.id].push(opt[0]);
+          if (q.id === 'limit') a.more = a.more.filter(function (k) { return a.limit.indexOf(k) < 0; });
+          a.rank = a.rank.filter(function (k) { return pickedNutrients(a).indexOf(k) >= 0; });   // un-picking a nutrient drops it from the ranking
+          renderOnboarding();
+        }));
+      });
+    });
+  } else if (q.type === 'rank') {
+    var picked = pickedNutrients(a);
+    a.rank = a.rank.filter(function (k) { return picked.indexOf(k) >= 0; });
+    if (!picked.length) box.appendChild(h('p', { class: 'small', style: 'color:var(--warn)', text: 'You have not picked any nutrients. Go back to pick some, or continue to score on processing and additives only.' }));
+    picked.forEach(function (k) {
+      var pos = a.rank.indexOf(k);
+      var phrase = nutrientPhrase(a, k);
+      box.appendChild(optNode([k, phrase.charAt(0).toUpperCase() + phrase.slice(1)], pos >= 0, pos >= 0 ? String(pos + 1) : '', function () {
+        if (pos >= 0) a.rank.splice(pos, 1); else a.rank.push(k);
         renderOnboarding();
-      } }, [opt[1], selected ? h('span', { class: 'tick', text: '✓' }) : null]));
+      }));
     });
-  } else if (q.type === 'budgets') {
-    q.fields.forEach(function (f) {
-      var cur = a.budgets[f[0]];
-      var inp = h('input', { type: 'text', inputmode: 'decimal', id: 'budget-' + f[0], placeholder: 'leave blank to skip', value: (cur !== undefined && cur !== null) ? String(cur) : '' });
-      inp.addEventListener('input', function () { a.budgets[f[0]] = parseBudget(inp.value); });
-      box.appendChild(h('div', { class: 'ob-field' }, [h('label', { for: 'budget-' + f[0], text: f[1] }), inp]));
-    });
+    if (a.rank.length) box.appendChild(h('button', { class: 'btn small', type: 'button', id: 'obRankReset', onclick: function () { a.rank = []; renderOnboarding(); } }, 'Clear order'));
+    if (picked.length) { var rw = rankWeights(a); box.appendChild(h('p', { class: 'tiny muted', text: 'Weights: ' + picked.map(function (k) { return nutrientLabel(k).toLowerCase() + ' ' + rw[k]; }).join(', ') + '.' })); }
   }
   var canNext = q.type !== 'single' || !!a[q.id];
   box.appendChild(h('div', { class: 'ob-nav' }, [
-    h('button', { class: 'btn grow', type: 'button', id: 'obBack', onclick: function () { ob.step = ob.step - 1; renderOnboarding(); } }, 'Back'),
+    h('button', { class: 'btn grow', type: 'button', id: 'obBack', onclick: function () { ob.step = ob.step - 1; renderOnboarding(); $('onboard').scrollTop = 0; } }, 'Back'),
     h('button', { class: 'btn primary grow', type: 'button', id: 'obNext', disabled: canNext ? null : 'disabled', onclick: function () { ob.step = ob.step + 1; renderOnboarding(); $('onboard').scrollTop = 0; } }, qi + 1 === QUESTIONS.length ? 'See my profile' : 'Next')
   ]));
 }
+function cutoffText(x, unit) { return ((unit === 'kcal' || unit === 'mg') ? Math.round(x) : Math.round(x * 100) / 100) + ' ' + unit; }   // exact, unlike the 1-decimal display rounding
+function thresholdText(met, th, dir) {
+  var t = th[met.key];
+  if (!t) return '';
+  return dir === 'low' ? '100 at ≤' + cutoffText(t[0], met.unit) + ', 0 at ≥' + cutoffText(t[1], met.unit) + ' per 100 g' : '0 at ≤' + cutoffText(t[0], met.unit) + ', 100 at ≥' + cutoffText(t[1], met.unit) + ' per 100 g';
+}
 function renderSummary(box) {
-  var p = answersToProfile(ob.answers);
+  var p = answersToProfile(ob.answers), total = 0, informative = 0;
+  METRICS.forEach(function (met) { var w = p.weights[met.key] || 0; total += w; if (met.key !== 'organic') informative += w; });   // an organic label alone never gives a score
   box.appendChild(h('h2', { text: 'Your scoring profile: ' + p.name }));
-  box.appendChild(h('p', { class: 'muted small', text: 'Products are scored 0–100 on these factors, weighted 0–5. Fine-tune the weights later under Settings › Adjust weights.' }));
+  if (!informative) box.appendChild(h('p', { class: 'small', style: 'color:var(--warn)', text: 'Nothing that can be scored is weighted yet' + (total ? ' (an organic label alone gives no score)' : '') + '. Go back and pick at least one nutrient or a processing preference.' }));
+  else box.appendChild(h('p', { class: 'muted small', text: 'Products are scored 0–100 on these factors, weighted 0–5 (' + STRICTNESS[p.answers.strict || 'typical'].label.toLowerCase() + ' cut-offs). Fine-tune the weights later under Settings › Adjust weights.' }));
   var list = h('div');
-  METRICS.forEach(function (met) { var w = p.weights[met.key] || 0; if (!w) return; list.appendChild(h('div', { class: 'wrow' }, [h('span', { class: 'wl', text: met.label }), h('span', { class: 'wv', text: String(w) })])); });
+  METRICS.slice().sort(function (x, y) { return (p.weights[y.key] || 0) - (p.weights[x.key] || 0); }).forEach(function (met) {   // heaviest first
+    var w = p.weights[met.key] || 0;
+    if (!w) return;
+    var dir = metricDir(p, met), tt = thresholdText(met, p.thresholds, dir);
+    list.appendChild(h('div', { class: 'wrow' }, [h('span', { class: 'wl' }, [met.label + (dir !== met.dir ? ' (more is better)' : ''), tt ? h('span', { class: 'tiny muted', text: ' — ' + tt }) : null]), h('span', { class: 'wv', text: String(w) })]));
+  });
   box.appendChild(list);
-  var bk = Object.keys(p.budgets);
-  if (bk.length) box.appendChild(h('p', { class: 'small muted', text: 'Daily budgets: ' + bk.map(function (k) { return BUDGET_LABELS[k][0] + ' ' + fmtVal(p.budgets[k], BUDGET_LABELS[k][1]); }).join(', ') + '.' }));
+  if (p.avoid.length) box.appendChild(h('p', { class: 'small muted', text: 'Warnings for: ' + p.avoid.map(function (k) { return AVOID_LABEL[k].toLowerCase(); }).join(', ') + '. These do not change the score.' }));
   box.appendChild(h('div', { class: 'ob-nav' }, [
-    h('button', { class: 'btn grow', type: 'button', id: 'obBack', onclick: function () { ob.step = QUESTIONS.length; renderOnboarding(); } }, 'Back'),
-    h('button', { class: 'btn primary grow', type: 'button', id: 'obUse', onclick: function () { saveProfile(p); closeOnboarding(); toast('Custom scoring on'); } }, 'Use this profile')
+    h('button', { class: 'btn grow', type: 'button', id: 'obBack', onclick: function () { ob.step = QUESTIONS.length; renderOnboarding(); $('onboard').scrollTop = 0; } }, 'Back'),
+    h('button', { class: 'btn primary grow', type: 'button', id: 'obUse', disabled: informative ? null : 'disabled', onclick: function () { saveProfile(p); closeOnboarding(); toast('Custom scoring on'); } }, 'Use this profile')
   ]));
 }
 function renderWeightsEditor(box) {
@@ -1433,19 +1668,27 @@ function renderWeightsEditor(box) {
   var draft = JSON.parse(JSON.stringify(profile));
   box.appendChild(h('h2', { text: 'Adjust weights' }));
   box.appendChild(h('p', { class: 'muted small', text: '0 ignores a factor, 5 makes it count the most. Nothing changes until you tap Save.' }));
+  var warnLine = h('p', { class: 'small', style: 'color:var(--warn)', text: '' }), doneBtn;
+  function refresh() {   // an organic label alone never gives a score, so at least one other factor must be weighted
+    var inf = 0;
+    METRICS.forEach(function (met) { if (met.key !== 'organic') inf += draft.weights[met.key] || 0; });
+    doneBtn.disabled = !inf;
+    warnLine.textContent = inf ? '' : 'Nothing that can be scored is weighted (an organic label alone gives no score). Raise at least one other factor.';
+  }
   METRICS.forEach(function (met) {
     var val = h('span', { class: 'wv', text: String(draft.weights[met.key] || 0) });
     var range = h('input', { type: 'range', min: '0', max: '5', step: '1', 'data-metric': met.key, value: String(draft.weights[met.key] || 0) });
-    range.addEventListener('input', function () { draft.weights[met.key] = parseInt(range.value, 10) || 0; val.textContent = range.value; });
-    box.appendChild(h('div', { class: 'wrow' }, [h('span', { class: 'wl', text: met.label }), range, val]));
+    range.addEventListener('input', function () { draft.weights[met.key] = parseInt(range.value, 10) || 0; val.textContent = range.value; refresh(); });
+    var dirNote = (met.dir === 'low' || met.dir === 'high') ? (metricDir(draft, met) === 'high' ? ' (more is better)' : ' (less is better)') : '';
+    box.appendChild(h('div', { class: 'wrow' }, [h('span', { class: 'wl', text: met.label + dirNote }), range, val]));
   });
-  box.appendChild(h('div', { class: 'ob-nav' }, [
-    h('button', { class: 'btn grow', type: 'button', id: 'obCancel', onclick: closeOnboarding }, 'Cancel'),
-    h('button', { class: 'btn primary grow', type: 'button', id: 'obDone', onclick: function () {
-      if (JSON.stringify(draft.weights) !== JSON.stringify(profile.weights) && String(draft.name || '').indexOf('(adjusted)') < 0) draft.name = (draft.name || 'Custom') + ' (adjusted)';
-      saveProfile(draft); closeOnboarding(); toast('Weights saved');
-    } }, 'Save')
-  ]));
+  doneBtn = h('button', { class: 'btn primary grow', type: 'button', id: 'obDone', onclick: function () {
+    if (JSON.stringify(draft.weights) !== JSON.stringify(profile.weights) && String(draft.name || '').indexOf('(adjusted)') < 0) draft.name = (draft.name || 'Custom') + ' (adjusted)';
+    saveProfile(draft); closeOnboarding(); toast('Weights saved');
+  } }, 'Save');
+  box.appendChild(warnLine);
+  box.appendChild(h('div', { class: 'ob-nav' }, [h('button', { class: 'btn grow', type: 'button', id: 'obCancel', onclick: closeOnboarding }, 'Cancel'), doneBtn]));
+  refresh();
 }
 
 /* ------------------------------------------------------ result rendering */
@@ -1511,6 +1754,8 @@ function renderResult(res) {
   var sc = scoreProduct(m, e, profile || { mode: 'standard' });
   if (sc) card.appendChild(renderScore(sc));
   if (!profile) card.appendChild(h('div', { class: 'tiny muted', text: 'Showing the standard score; choose or customize scoring in Settings.' }));
+  var av = avoidFlags(m, e, profile);
+  if (av) card.appendChild(renderAvoid(av));
   card.appendChild(h('div', { class: 'kv' }, [h('b', {}, 'Serving size: '), m.servingSize.v ? (m.servingSize.v + ' ') : '— ', m.servingSize.from ? h('span', { class: 'tiny muted', text: '(' + m.servingSize.from + ')' }) : null]));
   // nutrients table
   var tbl = h('table', { class: 'nut' });
@@ -2093,7 +2338,7 @@ function topWeights(p) {
     .sort(function (a, b) { return b[1] - a[1]; }).slice(0, 3).map(function (x) { return x[0].toLowerCase() + ' ' + x[1]; }).join(', ');
 }
 function renderSettings() {
-  $('scoringInfo').textContent = 'Current: ' + profileName(profile) + (profile ? (profile.mode === 'custom' ? ' — top weights: ' + topWeights(profile) + '.' : ' — Nutri-Score 60%, additives 30%, organic 10%.') : ' — choose one to score products.');
+  $('scoringInfo').textContent = 'Current: ' + profileName(profile) + (profile ? (profile.mode === 'custom' ? ' — top weights: ' + topWeights(profile) + '.' + (profile.avoid && profile.avoid.length ? ' Warnings for ' + profile.avoid.map(function (k) { return AVOID_LABEL[k].toLowerCase(); }).join(', ') + '.' : '') : ' — Nutri-Score 60%, additives 30%, organic 10%.') : ' — choose one to score products.');
   $('btnWeights').classList.toggle('hidden', !(profile && profile.mode === 'custom'));
   $('btnCopyProfile').classList.toggle('hidden', !profile);
   var key = getUsdaKey();
@@ -2304,7 +2549,7 @@ window.FS = {
   version: APP_VERSION, lookup: lookup, handleCode: handleCode, candidateCodes: candidateCodes, upcEToUpcA: upcEToUpcA, gtinCheckOK: gtinCheckOK,
   readIsValid: readIsValid, normOFF: normOFF, normUSDA: normUSDA, mergeProduct: mergeProduct, toCSV: toCSV, decodeCanvas: decodeCanvasWithZXing,
   startCamera: startCamera, stopCamera: stopCamera, pickDecoder: pickDecoder,
-  scoreProduct: scoreProduct, computeNutriScore: computeNutriScore, answersToProfile: answersToProfile, additivesScore: additivesScore, encodeProfile: encodeProfile, decodeProfile: decodeProfile, sanitizeProfile: sanitizeProfile, parseBudget: parseBudget, isBeverage: isBeverage, nutriKind: nutriKind, nutriScoreOf: nutriScoreOf, additiveLevel: additiveLevel, dedupeAdditives: dedupeAdditives,
+  scoreProduct: scoreProduct, computeNutriScore: computeNutriScore, answersToProfile: answersToProfile, additivesScore: additivesScore, encodeProfile: encodeProfile, decodeProfile: decodeProfile, sanitizeProfile: sanitizeProfile, normAnswers: normAnswers, avoidFlags: avoidFlags, allergensFromText: allergensFromText, allergensNamed: allergensNamed, isBeverage: isBeverage, nutriKind: nutriKind, nutriScoreOf: nutriScoreOf, additiveLevel: additiveLevel, dedupeAdditives: dedupeAdditives,
   profile: function () { return profile; }, openOnboarding: openOnboarding,
   state: function () { return { cam: cam, tally: tally, log: scanLog, current: current }; },
   _setFrameSource: function (el) { cam.frameSource = el; }
