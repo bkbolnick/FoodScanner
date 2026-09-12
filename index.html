@@ -1452,12 +1452,13 @@ var LEGACY_LEVELS = { relaxed: 'slight', typical: 'medium' };   // names used by
 function levelOf(v) { if (typeof v !== 'string') return null; if (LEGACY_LEVELS[v]) v = LEGACY_LEVELS[v]; return STRICT_LEVELS.indexOf(v) >= 0 ? v : null; }
 var AVOID_OPTS = [
   { group: 'Allergens and intolerances', items: [['milk', 'Milk / dairy'], ['eggs', 'Eggs'], ['gluten', 'Gluten'], ['peanuts', 'Peanuts'], ['nuts', 'Tree nuts'], ['soybeans', 'Soy'], ['fish', 'Fish'], ['shellfish', 'Shellfish'], ['sesame', 'Sesame'], ['celery', 'Celery'], ['mustard', 'Mustard'], ['lupin', 'Lupin'], ['sulphites', 'Sulphites']] },
-  { group: 'Diet', items: [['vegan', 'Non-vegan ingredients'], ['vegetarian', 'Non-vegetarian ingredients']] },
+  { group: 'Diet', items: [['vegan', 'I am vegan', 'Warns about non-vegan ingredients'], ['vegetarian', 'I am vegetarian', 'Warns about non-vegetarian ingredients']] },   // [key, option label, description]
   { group: 'Ingredients', items: [['palm-oil', 'Palm oil']] },
   { group: 'Labels (this one counts toward the score)', items: [['organic', 'Prefer organic']] }
 ];
+var AVOID_PHRASE = { vegan: 'non-vegan ingredients', vegetarian: 'non-vegetarian ingredients' };   // how the item is named in lists (summary, Settings)
 var AVOID_LABEL = {};
-AVOID_OPTS.forEach(function (g) { g.items.forEach(function (it) { AVOID_LABEL[it[0]] = it[1]; }); });
+AVOID_OPTS.forEach(function (g) { g.items.forEach(function (it) { AVOID_LABEL[it[0]] = AVOID_PHRASE[it[0]] || it[1]; }); });
 var QUESTIONS = [
   { id: 'limit', title: 'What do you want less of?', hint: 'Pick any, or none. Each pick is scored against a per-100 g cut-off.', type: 'multi', options: NUTRIENT_OPTS.limit },
   { id: 'more', title: 'What do you want more of?', hint: 'Pick any, or none. Total fat and calories appear here for high-fat or weight-gain plans, unless you chose to limit them in the previous question.', type: 'multi', options: NUTRIENT_OPTS.more },
@@ -1466,7 +1467,7 @@ var QUESTIONS = [
     ['ok', 'Do not mind', 'NOVA group and additives are ignored.'],
     ['prefer', 'Prefer less processed food', 'Moderate weight on the NOVA group and on additives.'],
     ['avoid', 'Avoid ultra-processed food and risky additives', 'Highest weight on additives, high weight on the NOVA group.']] },
-  { id: 'avoid', title: 'Anything to avoid or look for?', hint: 'Pick any, or none. A product that contains something on this list gets a warning; the score does not change. Organic is the exception: it counts toward the score.', type: 'multi', groups: AVOID_OPTS }
+  { id: 'avoid', title: 'Anything to avoid or look for?', hint: 'Pick any, or none. A product that contains an allergen you avoid, or that does not fit your diet, gets a warning; the score does not change. Organic is the exception: it counts toward the score.', type: 'multi', groups: AVOID_OPTS }
 ];
 var NUTRIENT_KEYS = NUTRIENT_OPTS.limit.concat(NUTRIENT_OPTS.more).map(function (o) { return o[0]; }).filter(function (k, i, arr) { return arr.indexOf(k) === i; });
 var AVOID_KEYS = Object.keys(AVOID_LABEL);

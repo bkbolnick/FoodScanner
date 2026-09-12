@@ -65,7 +65,8 @@ On first open the app asks how products should be scored. Both choices can be ch
   have data. The card lists the three factors that moved the score most. Weights can be fine-tuned under **Adjust
   weights** (custom profiles only).
 - **Avoid list** (question 5): allergens (milk, eggs, gluten, peanuts, tree nuts, soy, fish, shellfish, sesame,
-  celery, mustard, lupin, sulphites), non-vegan or non-vegetarian ingredients and palm oil never change the score.
+  celery, mustard, lupin, sulphites), non-vegan or non-vegetarian ingredients (the "I am vegan" and "I am vegetarian"
+  options) and palm oil never change the score.
   Instead the card shows a red warning when a product contains one, an amber note when it may contain it or the
   status is unknown, and a green "Clear" chip when everything on the list is confirmed absent; the log and the CSV
   export's `avoid_warnings` column carry the red warnings. The checks use Open Food Facts allergen tags and
