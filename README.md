@@ -53,14 +53,14 @@ On first open the app asks how products should be scored. Both choices can be ch
 - **Custom**: five questions, each about one thing, all answered by tapping: (1) which nutrients you want less of
   (sugar, net carbs, calories, saturated fat, total fat, sodium), (2) which you want more of (fiber, protein, and,
   for high-fat or weight-gain plans, total fat and calories; anything chosen in question 1 is not offered again),
-  (3) how strict each pick is: relaxed (weight 2; only clearly high amounts lose points, cut-offs 1.5× the guideline
-  and targets, i.e. fiber, protein and anything wanted more of, ⅔ of it), typical (weight 3, standard front-of-pack
-  guideline cut-offs) or strict (weight 5, half the limits and 1.5× the targets), with a row that sets all picks at
-  once, (4) processing and additives (ignored, moderate weight, or the highest weight) and (5) anything to avoid or
+  (3) how strong each preference is: every pick already means less (or more) of that nutrient, and the level says how
+  much it counts: slight preference (weight 1) and medium preference (weight 3) are scored against the standard
+  front-of-pack guideline cut-offs, while a strict preference (weight 5) also halves the limit cut-offs and raises
+  the targets, i.e. fiber, protein and anything wanted more of, by 1.5×; a row sets all picks at once, (4) processing and additives (ignored, moderate weight, or the highest weight) and (5) anything to avoid or
   look for. Each of eleven factors (net carbs, sugars, fiber, protein, saturated fat, total fat, sodium, calories, NOVA
   processing, additives, organic) gets a weight from 0 to 5 and a 0–100 sub-score from its per-100 g value against
-  the chosen cut-offs (drinks, whose data is per 100 ml, use the roughly half-size FSA drink cut-offs, scaled by the
-  same strictness); the score is
+  the chosen cut-offs (drinks, whose data is per 100 ml, use the roughly half-size FSA drink cut-offs, scaled the
+  same way for strict preferences); the score is
   the weighted average over the factors that have data, and is withheld when less than half of the weighted factors
   have data. The card lists the three factors that moved the score most. Weights can be fine-tuned under **Adjust
   weights** (custom profiles only).
