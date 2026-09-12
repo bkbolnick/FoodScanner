@@ -1122,8 +1122,8 @@ function renderLog() {
   scanLog.slice(0, 200).forEach(function (e) {
     var found = e.off === 'found' || e.usda === 'found';
     function statusWord(s) { return s === 'found' ? 'found' : s === 'not_found' ? 'not found' : s === 'error' ? 'error' : 'skipped'; }
-    var srcs = h('span', { class: 'srcs' }, [h('span', {}, [h('span', { class: 'dot ' + statusColor(e.off), 'aria-hidden': 'true' }), 'Open Food Facts', h('span', { class: 'sr', text: ' ' + statusWord(e.off) })])]);
-    if (e.usda !== 'skipped') srcs.appendChild(h('span', {}, [h('span', { class: 'dot ' + statusColor(e.usda), 'aria-hidden': 'true' }), 'USDA', h('span', { class: 'sr', text: ' ' + statusWord(e.usda) })]));
+    var srcs = h('span', { class: 'srcs' }, [h('span', {}, [h('span', { class: 'dot ' + statusColor(e.off), 'aria-hidden': 'true' }), 'Open Food Facts', ' ' + statusWord(e.off)])]);
+    if (e.usda !== 'skipped') srcs.appendChild(h('span', {}, [h('span', { class: 'dot ' + statusColor(e.usda), 'aria-hidden': 'true' }), 'USDA', ' ' + statusWord(e.usda)]));
     var hasMissing = found && e.missing && e.missing.length;
     var right = h('div', { class: 'sc' });
     if (e.score !== null && e.score !== undefined) {
@@ -1146,7 +1146,6 @@ function renderLog() {
   });
   if (scanLog.length > 200) ul.appendChild(h('li', { class: 'empty', text: 'Showing the latest 200 of ' + scanLog.length + ' entries. The CSV export includes all of them.' }));
 }
-function statusMark(s) { return s === 'found' ? '✓' : s === 'not_found' ? '✗' : s === 'error' ? '!' : '–'; }
 
 
 /* -------------------------------------------------------------- scoring */
@@ -2412,7 +2411,7 @@ function stopCamera(statusMsg) {
 }
 function scanLoop() {
   if (!cam.scanning) return;
-  if (cam.paused) { cam.timer = setTimeout(scanLoop, 250); return; }   // another tab is showing; keep the stream, skip decoding
+  if (cam.paused || sheet.drag) { cam.timer = setTimeout(scanLoop, 250); return; }   // another tab is showing or the sheet is being dragged; keep the stream, skip decoding
   var t0 = now();
   var p;
   if (cam.decoder.kind === 'native') p = detectNative();
@@ -2457,15 +2456,17 @@ function visibleRect(vw, vh) {
     var top = vp.getBoundingClientRect().top;
     var tabs = $('tabs').getBoundingClientRect().top - top;
     var sh = sheet.snap !== 'hidden' ? $('sheet').getBoundingClientRect().top - top : Infinity;
-    shown = Math.max(Math.round(bh * 0.25), Math.min(bh, Math.floor(tabs), Math.floor(sh)));
+    shown = Math.min(bh, Math.floor(tabs), Math.floor(sh));
   } catch (e) { /* keep the full crop */ }
   var hv = Math.min(h, Math.round(shown / scale));
+  if (shown < 48 || hv < 8) return null;   // nothing meaningful is visible (sheet mid-animation or covering the viewfinder)
   return { x: Math.round((vw - w) / 2), y: Math.round((vh - h) / 2), w: w, h: hv };
 }
 function detectNative() {
   var vw = video.videoWidth || 0, vh = video.videoHeight || 0;
   if (!vw || !vh) return Promise.resolve(null);
   var vis = visibleRect(vw, vh), canvas = cam.canvas, ctx = cam.ctx;
+  if (!vis) return Promise.resolve(null);
   if (canvas.width !== vis.w || canvas.height !== vis.h) { canvas.width = vis.w; canvas.height = vis.h; }
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.drawImage(video, vis.x, vis.y, vis.w, vis.h, 0, 0, vis.w, vis.h);
@@ -2494,6 +2495,7 @@ function decodeZXingFrame() {
   var canvas = cam.canvas, ctx = cam.ctx;
   var rotate = cam.rotate; cam.rotate = !rotate;
   var vis = visibleRect(vw, vh);
+  if (!vis) return null;
   var cw, ch, sx, sy;
   if (!rotate) {
     cw = Math.round(vis.w * 0.92); ch = Math.round(vis.h * 0.56); sx = vis.x + Math.round((vis.w - cw) / 2); sy = vis.y + Math.round((vis.h - ch) / 2);
@@ -2758,7 +2760,7 @@ function initSheet() {
     if (!d || d.cancelled) return;
     var p = point(e), dy = p.clientY - d.y0, dx = p.clientX - d.x0;
     if (!d.moved) {
-      var canScroll = d.inBody && sheet.snap === 'full' && (body.scrollTop > 0 || dy < 0);
+      var canScroll = d.inBody && sheet.snap === 'full' && (body.scrollTop > 0 || dy < -2);   // a 1 px upward wobble at the start of a downward drag is not a scroll
       if (!canScroll && e.cancelable) e.preventDefault();   // claim the gesture on the very first move, before WebKit hands it to the scroller
       if (Math.abs(dy) < 6 && Math.abs(dx) < 6) return;
       if (canScroll || Math.abs(dx) > Math.abs(dy)) { d.cancelled = true; return; }   // the list scrolls instead
@@ -2775,6 +2777,7 @@ function initSheet() {
     sheet.drag = null;
     if (!d || !d.moved) return;
     el.classList.remove('dragging');
+    if (now() - d.lastT > 100) d.v = 0;   // the finger stopped before lifting: settle to the nearest snap instead of flicking
     snapTo(nearestSnap(sheet.y, d.v, d.base));
   }
   el.addEventListener('touchstart', start, { passive: true });
