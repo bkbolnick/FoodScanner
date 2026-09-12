@@ -10,33 +10,41 @@ Live: https://bkbolnick.github.io/FoodScanner/
 
 Everything is a single `index.html` (vanilla HTML/CSS/JS, no build step). The only external dependency is the
 pinned `@zxing/browser` barcode decoder loaded from a CDN, used when the browser has no native `BarcodeDetector`
-(which is the case in iOS Safari). `.nojekyll` makes GitHub Pages serve the file as-is.
+(which is the case in iOS Safari). `.nojekyll` makes GitHub Pages serve the file as-is. `manifest.json` and the
+icons let **Add to Home Screen** install it like an app; the UI follows the iOS Human Interface Guidelines (system
+type, semantic colours in light and dark, a bottom tab bar, grouped settings and a result sheet).
 
 ## Using it
 
-1. Open the page in Safari on your iPhone (it must be served over HTTPS, which GitHub Pages does).
-2. Tap **Start camera** and allow camera access. Hold the barcode inside the frame, roughly 10–15 cm from the
-   lens; it detects EAN-13, EAN-8, UPC-A and UPC-E continuously. A beep and a green flash mean a code was read.
-   The same code is ignored while it stays in view and for 3 seconds after.
-3. Or type a barcode into the field under the camera and tap **Look up**. While the camera is running, tap
-   **Type a barcode** to bring the field back; scanning pauses while you type.
-4. The result card shows the score (see **Scoring** below), any warnings from your avoid list, product name, brand,
-   image, serving size, and
-   per-serving / per-100 g values for calories, carbs, sugars, fiber, net carbs (carbs − fiber), protein, fat,
-   saturated fat and sodium, plus ingredients, NOVA group, Nutri-Score, additive tags, categories, which source(s)
-   found the product and a per-source coverage table. Below the card, **Missing fields** lists whichever of serving
-   size, carbs, sugars, fiber, protein and ingredients no source provided.
-5. **Log** tab: the coverage tally (scans, found in OFF, found in USDA, found in neither, found-but-incomplete)
-   and the scan log. **Export log** copies the log as CSV to the clipboard; **Share CSV** opens the iOS share
-   sheet. Tap a log entry to reopen its result.
+1. Open the page in Safari on your iPhone (it must be served over HTTPS, which GitHub Pages does). Optionally
+   add it to the Home Screen; it then opens full screen like an app.
+2. Tap **Start camera** and allow camera access. The camera fills the screen; hold the barcode inside the marked
+   region, roughly 10–15 cm from the lens. It detects EAN-13, EAN-8, UPC-A and UPC-E continuously. A beep and a
+   green flash of the corner marks mean a code was read. The same code is ignored while it stays in view and for
+   3 seconds after. Floating buttons offer **Enter a code**, **Stop camera** and, when the phone has one, the torch.
+3. Or type a barcode into **Or enter a code** and tap **Look up**. While the camera is running, tap
+   **Enter a code** to bring the field back; scanning pauses while you type.
+4. The result opens in a sheet from the bottom. Drag the grabber (or tap it) to park it at a peek, half or full
+   height; swipe it down or tap the close button to dismiss it. While the camera runs it opens at half height so
+   the viewfinder stays usable; at full height scanning pauses until you lower it. The sheet shows the score (see
+   **Scoring** below), warnings from your avoid list, product name, brand, image and barcode, then the nutrients
+   with a **Per serving / Per 100 g** switch: net carbs (carbs − fiber) on top, then calories, carbs, sugars,
+   fiber, protein, fat, saturated fat and sodium, the serving size, and a **Missing fields** line naming whichever
+   of serving size, carbs, sugars, fiber, protein and ingredients no source provided. Below that: ingredients, NOVA
+   group, Nutri-Score, additives, categories, a **Sources** section saying what each database returned, a
+   per-source coverage table, and **Refresh** (bypasses the cache), **Open in Open Food Facts / USDA** and **Copy JSON**.
+5. **Log** tab: the coverage tally (scans, found in Open Food Facts, found in USDA, found in neither,
+   found-but-incomplete, lookup errors) and the scan history with each entry's sources, score, warnings and missing
+   fields. **Copy log as CSV** copies the log to the clipboard; **Share CSV** opens the iOS share sheet. Tap an
+   entry to reopen its result.
 6. **Settings** tab: paste a USDA FoodData Central API key (free, from
    https://fdc.nal.usda.gov/api-key-signup) to add USDA as a second source. The key is stored only in this
    browser's localStorage and is never sent anywhere except api.nal.usda.gov. To make it automatic, tap
    **Copy link with my key**, open that link once in Safari and add the page to the Home Screen: the link ends in
    `#usda=YOURKEY`, and every launch from that icon re-saves the key (see Notes). Also: decoder preference,
-   **Clear cache** and **Clear log & tally**.
-7. **Debug** button (top right): an on-screen log of everything (console output, uncaught errors, every fetch
-   with its status code). **Copy log** copies it so you can paste it into an issue or a chat.
+   **Clear cache** and **Clear log and tally**.
+7. **Settings › Developer › Debug log**: an on-screen log of everything (console output, uncaught errors, every
+   fetch with its status code). **Copy** copies it so you can paste it into an issue or a chat.
 
 ## Scoring
 
@@ -83,6 +91,8 @@ On first open the app asks how products should be scored. Both choices can be ch
   pick up later edits.
 - Scores are a guide computed from public data, not medical advice. The additive risk levels are this app's own
   editorial classification informed by public regulatory opinions; additives it does not know get a small penalty.
+- On the result sheet the score is a number with a coloured dot and band word (green for Excellent and Good, orange
+  for Poor, red for Bad, grey for low confidence); the same dot appears next to each entry in the log.
 
 ## Notes
 
@@ -103,6 +113,10 @@ On first open the app asks how products should be scored. Both choices can be ch
   than the two data sources.
 - Safari can delete a site's localStorage after 7 days of Safari use without visiting the site, so export the log
   now and then if the numbers matter to you.
+- Added to the Home Screen, the app runs in standalone mode (`display: standalone` in `manifest.json`). iOS has
+  supported the camera in Home Screen web apps since 13.4, but some versions ask for camera permission again on
+  every launch and there is no reload button; if the camera misbehaves there, open the page in Safari instead. The
+  manifest deliberately has no `start_url`, so an icon made from a `#usda=…`/`#profile=…` link keeps that link.
 - Open Food Facts data is © Open Food Facts contributors, ODbL. USDA FoodData Central data is public domain.
 
 ## Development

@@ -3,214 +3,328 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#0b6b46">
+<meta name="theme-color" content="#F2F2F7" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
 <meta name="color-scheme" content="light dark">
 <meta name="format-detection" content="telephone=no">
 <meta name="referrer" content="no-referrer">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="FoodScanner">
+<meta name="application-name" content="FoodScanner">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
 <title>FoodScanner</title>
 <style>
+/* ------------------------------------------------------------------ tokens
+   iOS semantic colours. Light values are the system ones except where Apple's
+   own value fails 4.5:1 for small text (secondary label, the dark accent, the
+   light green), which are nudged just far enough to pass.                    */
 :root {
   color-scheme: light dark;
-  --bg: #f3f6f4; --card: #ffffff; --text: #15201b; --muted: #5f6d66; --border: #d7dfda;
-  --accent: #0b6b46; --accent-ink: #ffffff; --danger: #b3261e; --warn: #8a5a00; --ok: #0b6b46;
-  --chip: #e6eee9; --input: #ffffff; --dbg-bg: #101613; --dbg-ink: #d7e2db;
-  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --bg: #F2F2F7;                         /* grouped background */
+  --cell: #FFFFFF;                       /* cells, sheet */
+  --fill: #F2F2F7;                       /* fill inside a cell */
+  --fill2: #E5E5EA;                      /* control fill */
+  --label: #000000;
+  --label2: #6E6E73;                     /* secondary label, 5.1:1 on white */
+  --label3: #8E8E93;                     /* icons and grabber only */
+  --sep: rgba(60, 60, 67, 0.29);
+  --accent: #5856D6;                     /* indigo */
+  --accent-fill: #5856D6;
+  --accent-tint: rgba(88, 86, 214, 0.12);
+  --green: #1F7A35; --orange: #B25E00; --red: #D70015;
+  --bar: rgba(249, 249, 249, 0.94);      /* tab bar, nav bars */
+  --seg-track: #E5E5EA; --seg-thumb: #FFFFFF;
+  --toast: rgba(28, 28, 30, 0.92);
+  --cam-mat: rgba(28, 28, 30, 0.62);     /* frosted material over the camera */
+  --safe-t: env(safe-area-inset-top, 0px); --safe-b: env(safe-area-inset-bottom, 0px);
+  --tabbar: 49px;
+  --ease: cubic-bezier(0.32, 0.72, 0, 1);
 }
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #0f1412; --card: #1a211d; --text: #e8ede9; --muted: #9aa8a0; --border: #2c3531;
-    --accent: #2fbf82; --accent-ink: #06281a; --danger: #ff7b70; --warn: #f0b34a; --ok: #2fbf82;
-    --chip: #26302b; --input: #121816; --dbg-bg: #050806; --dbg-ink: #c9d6cf;
+    --bg: #000000; --cell: #1C1C1E; --fill: #2C2C2E; --fill2: #3A3A3C;
+    --label: #FFFFFF; --label2: #98989D; --label3: #8E8E93;
+    --sep: rgba(84, 84, 88, 0.65);
+    --accent: #8A88FF; --accent-fill: #5E5CE6; --accent-tint: rgba(138, 136, 255, 0.14);
+    --green: #30D158; --orange: #FF9F0A; --red: #FF453A;
+    --bar: rgba(29, 29, 31, 0.90);
+    --seg-track: #2C2C2E; --seg-thumb: #636366;
+    --toast: rgba(58, 58, 60, 0.95);
   }
 }
+/* ------------------------------------------------------------------- base */
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html { font-size: 17px; -webkit-text-size-adjust: 100%; }
+@supports (font: -apple-system-body) { html { font: -apple-system-body; } }   /* follows Dynamic Type */
 html, body { margin: 0; padding: 0; }
 body {
-  background: var(--bg); color: var(--text);
-  font: 16px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-  -webkit-text-size-adjust: 100%; min-height: 100vh; min-height: 100dvh;
-  padding-bottom: calc(84px + env(safe-area-inset-bottom));
+  background: var(--bg); color: var(--label);
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  font-size: 1rem; line-height: 1.3; font-variant-numeric: tabular-nums;
+  min-height: 100vh; min-height: 100dvh; overscroll-behavior-y: none;
 }
+body.tab-scan { overflow: hidden; height: 100vh; height: 100dvh; }
 button, input, select, textarea { font: inherit; color: inherit; }
-button { touch-action: manipulation; cursor: pointer; }
-a { color: var(--accent); }
-.top {
-  position: sticky; top: 0; z-index: 20; background: var(--accent); color: var(--accent-ink);
-  padding: calc(10px + env(safe-area-inset-top)) 16px 10px; display: flex; align-items: center; justify-content: space-between; gap: 8px;
-}
-.top h1 { margin: 0; font-size: 20px; font-weight: 700; letter-spacing: 0.2px; }
-.top .ver { font-size: 12px; opacity: 0.8; margin-left: 6px; font-weight: 400; }
-.btn {
-  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
-  min-height: 48px; padding: 10px 16px; border-radius: 12px; border: 1px solid var(--border);
-  background: var(--card); color: var(--text); font-weight: 600; font-size: 16px; text-decoration: none;
-}
-.btn:active { transform: scale(0.98); opacity: 0.9; }
-.btn { white-space: nowrap; }
-#result { scroll-margin-top: calc(70px + env(safe-area-inset-top)); }
-.manual { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border); }
-.btn.primary { background: var(--accent); color: var(--accent-ink); border-color: transparent; }
-.btn.danger { color: var(--danger); }
-.btn.small { min-height: 40px; padding: 6px 12px; font-size: 14px; border-radius: 10px; }
-.btn.block { width: 100%; }
-.btn[disabled] { opacity: 0.5; pointer-events: none; }
-.top .btn { min-height: 38px; padding: 4px 12px; font-size: 14px; background: rgba(255,255,255,0.14); color: var(--accent-ink); border-color: rgba(255,255,255,0.35); }
-.top .btn .badge { background: rgba(255,255,255,0.9); color: #15201b; border-radius: 999px; padding: 0 7px; font-size: 12px; min-width: 20px; text-align: center; }
-main { padding: 12px 16px; max-width: 640px; margin: 0 auto; }
+button { touch-action: manipulation; cursor: pointer; background: none; border: 0; padding: 0; margin: 0; text-align: inherit; }
+a { color: var(--accent); text-decoration: none; }
+p { margin: 0 0 12px; }
+:focus { outline: none; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+input[type=text]:focus-visible, textarea:focus-visible { outline: none; }   /* the caret and keyboard already show focus */
+.hidden { display: none !important; }
+.grow { flex: 1 1 auto; min-width: 0; }
+.foot { font-size: 0.765rem; color: var(--label2); line-height: 1.35; }
+.sub { font-size: 0.882rem; color: var(--label2); }
+.dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--label3); vertical-align: 0.05em; margin-right: 8px; flex: none; }
+.dot.green { background: var(--green); } .dot.orange { background: var(--orange); } .dot.red { background: var(--red); }
+/* --------------------------------------------------------------- screens */
 .tab { display: none; }
 .tab.active { display: block; }
-.card { background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 14px; margin: 0 0 12px; }
-.card h2 { margin: 0 0 10px; font-size: 17px; }
-.row { display: flex; gap: 10px; align-items: center; }
-.row.wrap { flex-wrap: wrap; }
-.row > .grow { flex: 1 1 auto; min-width: 0; }
-.stack > * + * { margin-top: 10px; }
-.muted { color: var(--muted); }
-.small { font-size: 14px; }
-.tiny { font-size: 12px; }
-.mono { font-family: var(--mono); }
-input[type=text], input[type=password], input[type=search], select, textarea {
-  width: 100%; min-height: 48px; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--border);
-  background: var(--input); font-size: 16px; /* 16px prevents iOS zoom-on-focus */
-  -webkit-appearance: none; appearance: none;
+.page { padding: calc(var(--safe-t) + 8px) 16px calc(var(--tabbar) + var(--safe-b) + 28px); max-width: 640px; margin: 0 auto; }
+.page h1 { font-size: 2rem; font-weight: 700; line-height: 1.2; letter-spacing: 0.01em; margin: 12px 0 18px; }
+.group-h { font-size: 0.765rem; color: var(--label2); margin: 0 16px 7px; }
+.group-h span { font-weight: 400; }
+.group { background: var(--cell); border-radius: 10px; margin: 0 0 24px; padding: 0; list-style: none; overflow: hidden; }
+.group-f { font-size: 0.765rem; color: var(--label2); line-height: 1.35; margin: -16px 16px 24px; }
+.group-f + .group-f { margin-top: -18px; }
+.group > * { position: relative; }
+.group > * + *::before { content: ""; position: absolute; left: 16px; right: 0; top: 0; height: 1px; background: var(--sep); transform: scaleY(0.5); transform-origin: 0 0; pointer-events: none; }
+.row { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 44px; padding: 10px 16px; color: var(--label); font-size: 1rem; }
+.row .rl { flex: 1 1 auto; min-width: 0; }
+.row .rl .t { display: block; }
+.row .rl .d { display: block; font-size: 0.765rem; color: var(--label2); margin-top: 2px; line-height: 1.35; }
+.row .rv { flex: none; color: var(--label2); text-align: right; max-width: 60%; }
+.row.act { color: var(--accent); }
+.row.act:active, .row.nav:active { background: var(--fill); }
+.row.destructive { color: var(--red); }
+.row.nav { padding-right: 34px; }
+.row.nav::after { content: ""; position: absolute; right: 14px; top: 50%; width: 8px; height: 8px; border-right: 2px solid var(--label3); border-bottom: 2px solid var(--label3); transform: translateY(-50%) rotate(-45deg); }
+.inline-act { color: var(--accent); font-size: 1rem; min-height: 44px; padding: 0 4px; flex: none; }
+/* ------------------------------------------------------------- controls */
+.btn { display: inline-flex; align-items: center; justify-content: center; min-height: 50px; padding: 12px 20px; border-radius: 12px; background: var(--accent-tint); color: var(--accent); font-weight: 600; font-size: 1rem; white-space: nowrap; text-decoration: none; }
+.btn.primary { background: var(--accent-fill); color: #FFFFFF; }
+.btn.small { min-height: 44px; padding: 8px 16px; font-size: 0.882rem; border-radius: 10px; }
+.btn.block { width: 100%; }
+.btn[disabled] { opacity: 0.4; pointer-events: none; }
+.btn:active { opacity: 0.7; }
+input[type=text], input[type=search], textarea {
+  width: 100%; min-height: 44px; padding: 8px 0; border: 0; background: transparent; color: var(--label);
+  font-size: max(16px, 1rem); -webkit-appearance: none; appearance: none; border-radius: 0;
 }
+input::placeholder, textarea::placeholder { color: var(--label3); }
 input.secret { -webkit-text-security: disc; }
-select { background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='14' height='9' viewBox='0 0 14 9'><path d='M1 1l6 6 6-6' fill='none' stroke='%235f6d66' stroke-width='2'/></svg>"); background-repeat: no-repeat; background-position: right 14px center; padding-right: 40px; }
-textarea { min-height: 120px; font-family: var(--mono); font-size: 16px; line-height: 1.35; }
-label.field { display: block; font-size: 14px; color: var(--muted); margin-bottom: 4px; }
-/* camera */
-.viewport { position: relative; width: 100%; aspect-ratio: 4 / 3; background: #000; border-radius: 16px; overflow: hidden; }
-.viewport video { width: 100%; height: 100%; object-fit: cover; display: block; }
-.viewport .guide {
-  position: absolute; left: 8%; right: 8%; top: 30%; bottom: 30%; border: 3px solid rgba(255,255,255,0.85);
-  border-radius: 12px; box-shadow: 0 0 0 9999px rgba(0,0,0,0.28); pointer-events: none; transition: border-color 0.15s, box-shadow 0.15s;
-}
-.viewport .guide.hit { border-color: #4be08e; box-shadow: 0 0 0 9999px rgba(20,120,60,0.35); }
-.viewport .placeholder {
-  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; text-align: center; padding: 20px;
-  color: #cfd8d2; font-size: 15px;
-}
-.viewport.live .placeholder { display: none; }
-.viewport .guide { display: none; }
+textarea { min-height: 120px; line-height: 1.35; padding: 10px 16px; background: var(--cell); border-radius: 10px; margin: -14px 0 24px; }
+select { -webkit-appearance: none; appearance: none; border: 0; background: transparent; color: var(--label2); font-size: 1rem; padding: 6px 22px 6px 0; direction: rtl; max-width: 60%;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='16' viewBox='0 0 10 16'><path d='M1 6l4-4 4 4M1 10l4 4 4-4' fill='none' stroke='%238E8E93' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/></svg>"); background-repeat: no-repeat; background-position: right center; }
+select option { direction: ltr; }
+input[type=range] { accent-color: var(--accent); width: 100%; margin: 0; }
+.segmented { display: flex; background: var(--seg-track); border-radius: 9px; padding: 2px; }
+.segmented button, .seg-btn { flex: 1 1 0; min-height: 32px; border-radius: 7px; font-size: 0.765rem; font-weight: 500; color: var(--label); text-align: center; padding: 4px 6px; line-height: 1.2; }
+.segmented button[aria-pressed=true], .seg-btn.on { background: var(--seg-thumb); font-weight: 600; }
+.seg { display: flex; background: var(--seg-track); border-radius: 9px; padding: 2px; margin-top: 8px; }
+.seg-btn { min-height: 44px; }
+.seg-btn b { display: block; font-weight: inherit; }
+.seg-btn .lv2 { display: block; font-size: 0.706rem; color: var(--label2); }
+.seg-btn.on .lv2 { color: var(--label); }
+/* ----------------------------------------------------------- scan screen */
+#tab-scan { position: fixed; top: 0; right: 0; bottom: 0; left: 0; background: var(--bg); }
+.viewport { position: absolute; top: 0; right: 0; bottom: 0; left: 0; overflow: hidden; background: var(--bg); }
+.viewport.live { background: #000; }
+.viewport video { width: 100%; height: 100%; object-fit: cover; display: block; opacity: 0; }   /* stays rendered: iOS only decodes a rendered video */
+.viewport.live video { opacity: 1; }
+.viewport .guide { position: absolute; left: 10%; right: 10%; top: 22%; height: 24%; display: none; pointer-events: none; border-radius: 12px; box-shadow: 0 0 0 200vmax rgba(0, 0, 0, 0.45); transition: transform 0.25s var(--ease), box-shadow 0.25s; }
 .viewport.live .guide { display: block; }
-.status { min-height: 22px; font-size: 14px; color: var(--muted); margin: 8px 2px 0; word-break: break-word; }
-.status.err { color: var(--danger); }
-.camctl { margin-top: 10px; }
-.camctl input[type=range] { width: 100%; }
-/* result card */
-.prod { display: flex; gap: 12px; align-items: flex-start; }
-.prod img { width: 84px; height: 84px; object-fit: contain; border-radius: 10px; background: #fff; border: 1px solid var(--border); flex: none; }
-.prod .noimg { width: 84px; height: 84px; border-radius: 10px; background: var(--chip); flex: none; display: flex; align-items: center; justify-content: center; color: var(--muted); font-size: 12px; }
-.prod .name { font-size: 18px; font-weight: 700; line-height: 1.25; word-break: break-word; }
-.prod .brand { color: var(--muted); margin-top: 2px; }
-table.nut { width: 100%; border-collapse: collapse; margin-top: 12px; font-size: 15px; }
-table.nut th, table.nut td { padding: 7px 4px; border-bottom: 1px solid var(--border); text-align: right; white-space: nowrap; }
-table.nut th:first-child, table.nut td:first-child { text-align: left; white-space: normal; }
-table.nut th { font-weight: 600; color: var(--muted); font-size: 13px; }
-table.nut tr.calc td { color: var(--muted); }
-table.cov { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 6px; }
-table.cov th, table.cov td { padding: 4px 4px; border-bottom: 1px solid var(--border); text-align: center; }
-table.cov th:first-child, table.cov td:first-child { text-align: left; }
-.chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
-.chip { background: var(--chip); border-radius: 999px; padding: 3px 10px; font-size: 13px; }
-.chip.ok { background: rgba(11,107,70,0.15); color: var(--ok); }
-.chip.bad { background: rgba(179,38,30,0.12); color: var(--danger); }
-.chip.warn { background: rgba(138,90,0,0.14); color: var(--warn); }
-.kv { margin-top: 10px; font-size: 15px; }
-.kv b { font-weight: 600; }
-.missing { margin: -4px 0 14px; padding: 10px 14px; border-radius: 12px; background: rgba(138,90,0,0.12); color: var(--warn); font-size: 15px; }
-.missing.ok { background: rgba(11,107,70,0.12); color: var(--ok); }
-.missing.bad { background: rgba(179,38,30,0.12); color: var(--danger); }
-details summary { cursor: pointer; font-weight: 600; padding: 6px 0; }
-.ingr { white-space: pre-wrap; font-size: 14px; line-height: 1.4; margin: 4px 0 0; word-break: break-word; }
-.nutri { display: inline-block; min-width: 26px; text-align: center; border-radius: 6px; padding: 1px 6px; font-weight: 700; color: #fff; }
-.nutri.a { background: #038141; } .nutri.b { background: #85bb2f; } .nutri.c { background: #fecb02; color: #15201b; } .nutri.d { background: #ee8100; } .nutri.e { background: #e63e11; }
-/* tally */
-.tally { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
-.tally .tile { background: var(--chip); border-radius: 12px; padding: 10px 8px; text-align: center; }
-.tally .tile .n { font-size: 24px; font-weight: 700; line-height: 1.1; }
-.tally .tile .l { font-size: 12px; color: var(--muted); margin-top: 2px; }
-.loglist { list-style: none; margin: 0; padding: 0; }
-.loglist li { padding: 10px 4px; border-bottom: 1px solid var(--border); display: flex; gap: 10px; align-items: center; cursor: pointer; }
-.loglist li .grow { flex: 1 1 auto; min-width: 0; }
-.loglist li .t { font-size: 12px; color: var(--muted); }
-.loglist li .nm { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.loglist li .bc { font-family: var(--mono); font-size: 13px; color: var(--muted); }
-.loglist li .flags { display: flex; gap: 4px; flex-wrap: wrap; justify-content: flex-end; }
-.loglist li .flags .chip { font-size: 11px; padding: 2px 7px; }
-/* bottom nav */
-nav.tabs {
-  position: fixed; left: 0; right: 0; bottom: 0; z-index: 20; display: flex; background: var(--card); border-top: 1px solid var(--border);
-  padding-bottom: env(safe-area-inset-bottom);
-}
-nav.tabs button { flex: 1; min-height: 60px; border: 0; background: transparent; color: var(--muted); font-size: 13px; font-weight: 600; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; }
-nav.tabs button .ic { font-size: 22px; line-height: 1; }
+.guide .c { position: absolute; width: 24px; height: 24px; border: 0 solid #FFFFFF; transition: border-color 0.15s; }
+.guide .c.tl { left: -1px; top: -1px; border-top-width: 2.5px; border-left-width: 2.5px; border-top-left-radius: 12px; }
+.guide .c.tr { right: -1px; top: -1px; border-top-width: 2.5px; border-right-width: 2.5px; border-top-right-radius: 12px; }
+.guide .c.bl { left: -1px; bottom: -1px; border-bottom-width: 2.5px; border-left-width: 2.5px; border-bottom-left-radius: 12px; }
+.guide .c.br { right: -1px; bottom: -1px; border-bottom-width: 2.5px; border-right-width: 2.5px; border-bottom-right-radius: 12px; }
+.guide.hit { transform: scale(0.96); box-shadow: 0 0 0 200vmax rgba(0, 0, 0, 0.3); }
+.guide.hit .c { border-color: #30D158; }
+.placeholder { position: absolute; left: 0; right: 0; top: 0; height: 56%; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; text-align: center; padding: calc(var(--safe-t) + 24px) 32px 8px; }
+.viewport.live .placeholder { display: none; }
+.placeholder .glyph { width: 64px; height: 64px; color: var(--label3); margin-bottom: 12px; }
+.placeholder .glyph svg { width: 100%; height: 100%; display: block; }
+.placeholder h2 { font-size: 1.294rem; font-weight: 700; margin: 0 0 6px; }
+.placeholder .btn { margin-top: 14px; min-width: 180px; }
+.status { font-size: 0.765rem; color: var(--label2); line-height: 1.35; word-break: break-word; }
+.status.err { color: var(--red); }
+.status.quiet { display: none; }
+.viewport:not(.live) .status { position: absolute; left: 32px; right: 32px; top: 56%; text-align: center; margin-top: 4px; }
+.viewport.live .status { position: absolute; left: 50%; top: calc(var(--safe-t) + 12px); transform: translateX(-50%); width: max-content; max-width: calc(100% - 32px); z-index: 2;
+  padding: 7px 14px; border-radius: 999px; background: var(--cam-mat); color: #FFFFFF; text-align: center; -webkit-backdrop-filter: blur(20px) saturate(180%); backdrop-filter: blur(20px) saturate(180%); }
+.viewport.live .status.err { color: #FF6B60; }
+.scan-ui { position: absolute; left: 16px; right: 16px; bottom: calc(var(--tabbar) + var(--safe-b) + 16px + var(--sheet-up, 0px)); z-index: 3; transition: bottom 0.42s var(--ease); display: flex; flex-direction: column; gap: 10px; align-items: stretch; max-width: 608px; margin: 0 auto; }
+.manual { display: flex; align-items: center; gap: 8px; background: var(--cell); border-radius: 12px; padding: 2px 8px 2px 16px; }
+.manual input { flex: 1 1 auto; min-width: 0; }
+.viewport.live + .scan-ui .manual { background: var(--cam-mat); -webkit-backdrop-filter: blur(20px) saturate(180%); backdrop-filter: blur(20px) saturate(180%); }
+.viewport.live + .scan-ui .manual input { color: #FFFFFF; }
+.viewport.live + .scan-ui .manual input::placeholder { color: rgba(255, 255, 255, 0.6); }
+.viewport.live + .scan-ui .manual .inline-act { color: #FFFFFF; }
+.scan-ctl { display: none; justify-content: center; align-items: center; gap: 10px; flex-wrap: wrap; }
+.viewport.live + .scan-ui .scan-ctl { display: flex; }
+.cam-btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 44px; min-width: 44px; padding: 0 18px; border-radius: 999px; background: var(--cam-mat); color: #FFFFFF; font-weight: 600; font-size: 0.882rem; -webkit-backdrop-filter: blur(20px) saturate(180%); backdrop-filter: blur(20px) saturate(180%); }
+.cam-btn.icon { padding: 0; width: 44px; }
+.cam-btn.icon svg { width: 22px; height: 22px; display: block; }
+.cam-btn[aria-pressed=true] { background: rgba(255, 255, 255, 0.92); color: #000000; }
+.cam-btn:active { opacity: 0.7; }
+.camctl { display: contents; }
+#zoomWrap { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 14px; border-radius: 999px; background: var(--cam-mat); color: #FFFFFF; font-size: 0.765rem; -webkit-backdrop-filter: blur(20px) saturate(180%); backdrop-filter: blur(20px) saturate(180%); }
+#zoomWrap input[type=range] { width: 110px; }
+/* -------------------------------------------------------------- result sheet */
+.sheet { position: fixed; left: 0; right: 0; bottom: calc(var(--tabbar) + var(--safe-b)); top: calc(var(--safe-t) + 10px); z-index: 30; max-width: 640px; margin: 0 auto;
+  background: var(--cell); border-radius: 16px 16px 0 0; display: flex; flex-direction: column; transform: translateY(100%); visibility: hidden; will-change: transform;
+  transition: transform 0.42s var(--ease), visibility 0s linear 0.42s; }
+.sheet.open { visibility: visible; transition: transform 0.42s var(--ease), visibility 0s; }
+.sheet.dragging { transition: none; }
+body:not(.tab-scan) .sheet { visibility: hidden; transform: translateY(100%) !important; transition: none; }
+.sheet-grab { flex: none; height: 26px; display: flex; align-items: center; justify-content: center; touch-action: none; cursor: grab; }
+.grabber { width: 36px; height: 5px; border-radius: 3px; background: var(--label3); opacity: 0.5; }
+.sheet-close { position: absolute; right: 6px; top: 4px; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; color: var(--label2); z-index: 2; }
+.sheet-close svg { width: 30px; height: 30px; display: block; }
+.sheet-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; padding: 0 16px 28px; }
+.sheet:not([data-snap=full]) .sheet-body { overflow: hidden; }
+.sh-head { display: flex; gap: 14px; align-items: center; padding: 4px 44px 14px 0; }
+.thumb { width: 64px; height: 64px; border-radius: 8px; object-fit: contain; background: #FFFFFF; flex: none; box-shadow: inset 0 0 0 1px var(--sep); }
+.thumb.noimg { background: var(--fill); color: var(--label3); display: flex; align-items: center; justify-content: center; }
+.thumb.noimg svg { width: 28px; height: 28px; }
+.sh-head .name { font-size: 1.294rem; font-weight: 700; line-height: 1.2; word-break: break-word; }
+.sh-head .brand { font-size: 0.882rem; color: var(--label2); margin-top: 2px; }
+.sh-head .meta { font-size: 0.765rem; color: var(--label2); margin-top: 3px; }
+.sec { padding: 14px 0; position: relative; }
+.sec + .sec::before, .sec.sep::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 1px; background: var(--sep); transform: scaleY(0.5); transform-origin: 0 0; }
+.sec-h { font-size: 0.765rem; color: var(--label2); margin-bottom: 8px; }
+.sec-f { font-size: 0.765rem; color: var(--label2); margin-top: 8px; line-height: 1.35; }
+.score-row { display: flex; align-items: center; gap: 14px; }
+.score-n { font-size: 1.647rem; font-weight: 700; line-height: 1; min-width: 2.2em; }
+.score-n.none { color: var(--label3); }
+.band { font-size: 1rem; font-weight: 600; display: flex; align-items: center; }
+.why { list-style: none; margin: 10px 0 0; padding: 0; font-size: 0.882rem; }
+.why li { padding: 3px 0; display: flex; gap: 8px; }
+.why .sign { flex: none; width: 1em; text-align: center; font-weight: 600; }
+.why .pos .sign { color: var(--green); } .why .neg .sign { color: var(--red); }
+.lowconf { font-size: 0.765rem; color: var(--orange); margin-top: 6px; }
+details.disc { margin-top: 6px; }
+details.disc summary { list-style: none; display: flex; align-items: center; min-height: 44px; font-size: 1rem; cursor: pointer; position: relative; padding-right: 26px; }
+details.disc summary::-webkit-details-marker { display: none; }
+details.disc summary::after { content: ""; position: absolute; right: 8px; top: 50%; width: 8px; height: 8px; border-right: 2px solid var(--label3); border-bottom: 2px solid var(--label3); transform: translateY(-60%) rotate(45deg); transition: transform 0.2s; }
+details.disc[open] summary::after { transform: translateY(-30%) rotate(-135deg); }
+details.disc summary .rv { margin-left: auto; color: var(--label2); font-size: 0.882rem; }
+table.sc, table.cov { width: 100%; border-collapse: collapse; font-size: 0.765rem; }
+table.sc th, table.sc td, table.cov th, table.cov td { padding: 8px 4px; text-align: right; vertical-align: top; border-top: 1px solid var(--sep); }
+table.sc th, table.cov th { font-weight: 400; color: var(--label2); border-top: 0; }
+table.sc th:first-child, table.sc td:first-child, table.cov th:first-child, table.cov td:first-child { text-align: left; padding-left: 0; }
+table.cov td, table.cov th { text-align: center; }
+table.cov .has { color: var(--green); } table.cov .no { color: var(--label3); }
+.avoid-row { display: flex; align-items: center; min-height: 32px; font-size: 1rem; }
+.avoid-row.warn { color: var(--label); } .avoid-row.caution { color: var(--label); }
+.nut-hero { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 14px 0 6px; }
+.nut-hero .hl { font-size: 1rem; font-weight: 600; }
+.nut-hero .hv { font-size: 1.647rem; font-weight: 700; line-height: 1; }
+.nlist { list-style: none; margin: 0; padding: 0; }
+.nlist li { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 44px; padding: 8px 0; border-top: 1px solid var(--sep); font-size: 1rem; }
+.nlist li .v { color: var(--label2); }
+.nut.basis-s .v.h, .nut.basis-h .v.s { display: none; }
+.missing { display: flex; align-items: center; min-height: 40px; padding: 6px 0 0; font-size: 0.882rem; color: var(--label2); border-top: 1px solid var(--sep); }
+.missing.bad { color: var(--label); }
+.ingr { white-space: pre-wrap; font-size: 0.882rem; line-height: 1.4; margin: 0 0 8px; word-break: break-word; }
+.kv { list-style: none; margin: 0; padding: 0; }
+.kv li { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; min-height: 44px; padding: 8px 0; border-top: 1px solid var(--sep); font-size: 1rem; }
+.kv li:first-child { border-top: 0; }
+.kv li .k { flex: none; }
+.kv li .v { color: var(--label2); text-align: right; min-width: 0; word-break: break-word; }
+.kv li .v.wrap { text-align: right; }
+.nutri { display: inline-block; min-width: 26px; text-align: center; border-radius: 6px; padding: 2px 7px; font-weight: 700; font-size: 0.882rem; color: #FFFFFF; }
+.nutri.a { background: #038141; } .nutri.b { background: #85BB2F; color: #000000; } .nutri.c { background: #FECB02; color: #000000; } .nutri.d { background: #EE8100; color: #000000; } .nutri.e { background: #CC3A12; }
+.chips { display: inline-flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; }
+.chip { background: var(--fill); border-radius: 999px; padding: 3px 10px; font-size: 0.765rem; color: var(--label); }
+.src { list-style: none; margin: 0; padding: 0; }
+.src li { display: flex; align-items: flex-start; gap: 10px; min-height: 44px; padding: 8px 0; border-top: 1px solid var(--sep); font-size: 1rem; }
+.src li:first-child { border-top: 0; }
+.src li .dot { margin-top: 0.45em; }
+.src li .d { font-size: 0.765rem; color: var(--label2); margin-top: 2px; word-break: break-word; }
+.actions { display: flex; flex-wrap: wrap; gap: 8px; padding-top: 14px; }
+.actions .btn { flex: 1 1 auto; }
+.state { display: flex; flex-direction: column; align-items: center; text-align: center; padding: 8px 8px 12px; }
+.state .glyph { width: 44px; height: 44px; margin-bottom: 8px; }
+.state .glyph svg { width: 100%; height: 100%; }
+.state.red .glyph { color: var(--red); }
+.state h3 { font-size: 1.294rem; font-weight: 700; margin: 0 0 4px; }
+.state .code { font-size: 0.882rem; color: var(--label2); }
+.spinner { width: 20px; height: 20px; border-radius: 50%; border: 2px solid var(--fill2); border-top-color: var(--accent); animation: spin 0.8s linear infinite; flex: none; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.loading { display: flex; align-items: center; gap: 12px; min-height: 60px; padding: 8px 0 16px; font-size: 1rem; }
+/* ----------------------------------------------------------------- log */
+.loglist li { display: flex; align-items: center; gap: 12px; min-height: 44px; padding: 10px 16px; cursor: pointer; }
+.loglist li.empty { color: var(--label2); font-size: 0.882rem; cursor: default; }
+.loglist li:active { background: var(--fill); }
+.loglist .nm { font-size: 1rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.loglist .d { font-size: 0.765rem; color: var(--label2); margin-top: 2px; line-height: 1.35; }
+.loglist .d.warn { color: var(--orange); } .loglist .d.bad { color: var(--red); }
+.loglist .srcs { display: flex; gap: 10px; }
+.loglist .srcs span { display: inline-flex; align-items: center; }
+.loglist .sc { flex: none; text-align: right; }
+.loglist .sc .n { font-size: 1rem; font-weight: 600; display: flex; align-items: center; justify-content: flex-end; }
+.loglist .sc .m { font-size: 0.706rem; color: var(--label2); }
+/* --------------------------------------------------------------- tab bar */
+nav.tabs { position: fixed; left: 0; right: 0; bottom: 0; z-index: 40; display: flex; justify-content: center; background: var(--bar); -webkit-backdrop-filter: blur(20px) saturate(180%); backdrop-filter: blur(20px) saturate(180%); padding-bottom: var(--safe-b); }
+nav.tabs::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 1px; background: var(--sep); transform: scaleY(0.5); transform-origin: 0 0; }
+nav.tabs button { flex: 1 1 0; max-width: 200px; height: var(--tabbar); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; color: var(--label2); font-size: 0.647rem; font-weight: 500; }
+nav.tabs button svg { width: 26px; height: 26px; display: block; }
 nav.tabs button.active { color: var(--accent); }
-/* debug panel */
-#dbgPanel {
-  position: fixed; left: 0; right: 0; bottom: 0; z-index: 30; background: var(--dbg-bg); color: var(--dbg-ink);
-  max-height: 45vh; display: none; flex-direction: column; border-top: 2px solid var(--accent);
-  padding-bottom: env(safe-area-inset-bottom);
-}
-#dbgPanel.open { display: flex; height: 45vh; }
-#dbgPanel .bar { display: flex; gap: 8px; align-items: center; padding: 8px 12px; border-bottom: 1px solid #2c3531; flex: none; }
-#dbgPanel .bar .btn { min-height: 36px; padding: 4px 10px; font-size: 13px; background: #1d2622; color: var(--dbg-ink); border-color: #3a4640; }
-#dbgLines { flex: 1 1 auto; overflow: auto; -webkit-overflow-scrolling: touch; padding: 6px 10px; font-family: var(--mono); font-size: 11px; line-height: 1.35; }
-#dbgLines div { white-space: pre-wrap; word-break: break-all; border-bottom: 1px solid rgba(255,255,255,0.05); padding: 2px 0; }
-#dbgLines .warn { color: #f0b34a; } #dbgLines .error { color: #ff7b70; } #dbgLines .net { color: #7cc4ff; } #dbgLines .log { color: var(--dbg-ink); }
-/* toast */
-#toast { position: fixed; left: 50%; bottom: calc(96px + env(safe-area-inset-bottom)); transform: translateX(-50%); background: #15201b; color: #fff; padding: 10px 16px; border-radius: 999px; font-size: 14px; z-index: 70; opacity: 0; transition: opacity 0.2s; pointer-events: none; max-width: 90vw; text-align: center; }
-#toast.show { opacity: 0.95; }
-.hidden { display: none !important; }
-/* score */
-.scorebox { display: flex; gap: 12px; align-items: center; margin-top: 12px; padding: 10px 12px; border-radius: 14px; background: var(--chip); }
-.scoreval { min-width: 66px; text-align: center; font-size: 30px; font-weight: 800; line-height: 1; padding: 10px 6px; border-radius: 12px; color: #fff; flex: none; }
-.scoreval.band-excellent { background: #038141; } .scoreval.band-good { background: #6aa41f; } .scoreval.band-poor { background: #ee8100; } .scoreval.band-bad { background: #e63e11; } .scoreval.band-none { background: var(--muted); } .scoreval.band-low { background: #8a7a4a; }
-.scoreband { font-weight: 700; font-size: 17px; }
-.why { margin-top: 8px; }
-.why div { padding: 2px 0; }
-.why .pos { color: var(--ok); } .why .neg { color: var(--danger); }
-table.sc { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 6px; }
-table.sc th, table.sc td { padding: 4px 4px; border-bottom: 1px solid var(--border); text-align: right; vertical-align: top; }
-table.sc th:first-child, table.sc td:first-child { text-align: left; }
-.chip.sc-excellent { background: rgba(3,129,65,0.18); color: #038141; } .chip.sc-good { background: rgba(106,164,31,0.2); color: #4d7a12; } .chip.sc-poor { background: rgba(238,129,0,0.18); color: #b35f00; } .chip.sc-bad { background: rgba(230,62,17,0.16); color: #c23411; }
-/* onboarding / scoring setup */
-#onboard { position: fixed; inset: 0; z-index: 60; background: var(--bg); overflow: auto; -webkit-overflow-scrolling: touch; display: none; padding: calc(16px + env(safe-area-inset-top)) 16px calc(24px + env(safe-area-inset-bottom)); }
+/* ---------------------------------------------------------- modal screens */
+.modal { position: fixed; top: 0; right: 0; bottom: 0; left: 0; z-index: 60; background: var(--bg); display: none; flex-direction: column; }
+.modal.open { display: flex; }
+.navbar { flex: none; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: calc(var(--safe-t) + 4px) 8px 4px; background: var(--bar); -webkit-backdrop-filter: blur(20px) saturate(180%); backdrop-filter: blur(20px) saturate(180%); position: relative; }
+.navbar::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 1px; background: var(--sep); transform: scaleY(0.5); transform-origin: 0 100%; }
+.navbar .title { font-size: 1rem; font-weight: 600; flex: 1 1 auto; text-align: center; }
+.navbar .side { flex: 1 1 0; display: flex; gap: 4px; }
+.navbar .side.r { justify-content: flex-end; }
+.navbar button { color: var(--accent); font-size: 1rem; min-height: 44px; padding: 0 10px; }
+.navbar button.bold { font-weight: 600; }
+#dbgLines { flex: 1 1 auto; overflow: auto; -webkit-overflow-scrolling: touch; padding: 8px 16px calc(var(--safe-b) + 16px); font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.706rem; line-height: 1.4; }
+#dbgLines div { white-space: pre-wrap; word-break: break-all; padding: 3px 0; border-bottom: 1px solid var(--sep); }
+#dbgLines .warn { color: var(--orange); } #dbgLines .error { color: var(--red); } #dbgLines .net { color: var(--accent); } #dbgLines .log { color: var(--label); }
+/* --------------------------------------------------------------- toast */
+#toast { position: fixed; left: 50%; bottom: calc(var(--tabbar) + var(--safe-b) + 16px); transform: translate(-50%, 6px); background: var(--toast); color: #FFFFFF; padding: 10px 16px; border-radius: 999px; font-size: 0.882rem; z-index: 70; opacity: 0; transition: opacity 0.2s, transform 0.2s; pointer-events: none; max-width: calc(100vw - 32px); text-align: center; }
+#toast.show { opacity: 1; transform: translate(-50%, 0); }
+/* ----------------------------------------------------- scoring setup */
+#onboard { position: fixed; top: 0; right: 0; bottom: 0; left: 0; z-index: 50; background: var(--bg); overflow: auto; -webkit-overflow-scrolling: touch; display: none; padding: calc(var(--safe-t) + 16px) 16px calc(var(--safe-b) + 28px); }
 #onboard.open { display: block; }
-body.ob-open { overflow: hidden; }
+body.ob-open, body.dbg-open { overflow: hidden; }
 .ob-inner { max-width: 560px; margin: 0 auto; }
-.ob-inner h2 { font-size: 22px; margin: 8px 0 6px; }
-.ob-progress { font-size: 13px; color: var(--muted); margin-bottom: 4px; }
-.ob-choice, .ob-opt { display: block; width: 100%; text-align: left; background: var(--card); border: 2px solid var(--border); border-radius: 14px; padding: 14px 16px; margin: 10px 0; font-size: 16px; color: var(--text); cursor: pointer; }
-.ob-choice b { display: block; font-size: 18px; margin-bottom: 4px; }
-.ob-opt.selected { border-color: var(--accent); background: rgba(11,107,70,0.08); }
-.ob-opt .tick { float: right; color: var(--accent); font-weight: 700; }
-.ob-opt b { display: block; }
-.ob-opt .desc { display: block; margin-top: 2px; }
-.ob-row { padding: 10px 0; border-bottom: 1px solid var(--border); }
-.ob-row .wl { display: block; font-size: 16px; margin-bottom: 6px; }
-.ob-row.all { border-bottom: 2px solid var(--border); }
-.ob-row.all .wl { font-size: 14px; }
-.seg { display: flex; border: 2px solid var(--border); border-radius: 12px; overflow: hidden; background: var(--card); }
-.seg-btn { flex: 1 1 0; background: var(--card); color: var(--text); border: 0; padding: 10px 4px; font-size: 14px; line-height: 1.2; cursor: pointer; }
-.seg-btn + .seg-btn { border-left: 2px solid var(--border); }
-.seg-btn b { display: block; font-weight: 600; }
-.seg-btn .lv2 { display: block; font-size: 12px; opacity: 0.8; }
-.seg-btn.on { background: var(--accent); color: var(--accent-ink); }
-.seg-btn.on b { font-weight: 700; }
-.ob-group { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; margin: 16px 0 -4px; }
-.avoid { margin-top: 10px; }
-.avoid .chips { margin-top: 4px; }
-.ob-nav { display: flex; gap: 10px; margin-top: 16px; }
-.ob-field { margin: 10px 0; }
-.ob-field label { display: block; font-size: 14px; color: var(--muted); margin-bottom: 4px; }
-.wrow { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--border); }
-.wrow .wl { flex: 1 1 auto; }
-.wrow input[type=range] { width: 140px; }
-.wrow .wv { width: 18px; text-align: right; font-weight: 700; }
-body.dbg-open { padding-bottom: calc(45vh + 84px + env(safe-area-inset-bottom)); }
-body.dbg-open nav.tabs { bottom: 45vh; padding-bottom: 0; }
-body.dbg-open #toast { bottom: calc(45vh + 96px + env(safe-area-inset-bottom)); }
+.ob-inner h2 { font-size: 1.647rem; font-weight: 700; line-height: 1.2; margin: 6px 0 8px; }
+.ob-inner p { font-size: 0.882rem; color: var(--label2); line-height: 1.4; }
+.ob-inner p.warn { color: var(--orange); }
+.ob-progress { font-size: 0.765rem; color: var(--label2); }
+.ob-choice { display: block; width: 100%; background: var(--cell); border-radius: 10px; padding: 14px 16px; margin: 0 0 12px; }
+.ob-choice b { display: block; font-size: 1rem; font-weight: 600; margin-bottom: 3px; }
+.ob-choice .small { display: block; font-size: 0.765rem; color: var(--label2); line-height: 1.35; }
+.ob-choice:active { background: var(--fill); }
+.ob-opt { display: block; width: 100%; min-height: 44px; padding: 11px 44px 11px 16px; background: var(--cell); color: var(--label); font-size: 1rem; }
+.ob-opt:active { background: var(--fill); }
+.ob-opt b { display: block; font-weight: 400; }
+.ob-opt .desc { display: block; font-size: 0.765rem; color: var(--label2); margin-top: 2px; line-height: 1.35; }
+.ob-opt .tick { position: absolute; right: 16px; top: 50%; width: 22px; height: 22px; transform: translateY(-50%); background: var(--accent); -webkit-mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 22 22'><path d='M5 11.5l4 4 8-9' fill='none' stroke='black' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'/></svg>") center / contain no-repeat; mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 22 22'><path d='M5 11.5l4 4 8-9' fill='none' stroke='black' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'/></svg>") center / contain no-repeat; }
+.ob-group { font-size: 0.765rem; color: var(--label2); margin: 0 16px 7px; }
+.ob-row { padding: 12px 16px; background: var(--cell); }
+.ob-row .wl { display: block; font-size: 1rem; }
+.ob-row.all .wl { font-size: 0.882rem; color: var(--label2); }
+.ob-nav { display: flex; gap: 10px; margin-top: 20px; }
+.ob-nav .btn { flex: 1 1 0; }
+.wrow { display: flex; align-items: center; gap: 12px; min-height: 44px; padding: 10px 16px; background: var(--cell); font-size: 1rem; }
+.wrow .wl { flex: 1 1 auto; min-width: 0; }
+.wrow .wl .foot { display: block; }
+.wrow input[type=range] { width: 130px; flex: none; }
+.wrow .wv { width: 22px; text-align: right; font-weight: 600; flex: none; }
+/* -------------------------------------------------------------- motion */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { transition: none !important; animation: none !important; }
+  .spinner { border-top-color: var(--fill2); border-color: var(--accent); }
+}
+@media (hover: hover) { .row.act:hover, .row.nav:hover, .loglist li:hover { background: var(--fill); } }
 </style>
 <script>
 /* ---------------------------------------------------------------------------
@@ -288,141 +402,130 @@ body.dbg-open #toast { bottom: calc(45vh + 96px + env(safe-area-inset-bottom)); 
 })();
 </script>
 </head>
-<body>
-<header class="top">
-  <h1>FoodScanner <span class="ver" id="verLabel"></span></h1>
-  <button class="btn" id="dbgToggle" type="button" aria-label="Toggle debug log">Debug <span class="badge" id="dbgCount">0</span></button>
-</header>
-
+<body class="tab-scan">
 <main>
-  <!-- ============================== SCAN TAB ============================== -->
+  <!-- ============================== SCAN ============================== -->
   <section class="tab active" id="tab-scan">
-    <div class="card">
-      <div class="viewport" id="viewport">
-        <video id="video" playsinline muted autoplay></video>
-        <div class="guide" id="guide"></div>
-        <div class="placeholder" id="placeholder">Tap <b>&nbsp;Start camera&nbsp;</b> and point at a barcode</div>
+    <div class="viewport" id="viewport">
+      <video id="video" playsinline muted autoplay></video>
+      <div class="guide" id="guide" aria-hidden="true"><span class="c tl"></span><span class="c tr"></span><span class="c bl"></span><span class="c br"></span></div>
+      <div class="status" id="camStatus" role="status"></div>
+      <div class="placeholder" id="placeholder">
+        <div class="glyph" aria-hidden="true"><svg viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 20v-6a8 8 0 0 1 8-8h6M44 6h6a8 8 0 0 1 8 8v6M58 44v6a8 8 0 0 1-8 8h-6M20 58h-6a8 8 0 0 1-8-8v-6"/><path d="M20 24v16M27 24v16M34 24v16M41 24v16M44 24v16" stroke-width="3"/></svg></div>
+        <h2>Point at a barcode</h2>
+        <button class="btn primary" id="btnStart" type="button">Start camera</button>
       </div>
-      <div class="status" id="camStatus">Camera off.</div>
-      <div class="row" style="margin-top:10px">
-        <button class="btn primary grow" id="btnStart" type="button">Start camera</button>
-        <button class="btn grow hidden" id="btnStop" type="button">Stop camera</button>
-        <button class="btn grow hidden" id="btnTypeCode" type="button" aria-controls="manualForm" aria-expanded="false">Type a barcode</button>
-      </div>
-      <div class="camctl hidden" id="camCtl">
-        <div class="row wrap">
-          <button class="btn small hidden" id="btnTorch" type="button">Torch</button>
-          <label class="grow hidden" id="zoomWrap"><span class="small muted">Zoom</span> <input type="range" id="zoom" min="1" max="1" step="0.1" value="1"></label>
-        </div>
-      </div>
+    </div>
+    <div class="scan-ui">
       <form class="manual" id="manualForm" autocomplete="off" novalidate>
-        <label class="field" for="manualCode">Or type a barcode</label>
-        <div class="row">
-          <input class="grow" type="text" id="manualCode" inputmode="numeric" pattern="[0-9]*" placeholder="e.g. 049000028911" enterkeyhint="search">
-          <button class="btn primary" id="btnLookup" type="submit">Look up</button>
-        </div>
-        <div class="tiny muted" style="margin-top:6px">EAN-13, UPC-A (12), EAN-8 or UPC-E (8 digits). Cached lookups are instant.</div>
+        <input type="text" id="manualCode" inputmode="numeric" pattern="[0-9]*" placeholder="Or enter a code" aria-label="Barcode" enterkeyhint="search">
+        <button class="inline-act" id="btnLookup" type="submit">Look up</button>
       </form>
-    </div>
-
-    <div id="result"></div>
-    <div id="missingLine"></div>
-  </section>
-
-  <!-- ============================== LOG TAB ============================== -->
-  <section class="tab" id="tab-log">
-    <div class="card">
-      <h2>Coverage tally</h2>
-      <div class="tally" id="tally"></div>
-      <div class="tiny muted" style="margin-top:8px" id="tallyNote"></div>
-    </div>
-    <div class="card">
-      <div class="row wrap">
-        <button class="btn grow" id="btnExport" type="button">Export log (copy CSV)</button>
-        <button class="btn grow hidden" id="btnShare" type="button">Share CSV</button>
+      <div class="scan-ctl">
+        <div class="camctl hidden" id="camCtl">
+          <button class="cam-btn icon hidden" id="btnTorch" type="button" aria-label="Torch" aria-pressed="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M13 2 4 14h6l-1 8 9-12h-6l1-8z"/></svg></button>
+          <label class="hidden" id="zoomWrap"><span>Zoom</span><input type="range" id="zoom" min="1" max="1" step="0.1" value="1" aria-label="Zoom"></label>
+        </div>
+        <button class="cam-btn hidden" id="btnTypeCode" type="button" aria-controls="manualForm" aria-expanded="false">Enter a code</button>
+        <button class="cam-btn hidden" id="btnStop" type="button">Stop camera</button>
       </div>
-      <textarea id="exportBox" class="hidden" readonly style="margin-top:10px" aria-label="CSV export"></textarea>
-    </div>
-    <div class="card">
-      <h2>Scan log <span class="muted small" id="logCount"></span></h2>
-      <ul class="loglist" id="logList"></ul>
     </div>
   </section>
 
-  <!-- ============================== SETTINGS TAB ============================== -->
-  <section class="tab" id="tab-settings">
-    <div class="card stack">
-      <h2>Scoring</h2>
-      <div class="small" id="scoringInfo"></div>
-      <div class="row wrap">
-        <button class="btn primary grow" id="btnScoring" type="button">Change scoring</button>
-        <button class="btn grow hidden" id="btnWeights" type="button">Adjust weights</button>
-      </div>
-      <div class="row wrap">
-        <button class="btn grow hidden" id="btnCopyProfile" type="button">Copy link with my profile</button>
-      </div>
-      <div class="tiny muted">Scores are a guide computed from the data the sources provide, not medical advice. Additive risk levels are this app's own editorial classification.</div>
+  <!-- ============================== LOG ============================== -->
+  <section class="tab page" id="tab-log">
+    <h1>Log</h1>
+    <div class="group-h">Coverage</div>
+    <div class="group" id="tally"></div>
+    <div class="group-f" id="tallyNote"></div>
+    <div class="group">
+      <button class="row act" id="btnExport" type="button">Copy log as CSV</button>
+      <button class="row act hidden" id="btnShare" type="button">Share CSV</button>
     </div>
+    <textarea id="exportBox" class="hidden" readonly aria-label="CSV export"></textarea>
+    <div class="group-h">History</div>
+    <ul class="group loglist" id="logList"></ul>
+  </section>
 
-    <div class="card stack">
-      <h2>USDA FoodData Central</h2>
-      <div class="small muted">Optional second source. The key is stored only in this browser's localStorage and sent only to api.nal.usda.gov. <a href="https://fdc.nal.usda.gov/api-key-signup" target="_blank" rel="noopener noreferrer">Get a free API key</a>.</div>
-      <label class="field" for="usdaKey">USDA API key</label>
+  <!-- ============================== SETTINGS ============================== -->
+  <section class="tab page" id="tab-settings">
+    <h1>Settings</h1>
+    <div class="group-h">Scoring</div>
+    <div class="group">
+      <div id="scoringInfo"></div>
+      <button class="row act" id="btnScoring" type="button">Change scoring</button>
+      <button class="row act hidden" id="btnWeights" type="button">Adjust weights</button>
+      <button class="row act hidden" id="btnCopyProfile" type="button">Copy link with my profile</button>
+    </div>
+    <div class="group-f">Scores are a guide computed from the data the sources provide, not medical advice. Additive risk levels are this app's own editorial classification.</div>
+
+    <div class="group-h">USDA FoodData Central</div>
+    <div class="group">
       <div class="row">
-        <input class="grow secret" type="text" id="usdaKey" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="paste key">
-        <button class="btn small" id="btnShowKey" type="button">Show</button>
+        <input class="secret" type="text" id="usdaKey" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="API key" aria-label="USDA API key">
+        <button class="inline-act" id="btnShowKey" type="button" aria-label="Show key">Show</button>
       </div>
-      <div class="row wrap">
-        <button class="btn primary grow" id="btnSaveKey" type="button">Save key</button>
-        <button class="btn grow" id="btnTestKey" type="button">Test key</button>
-        <button class="btn danger" id="btnRemoveKey" type="button">Remove</button>
-      </div>
-      <div class="small" id="keyStatus"></div>
-      <div class="tiny muted" id="linkHint"></div>
-      <div class="row wrap">
-        <button class="btn grow hidden" id="btnCopyLink" type="button">Copy link with my key</button>
-      </div>
+      <button class="row act" id="btnSaveKey" type="button">Save key</button>
+      <button class="row act" id="btnTestKey" type="button">Test key</button>
+      <button class="row act destructive" id="btnRemoveKey" type="button">Remove key</button>
+      <button class="row act hidden" id="btnCopyLink" type="button">Copy link with my key</button>
     </div>
+    <div class="group-f" id="keyStatus"></div>
+    <div class="group-f" id="linkHint"></div>
+    <div class="group-f">Optional second source. The key is stored only in this browser and sent only to api.nal.usda.gov. <a href="https://fdc.nal.usda.gov/api-key-signup" target="_blank" rel="noopener noreferrer">Get a free API key</a>.</div>
 
-    <div class="card stack">
-      <h2>Scanner</h2>
-      <label class="field" for="decoderPref">Barcode decoder</label>
-      <select id="decoderPref">
-        <option value="auto">Auto (native if available, else ZXing)</option>
-        <option value="zxing">ZXing only</option>
-      </select>
-      <div class="small muted" id="decoderInfo"></div>
+    <div class="group-h">Scanner</div>
+    <div class="group">
+      <label class="row" for="decoderPref"><span class="rl"><span class="t">Barcode decoder</span></span>
+        <select id="decoderPref"><option value="auto">Automatic</option><option value="zxing">ZXing only</option></select>
+      </label>
     </div>
+    <div class="group-f" id="decoderInfo"></div>
 
-    <div class="card stack">
-      <h2>Storage</h2>
-      <div class="small muted" id="storageInfo"></div>
-      <div class="row wrap">
-        <button class="btn grow" id="btnClearCache" type="button">Clear cache</button>
-        <button class="btn grow danger" id="btnClearLog" type="button">Clear log &amp; tally</button>
-      </div>
+    <div class="group-h">Storage</div>
+    <div class="group">
+      <button class="row act" id="btnClearCache" type="button">Clear cache</button>
+      <button class="row act destructive" id="btnClearLog" type="button">Clear log and tally</button>
     </div>
+    <div class="group-f" id="storageInfo"></div>
 
-    <div class="card stack small muted">
-      <div><b>FoodScanner</b> v<span id="verLabel2"></span> &middot; scores products and tests source coverage.</div>
-      <div>Sources: <a href="https://world.openfoodfacts.org" target="_blank" rel="noopener noreferrer">Open Food Facts</a> (ODbL) and <a href="https://fdc.nal.usda.gov" target="_blank" rel="noopener noreferrer">USDA FoodData Central</a>.</div>
+    <div class="group-h">Developer</div>
+    <div class="group">
+      <button class="row nav" id="dbgToggle" type="button" aria-haspopup="dialog"><span class="rl"><span class="t">Debug log</span></span><span class="rv" id="dbgCount">0</span></button>
     </div>
+    <div class="group-f">Console output, uncaught errors and every request with its status code.</div>
+
+    <div class="group-h">About</div>
+    <div class="group">
+      <div class="row"><span class="rl"><span class="t">Version</span></span><span class="rv" id="verLabel"></span></div>
+      <a class="row nav" href="https://world.openfoodfacts.org" target="_blank" rel="noopener noreferrer"><span class="rl"><span class="t">Open Food Facts</span><span class="d">Open Database License</span></span></a>
+      <a class="row nav" href="https://fdc.nal.usda.gov" target="_blank" rel="noopener noreferrer"><span class="rl"><span class="t">USDA FoodData Central</span><span class="d">Public domain</span></span></a>
+    </div>
+    <div class="group-f">FoodScanner scores products and tests how well the public food databases cover what you buy.</div>
   </section>
 </main>
 
-<nav class="tabs" id="tabs">
-  <button type="button" data-tab="scan" class="active"><span class="ic">&#128247;</span>Scan</button>
-  <button type="button" data-tab="log"><span class="ic">&#128203;</span>Log</button>
-  <button type="button" data-tab="settings"><span class="ic">&#9881;&#65039;</span>Settings</button>
+<div class="sheet" id="sheet" role="region" aria-label="Result" data-snap="hidden">
+  <div class="sheet-grab" id="sheetGrab"><span class="grabber"></span></div>
+  <button class="sheet-close" id="sheetClose" type="button" aria-label="Close"><svg viewBox="0 0 30 30" aria-hidden="true"><circle cx="15" cy="15" r="15" fill="currentColor" opacity="0.18"/><path d="M10.5 10.5l9 9M19.5 10.5l-9 9" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg></button>
+  <div class="sheet-body" id="sheetBody">
+    <div id="result"></div>
+    <div id="missingLine"></div>
+    <div id="resultMore"></div>
+  </div>
+</div>
+
+<nav class="tabs" id="tabs" aria-label="Sections">
+  <button type="button" data-tab="scan" class="active" aria-current="page"><svg viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 9V6a3 3 0 0 1 3-3h3M17 3h3a3 3 0 0 1 3 3v3M23 17v3a3 3 0 0 1-3 3h-3M9 23H6a3 3 0 0 1-3-3v-3"/><path d="M8 9v8M11.5 9v8M15 9v8M18 9v8"/></svg>Scan</button>
+  <button type="button" data-tab="log"><svg viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="20" height="20" rx="4"/><path d="M8 9h10M8 13h10M8 17h6"/></svg>Log</button>
+  <button type="button" data-tab="settings"><svg viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="13" cy="13" r="3.2"/><path d="M13 2.5l2 2.6 3.2-.9.9 3.2 2.6 2-1.6 2.9 1.6 2.9-2.6 2-.9 3.2-3.2-.9-2 2.6-2-2.6-3.2.9-.9-3.2-2.6-2 1.6-2.9-1.6-2.9 2.6-2 .9-3.2 3.2.9z"/></svg>Settings</button>
 </nav>
 
-<div id="dbgPanel" aria-label="Debug log">
-  <div class="bar">
-    <b class="small">Debug log</b>
-    <span class="grow"></span>
-    <button class="btn" id="dbgCopy" type="button">Copy log</button>
-    <button class="btn" id="dbgClear" type="button">Clear</button>
-    <button class="btn" id="dbgClose" type="button">Close</button>
+<div class="modal" id="dbgPanel" role="dialog" aria-modal="true" aria-label="Debug log">
+  <div class="navbar">
+    <div class="side"><button id="dbgClose" type="button">Done</button></div>
+    <div class="title">Debug log</div>
+    <div class="side r"><button id="dbgClear" type="button">Clear</button><button class="bold" id="dbgCopy" type="button">Copy</button></div>
   </div>
   <div id="dbgLines"></div>
 </div>
@@ -439,7 +542,7 @@ body.dbg-open #toast { bottom: calc(45vh + 96px + env(safe-area-inset-bottom)); 
 (function () {
 'use strict';
 
-var APP_VERSION = '0.3.0';
+var APP_VERSION = '0.4.0';
 var OFF_BASE = 'https://world.openfoodfacts.org/api/v2/product/';
 var OFF_FIELDS = ['code', 'product_name', 'product_name_en', 'generic_name', 'brands', 'quantity', 'serving_size', 'serving_quantity',
   'serving_quantity_unit', 'nutrition_data_per', 'nutriments', 'ingredients_text', 'ingredients_text_en', 'nova_group',
@@ -510,6 +613,10 @@ function fmtVal(v, unit) {
   return s + (unit === 'kcal' ? '' : ' ' + unit);
 }
 function digitsOnly(s) { return String(s || '').replace(/\D/g, ''); }
+function capitalize(s) { s = String(s || ''); return s.charAt(0).toUpperCase() + s.slice(1); }
+// Inline glyphs (app-authored SVG, used through h()'s html attribute).
+var SVG_PHOTO = '<svg viewBox="0 0 28 28" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="22" height="18" rx="3"/><circle cx="10" cy="11" r="2"/><path d="M25 18l-6-6-9 9"/></svg>';
+var SVG_ALERT = '<svg viewBox="0 0 44 44" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><circle cx="22" cy="22" r="18"/><path d="M22 13v11"/><circle cx="22" cy="30.5" r="1.4" fill="currentColor" stroke="none"/></svg>';
 function emptyNut() { var o = {}; NUT_KEYS.forEach(function (k) { o[k] = null; }); return o; }
 function now() { return Date.now(); }
 function isoNow() { return new Date().toISOString(); }
@@ -974,38 +1081,44 @@ function toCSV(entries) {
 }
 function renderTally() {
   var t = tally, el = clear($('tally'));
-  [['Scans', t.total], ['Found in OFF', t.off], ['Found in USDA', t.usda], ['Found in neither', t.neither], ['Found, incomplete', t.incomplete], ['Lookup errors', t.errors || 0]]
-    .forEach(function (x) { el.appendChild(h('div', { class: 'tile' }, [h('div', { class: 'n', text: String(x[1]) }), h('div', { class: 'l', text: x[0] })])); });
+  [['Scans', t.total], ['Found in Open Food Facts', t.off], ['Found in USDA', t.usda], ['Found in neither', t.neither], ['Found but incomplete', t.incomplete], ['Lookup errors', t.errors || 0]]
+    .forEach(function (x) { el.appendChild(h('div', { class: 'row' }, [h('span', { class: 'rl' }, h('span', { class: 't', text: x[0] })), h('span', { class: 'rv', text: String(x[1]) })])); });
   var uniq = {};
   scanLog.forEach(function (e) { uniq[e.barcode] = 1; });
-  $('tallyNote').textContent = 'Every lookup counts as a scan (cached repeats included). Unique barcodes in log: ' + Object.keys(uniq).length + '. "Incomplete" = found but missing serving size, carbs, sugars, fiber, protein or ingredients. Safari may clear this data after 7 days without a visit — export now and then. Scores in the log are from the scoring profile in use at scan time; "?" marks low confidence.';
+  var n = Object.keys(uniq).length;
+  $('tallyNote').textContent = 'Every lookup counts, cached repeats included; ' + n + ' unique barcode' + (n === 1 ? '' : 's') + ' in the log. Incomplete means a found product is missing serving size, carbs, sugars, fiber, protein or ingredients. Scores use the scoring profile in force at scan time. Safari can clear this data after 7 days without a visit, so export it now and then.';
 }
+function originWord(o) { return o === 'scan' ? 'scanned' : o === 'manual' ? 'typed' : o === 'refetch' ? 'refreshed' : o === 'log' ? 'reopened' : (o || ''); }
+function statusColor(s) { return s === 'found' ? 'green' : s === 'error' ? 'orange' : s === 'skipped' ? '' : 'red'; }
+function bandColor(key) { return key === 'excellent' || key === 'good' ? 'green' : key === 'poor' ? 'orange' : key === 'bad' ? 'red' : ''; }
 function renderLog() {
   var ul = clear($('logList'));
-  $('logCount').textContent = scanLog.length ? '(' + scanLog.length + ')' : '';
-  if (!scanLog.length) { ul.appendChild(h('li', { class: 'muted small', text: 'No scans yet.' })); return; }
+  if (!scanLog.length) { ul.appendChild(h('li', { class: 'empty', text: 'No scans yet. Every lookup is listed here.' })); return; }
   scanLog.slice(0, 200).forEach(function (e) {
-    var flags = h('div', { class: 'flags' });
-    flags.appendChild(h('span', { class: 'chip ' + (e.off === 'found' ? 'ok' : e.off === 'error' ? 'warn' : 'bad'), text: 'OFF ' + statusMark(e.off) }));
-    if (e.usda !== 'skipped') flags.appendChild(h('span', { class: 'chip ' + (e.usda === 'found' ? 'ok' : e.usda === 'error' ? 'warn' : 'bad'), text: 'USDA ' + statusMark(e.usda) }));
-    var hasMissing = (e.off === 'found' || e.usda === 'found') && e.missing && e.missing.length;
-    if (hasMissing) flags.appendChild(h('span', { class: 'chip warn', text: 'missing ' + e.missing.length }));
-    if (e.warnings && e.warnings.length) flags.appendChild(h('span', { class: 'chip bad', text: '⚠ ' + e.warnings.length }));
-    if (e.score !== null && e.score !== undefined) { var sb = bandOf(e.score); flags.appendChild(h('span', { class: e.lowConfidence ? 'chip warn' : 'chip sc-' + sb.key, text: (e.scoreMode === 'custom' ? 'custom ' : 'std ') + e.score + (e.lowConfidence ? '?' : '') })); }
-    var li = h('li', { onclick: function () { showTab('scan'); handleCode(e.barcode, e.format || null, 'log'); } }, [
+    var found = e.off === 'found' || e.usda === 'found';
+    var srcs = h('span', { class: 'srcs' }, [h('span', {}, [h('span', { class: 'dot ' + statusColor(e.off) }), 'OFF'])]);
+    if (e.usda !== 'skipped') srcs.appendChild(h('span', {}, [h('span', { class: 'dot ' + statusColor(e.usda) }), 'USDA']));
+    var hasMissing = found && e.missing && e.missing.length;
+    var right = h('div', { class: 'sc' });
+    if (e.score !== null && e.score !== undefined) {
+      var sb = bandOf(e.score);
+      right.appendChild(h('div', { class: 'n' }, [h('span', { class: 'dot ' + (e.lowConfidence ? '' : bandColor(sb.key)) }), String(e.score)]));
+      right.appendChild(h('div', { class: 'm', text: (e.scoreMode === 'custom' ? 'Custom' : 'Standard') + (e.lowConfidence ? ', low confidence' : '') }));
+    }
+    function open() { showTab('scan'); handleCode(e.barcode, e.format || null, 'log'); }
+    var li = h('li', { role: 'button', tabindex: '0', onclick: open, onkeydown: function (ev) { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); open(); } } }, [
       h('div', { class: 'grow' }, [
-        h('div', { class: 'nm', text: e.name || (e.off === 'found' || e.usda === 'found' ? '(unnamed)' : (e.off === 'error' || e.usda === 'error') ? 'Lookup failed' : 'Not found') }),
-        h('div', { class: 'bc', text: e.barcode + (e.cached ? ' · cached' : '') }),
-        hasMissing ? h('div', { class: 't', style: 'color:var(--warn)', text: 'missing: ' + e.missing.join(', ') }) : null,
-        (e.warnings && e.warnings.length) ? h('div', { class: 't', style: 'color:var(--danger)', text: e.warnings.join(' · ') }) : null,
-        h('div', { class: 't', text: shortTime(e.ts) + (e.origin ? ' · ' + e.origin : '') })
+        h('div', { class: 'nm', text: e.name || (found ? '(unnamed)' : (e.off === 'error' || e.usda === 'error') ? 'Lookup failed' : 'Not found') }),
+        h('div', { class: 'd', text: e.barcode + (e.cached ? ', cached' : '') }),
+        h('div', { class: 'd' }, [srcs, ' ' + shortTime(e.ts) + (e.origin ? ', ' + originWord(e.origin) : '')]),
+        hasMissing ? h('div', { class: 'd warn', text: 'Missing ' + e.missing.join(', ') }) : null,
+        (e.warnings && e.warnings.length) ? h('div', { class: 'd bad', text: e.warnings.join(', ') }) : null
       ]),
-      flags,
-      h('span', { class: 'muted', text: '›', 'aria-hidden': 'true' })
+      right
     ]);
     ul.appendChild(li);
   });
-  if (scanLog.length > 200) ul.appendChild(h('li', { class: 'muted small', text: 'Showing the latest 200 of ' + scanLog.length + ' entries. Export includes all.' }));
+  if (scanLog.length > 200) ul.appendChild(h('li', { class: 'empty', text: 'Showing the latest 200 of ' + scanLog.length + ' entries. The CSV export includes all of them.' }));
 }
 function statusMark(s) { return s === 'found' ? '✓' : s === 'not_found' ? '✗' : s === 'error' ? '!' : '–'; }
 
@@ -1263,7 +1376,7 @@ function customScore(m, e, prof) {
     .sort(function (a, b) { return b.weight - a.weight; }).slice(0, 3);
   var missing = rows.filter(function (r) { return r.s === null; }).map(function (r) { return r.label.toLowerCase(); });
   return { mode: 'custom', score: score, band: bandOf(score), rows: rows, why: why,
-    coverageNote: (missing.length ? 'based on ' + (rows.length - missing.length) + ' of ' + rows.length + ' weighted factors' : '') + (drink ? (missing.length ? ' · ' : '') + 'drink cut-offs per 100 ml' : ''),
+    coverageNote: (missing.length ? 'based on ' + (rows.length - missing.length) + ' of ' + rows.length + ' weighted factors' : '') + (drink ? (missing.length ? ', ' : '') + 'drink cut-offs per 100 ml' : ''),
     lowConfidence: totalW > 0 && missW / totalW > 0.4, missingNote: missing.length ? 'no data for ' + missing.join(', ') : '',
     reason: score !== null ? '' : (!wsum ? 'none of your weighted factors has data' : !informative ? 'only the organic label is known' : 'too little data for your weighted factors' + (missing.length ? ' (no data for ' + missing.join(', ') + ')' : '')) };
 }
@@ -1404,25 +1517,27 @@ function avoidFlags(m, e, prof) {
   return { warn: warn, caution: caution, ok: ok };
 }
 function renderAvoid(av) {
-  var chips = [];
-  av.warn.forEach(function (t) { chips.push(h('span', { class: 'chip bad', text: '⚠ ' + t })); });
-  av.caution.forEach(function (t) { chips.push(h('span', { class: 'chip warn', text: t })); });
-  if (!chips.length) chips.push(h('span', { class: 'chip ok', text: 'Clear: ' + av.ok.join(', ') }));
-  return h('div', { class: 'avoid' }, [h('div', { class: 'tiny muted', text: 'Your avoid list (does not change the score)' }), h('div', { class: 'chips' }, chips)]);
+  var rows = [];
+  av.warn.forEach(function (t) { rows.push(h('div', { class: 'avoid-row warn' }, [h('span', { class: 'dot red' }), t])); });
+  av.caution.forEach(function (t) { rows.push(h('div', { class: 'avoid-row caution' }, [h('span', { class: 'dot orange' }), t])); });
+  if (!rows.length) rows.push(h('div', { class: 'avoid-row' }, [h('span', { class: 'dot green' }), 'Clear: ' + av.ok.join(', ')]));
+  return h('section', { class: 'sec avoid' }, [h('div', { class: 'sec-h', text: 'Avoid list' }), h('div', {}, rows), h('div', { class: 'sec-f', text: 'Does not change the score.' })]);
 }
 function renderScore(sc) {
-  var wrap = h('div', { class: 'scorewrap' });
+  var sec = h('section', { class: 'sec score' });
   if (sc.score === null) {
-    wrap.appendChild(h('div', { class: 'scorebox' }, [h('div', { class: 'scoreval band-none', text: '–' }), h('div', { class: 'grow small muted', text: 'No score: ' + sc.reason + '.' })]));
-    return wrap;
+    sec.appendChild(h('div', { class: 'score-row' }, [h('div', { class: 'score-n none', text: '–', 'aria-hidden': 'true' }), h('div', { class: 'grow' }, [h('div', { class: 'band', text: 'No score' }), h('div', { class: 'foot', text: capitalize(sc.reason) + '.' })])]));
+    return sec;
   }
-  var label = sc.mode === 'standard' ? 'Standard score' : 'Custom score · ' + ((profile && profile.name) || 'custom');
-  wrap.appendChild(h('div', { class: 'scorebox' }, [
-    h('div', { class: 'scoreval band-' + (sc.lowConfidence ? 'low' : sc.band.key), text: String(sc.score) }),
-    h('div', { class: 'grow' }, [h('div', { class: 'scoreband', text: (sc.lowConfidence ? 'Low confidence' : sc.band.label) + ' (' + sc.score + '/100)' }), h('div', { class: 'tiny muted', text: label + (sc.coverageNote ? ' · ' + sc.coverageNote : '') })])
+  var foot = [h('div', { class: 'foot', text: sc.mode === 'standard' ? 'Standard score' : 'Custom score' })];
+  if (sc.mode === 'custom') foot.push(h('div', { class: 'foot', text: (profile && profile.name) || 'custom' }));
+  if (sc.coverageNote) foot.push(h('div', { class: 'foot', text: capitalize(sc.coverageNote) + '.' }));
+  sec.appendChild(h('div', { class: 'score-row' }, [
+    h('div', { class: 'score-n', text: String(sc.score), 'aria-label': 'Score ' + sc.score + ' of 100' }),
+    h('div', { class: 'grow' }, [h('div', { class: 'band' }, [h('span', { class: 'dot ' + (sc.lowConfidence ? '' : bandColor(sc.band.key)) }), sc.lowConfidence ? 'Low confidence' : sc.band.label])].concat(foot))
   ]));
-  if (sc.why && sc.why.length) wrap.appendChild(h('div', { class: 'why' }, sc.why.slice(0, 3).map(function (w) { return h('div', { class: 'small ' + (w.positive ? 'pos' : 'neg'), text: (w.positive ? '+ ' : '− ') + w.text }); })));
-  if (sc.lowConfidence) wrap.appendChild(h('div', { class: 'tiny', style: 'margin-top:4px;color:var(--warn)', text: 'Low confidence — ' + (sc.missingNote || 'key data is missing') + '.' }));
+  if (sc.why && sc.why.length) sec.appendChild(h('ul', { class: 'why' }, sc.why.slice(0, 3).map(function (w) { return h('li', { class: w.positive ? 'pos' : 'neg' }, [h('span', { class: 'sign', 'aria-hidden': 'true', text: w.positive ? '+' : '−' }), h('span', { text: w.text })]); })));
+  if (sc.lowConfidence) sec.appendChild(h('div', { class: 'lowconf', text: 'Low confidence: ' + (sc.missingNote || 'key data is missing') + '.' }));
   var tbl = h('table', { class: 'sc' });
   if (sc.mode === 'standard') {
     tbl.appendChild(h('tr', {}, [h('th', { text: 'Component' }), h('th', { text: 'Points' })]));
@@ -1431,9 +1546,9 @@ function renderScore(sc) {
     tbl.appendChild(h('tr', {}, [h('th', { text: 'Factor' }), h('th', { text: 'Weight' }), h('th', { text: 'Score' })]));
     sc.rows.forEach(function (r) { tbl.appendChild(h('tr', {}, [h('td', { text: r.label + (r.text ? ' — ' + r.text : '') }), h('td', { text: String(r.w) }), h('td', { text: r.s === null ? '–' : String(r.s) })])); });
   }
-  wrap.appendChild(h('details', {}, [h('summary', { class: 'small', text: 'Score details' }), tbl,
-    h('div', { class: 'tiny muted', style: 'margin-top:6px', text: 'Scores are a guide computed from public data, not medical advice. Additive risk levels are this app\'s own editorial classification.' })]));
-  return wrap;
+  sec.appendChild(h('details', { class: 'disc' }, [h('summary', { text: 'Details' }), tbl,
+    h('div', { class: 'sec-f', text: 'Scores are a guide computed from public data, not medical advice. Additive risk levels are this app\'s own editorial classification.' })]));
+  return sec;
 }
 
 /* ------------------------------------------------- scoring profile & setup */
@@ -1534,7 +1649,7 @@ function answersToProfile(a) {
   return { mode: 'custom', version: 3, name: profileNameFor(a), weights: w, dirs: dirs, thresholds: scaleThresholds(a.strict, dirs),
     avoid: a.avoid.filter(function (k) { return k !== 'organic'; }), answers: a };
 }
-function profileName(p) { if (!p) return 'not chosen'; return p.mode === 'standard' ? 'Standard' : 'Custom · ' + (p.name || 'custom'); }
+function profileName(p) { if (!p) return 'not chosen'; return p.mode === 'standard' ? 'Standard' : 'Custom: ' + (p.name || 'custom'); }
 // Anything read from storage or a link is normalised to a safe shape (weights 0–5, valid thresholds, known avoid keys).
 function sanitizeProfile(p) {
   if (!p || typeof p !== 'object' || Array.isArray(p)) return null;
@@ -1592,11 +1707,11 @@ function renderOnboarding() {
   if (ob.step === 'weights') { renderWeightsEditor(box); return; }
   if (ob.step === 0) {
     box.appendChild(h('h2', { text: 'How should products be scored?' }));
-    box.appendChild(h('p', { class: 'muted', text: 'Every product gets a 0–100 score. Use the standard score, or tailor one to your own goals. You can change this any time in Settings. Scores are a guide from public data, not medical advice.' }));
+    box.appendChild(h('p', { text: 'Every product gets a 0–100 score. Use the standard score, or tailor one to your own goals. You can change this any time in Settings. Scores are a guide from public data, not medical advice.' }));
     box.appendChild(h('button', { class: 'ob-choice', type: 'button', id: 'obStandard', onclick: function () { saveProfile({ mode: 'standard', version: 1 }); closeOnboarding(); toast('Standard scoring on'); } },
-      [h('b', {}, 'Standard'), h('span', { class: 'small muted', text: 'Nutritional quality via Nutri-Score (50%), additives weighed by risk level (25%), NOVA processing (15%) and organic certification (10%).' })]));
+      [h('b', {}, 'Standard'), h('span', { class: 'small', text: 'Nutritional quality via Nutri-Score (50%), additives weighed by risk level (25%), NOVA processing (15%) and organic certification (10%).' })]));
     box.appendChild(h('button', { class: 'ob-choice', type: 'button', id: 'obCustom', onclick: function () { ob.step = 1; renderOnboarding(); } },
-      [h('b', {}, 'Customize'), h('span', { class: 'small muted', text: 'Five quick questions — what to limit, what to get more of, how strong each preference is, processing, and what to avoid — build a personal score. Nothing to type.' })]));
+      [h('b', {}, 'Customize'), h('span', { class: 'small', text: 'Five quick questions build a personal score: what to limit, what to get more of, how strong each preference is, processing, and what to avoid. Nothing to type.' })]));
     if (profile) box.appendChild(h('button', { class: 'btn block', type: 'button', id: 'obKeep', onclick: closeOnboarding }, 'Keep current: ' + profileName(profile)));
     return;
   }
@@ -1608,27 +1723,30 @@ function renderQuestion(box, q, qi) {
   var a = ob.answers;
   box.appendChild(h('div', { class: 'ob-progress', text: 'Question ' + (qi + 1) + ' of ' + QUESTIONS.length }));
   box.appendChild(h('h2', { text: q.title }));
-  if (q.hint) box.appendChild(h('p', { class: 'muted small', text: q.hint }));
+  if (q.hint) box.appendChild(h('p', { text: q.hint }));
   function refocus(optValue) {   // after a re-render, put keyboard / VoiceOver focus back on the same control
     var nb = $('obInner').querySelector('[data-opt="' + optValue + '"]');
     if (nb) { try { nb.focus({ preventScroll: true }); } catch (e) { nb.focus(); } }
   }
-  // opt = [value, label, description?]; the tick comes first so it floats beside the label
+  // opt = [value, label, description?]; a selected row carries an accent checkmark on the right
   function optNode(opt, selected, onTap) {
     return h('button', { class: 'ob-opt' + (selected ? ' selected' : ''), type: 'button', 'data-opt': opt[0], 'aria-pressed': String(selected), onclick: function () { onTap(); refocus(opt[0]); } }, [
-      selected ? h('span', { class: 'tick', text: '✓' }) : null,
       opt[2] ? h('b', { text: opt[1] }) : opt[1],
-      opt[2] ? h('span', { class: 'small muted desc', text: opt[2] }) : null
+      opt[2] ? h('span', { class: 'desc', text: opt[2] }) : null,
+      selected ? h('span', { class: 'tick', 'aria-hidden': 'true' }) : null
     ]);
   }
   if (q.type === 'single') {
-    q.options.forEach(function (opt) { box.appendChild(optNode(opt, a[q.id] === opt[0], function () { a[q.id] = opt[0]; renderOnboarding(); })); });
+    var g1 = h('div', { class: 'group' });
+    q.options.forEach(function (opt) { g1.appendChild(optNode(opt, a[q.id] === opt[0], function () { a[q.id] = opt[0]; renderOnboarding(); })); });
+    box.appendChild(g1);
   } else if (q.type === 'multi') {
     var items = q.id === 'more' ? q.options.filter(function (o) { return a.limit.indexOf(o[0]) < 0; }) : q.options;   // limited nutrients are not offered as "more of"
     (q.groups || [{ items: items }]).forEach(function (g) {
       if (g.group) box.appendChild(h('div', { class: 'ob-group', text: g.group }));
+      var gg = h('div', { class: 'group' });
       g.items.forEach(function (opt) {
-        box.appendChild(optNode(opt, a[q.id].indexOf(opt[0]) >= 0, function () {
+        gg.appendChild(optNode(opt, a[q.id].indexOf(opt[0]) >= 0, function () {
           var i = a[q.id].indexOf(opt[0]);
           if (i >= 0) a[q.id].splice(i, 1); else a[q.id].push(opt[0]);
           if (q.id === 'limit') a.more = a.more.filter(function (k) { return a.limit.indexOf(k) < 0; });
@@ -1638,10 +1756,11 @@ function renderQuestion(box, q, qi) {
           renderOnboarding();
         }));
       });
+      box.appendChild(gg);
     });
   } else if (q.type === 'strictness') {
     var picked = pickedNutrients(a);
-    if (!picked.length) box.appendChild(h('p', { class: 'small', style: 'color:var(--warn)', text: 'You have not picked any nutrients. Go back to pick some, or continue to score on processing and additives only.' }));
+    if (!picked.length) box.appendChild(h('p', { class: 'warn', text: 'You have not picked any nutrients. Go back to pick some, or continue to score on processing and additives only.' }));
     else {
       // one slight / medium / strict control per pick, plus a row that sets them all at once
       function seg(key, label, cur, onPick) {
@@ -1651,20 +1770,22 @@ function renderQuestion(box, q, qi) {
           return h('button', { class: 'seg-btn' + (on ? ' on' : ''), type: 'button', 'data-opt': key + ':' + lv, 'aria-pressed': String(on), onclick: function () { onPick(lv); renderOnboarding(); refocus(key + ':' + lv); } }, [h('b', { text: words[0] }), ' ', h('span', { class: 'lv2', text: words.slice(1).join(' ') })]);
         }));
       }
+      var gs = h('div', { class: 'group' });
       var allSame = picked.every(function (k) { return (a.strict[k] || 'medium') === (a.strict[picked[0]] || 'medium'); });
-      box.appendChild(h('div', { class: 'ob-row all' }, [h('span', { class: 'wl small muted', text: 'Set all picks to' }), seg('all', 'All picks', allSame ? (a.strict[picked[0]] || 'medium') : null, function (lv) { picked.forEach(function (k) { a.strict[k] = lv; }); })]));
+      gs.appendChild(h('div', { class: 'ob-row all' }, [h('span', { class: 'wl', text: 'Set all picks to' }), seg('all', 'All picks', allSame ? (a.strict[picked[0]] || 'medium') : null, function (lv) { picked.forEach(function (k) { a.strict[k] = lv; }); })]));
       picked.forEach(function (k) {
         var phrase = nutrientPhrase(a, k);
-        box.appendChild(h('div', { class: 'ob-row' }, [h('span', { class: 'wl', text: phrase.charAt(0).toUpperCase() + phrase.slice(1) }), seg(k, phrase, a.strict[k] || 'medium', function (lv) { a.strict[k] = lv; })]));
+        gs.appendChild(h('div', { class: 'ob-row' }, [h('span', { class: 'wl', text: phrase.charAt(0).toUpperCase() + phrase.slice(1) }), seg(k, phrase, a.strict[k] || 'medium', function (lv) { a.strict[k] = lv; })]));
       });
+      box.appendChild(gs);
       var pw = pickWeights(a);
-      box.appendChild(h('p', { class: 'tiny muted', text: 'Weights: ' + picked.map(function (k) { return nutrientLabel(k).toLowerCase() + ' ' + pw[k]; }).join(', ') + '.' }));
+      box.appendChild(h('p', { class: 'foot', text: 'Weights: ' + picked.map(function (k) { return nutrientLabel(k).toLowerCase() + ' ' + pw[k]; }).join(', ') + '.' }));
     }
   }
   var canNext = q.type !== 'single' || !!a[q.id];
   box.appendChild(h('div', { class: 'ob-nav' }, [
-    h('button', { class: 'btn grow', type: 'button', id: 'obBack', onclick: function () { ob.step = ob.step - 1; renderOnboarding(); $('onboard').scrollTop = 0; } }, 'Back'),
-    h('button', { class: 'btn primary grow', type: 'button', id: 'obNext', disabled: canNext ? null : 'disabled', onclick: function () { ob.step = ob.step + 1; renderOnboarding(); $('onboard').scrollTop = 0; } }, qi + 1 === QUESTIONS.length ? 'See my profile' : 'Next')
+    h('button', { class: 'btn', type: 'button', id: 'obBack', onclick: function () { ob.step = ob.step - 1; renderOnboarding(); $('onboard').scrollTop = 0; } }, 'Back'),
+    h('button', { class: 'btn primary', type: 'button', id: 'obNext', disabled: canNext ? null : 'disabled', onclick: function () { ob.step = ob.step + 1; renderOnboarding(); $('onboard').scrollTop = 0; } }, qi + 1 === QUESTIONS.length ? 'See my profile' : 'Next')
   ]));
 }
 function cutoffText(x, unit) { return ((unit === 'kcal' || unit === 'mg') ? Math.round(x) : Math.round(x * 100) / 100) + ' ' + unit; }   // exact, unlike the 1-decimal display rounding
@@ -1677,47 +1798,49 @@ function renderSummary(box) {
   var p = answersToProfile(ob.answers), total = 0, informative = 0;
   METRICS.forEach(function (met) { var w = p.weights[met.key] || 0; total += w; if (met.key !== 'organic') informative += w; });   // an organic label alone never gives a score
   box.appendChild(h('h2', { text: 'Your scoring profile: ' + p.name }));
-  if (!informative) box.appendChild(h('p', { class: 'small', style: 'color:var(--warn)', text: 'Nothing that can be scored is weighted yet' + (total ? ' (an organic label alone gives no score)' : '') + '. Go back and pick at least one nutrient or a processing preference.' }));
-  else box.appendChild(h('p', { class: 'muted small', text: 'Products are scored 0–100 on these factors. Strict preferences weigh 5, medium 3, slight 1; a strict preference also halves the limit cut-offs and raises the targets by 1.5×. Fine-tune the weights later under Settings › Adjust weights.' }));
-  var list = h('div');
+  if (!informative) box.appendChild(h('p', { class: 'warn', text: 'Nothing that can be scored is weighted yet' + (total ? ' (an organic label alone gives no score)' : '') + '. Go back and pick at least one nutrient or a processing preference.' }));
+  else box.appendChild(h('p', { text: 'Products are scored 0–100 on these factors. Strict preferences weigh 5, medium 3, slight 1; a strict preference also halves the limit cut-offs and raises the targets by 1.5×. You can fine-tune the weights later in Settings.' }));
+  var list = h('div', { class: 'group' });
   METRICS.slice().sort(function (x, y) { return (p.weights[y.key] || 0) - (p.weights[x.key] || 0); }).forEach(function (met) {   // heaviest first
     var w = p.weights[met.key] || 0;
     if (!w) return;
     var dir = metricDir(p, met), tt = thresholdText(met, p.thresholds, dir), lv = p.answers.strict[met.key];
-    list.appendChild(h('div', { class: 'wrow' }, [h('span', { class: 'wl' }, [met.label + (dir !== met.dir ? ' (more is better)' : ''), tt ? h('span', { class: 'tiny muted', text: ' — ' + (lv ? STRICTNESS[lv].label.toLowerCase() + ' · ' : '') + tt }) : null]), h('span', { class: 'wv', text: String(w) })]));
+    list.appendChild(h('div', { class: 'wrow' }, [h('span', { class: 'wl' }, [met.label + (dir !== met.dir ? ' (more is better)' : ''), tt ? h('span', { class: 'foot', text: (lv ? STRICTNESS[lv].label + '. ' : '') + capitalize(tt) }) : null]), h('span', { class: 'wv', text: String(w) })]));
   });
   box.appendChild(list);
-  if (p.avoid.length) box.appendChild(h('p', { class: 'small muted', text: 'Warnings for: ' + p.avoid.map(function (k) { return AVOID_LABEL[k].toLowerCase(); }).join(', ') + '. These do not change the score.' }));
+  if (p.avoid.length) box.appendChild(h('p', { text: 'Warnings for: ' + p.avoid.map(function (k) { return AVOID_LABEL[k].toLowerCase(); }).join(', ') + '. These do not change the score.' }));
   box.appendChild(h('div', { class: 'ob-nav' }, [
-    h('button', { class: 'btn grow', type: 'button', id: 'obBack', onclick: function () { ob.step = QUESTIONS.length; renderOnboarding(); $('onboard').scrollTop = 0; } }, 'Back'),
-    h('button', { class: 'btn primary grow', type: 'button', id: 'obUse', disabled: informative ? null : 'disabled', onclick: function () { saveProfile(p); closeOnboarding(); toast('Custom scoring on'); } }, 'Use this profile')
+    h('button', { class: 'btn', type: 'button', id: 'obBack', onclick: function () { ob.step = QUESTIONS.length; renderOnboarding(); $('onboard').scrollTop = 0; } }, 'Back'),
+    h('button', { class: 'btn primary', type: 'button', id: 'obUse', disabled: informative ? null : 'disabled', onclick: function () { saveProfile(p); closeOnboarding(); toast('Custom scoring on'); } }, 'Use this profile')
   ]));
 }
 function renderWeightsEditor(box) {
   if (!profile || profile.mode !== 'custom') { closeOnboarding(); return; }   // only custom profiles have weights
   var draft = JSON.parse(JSON.stringify(profile));
   box.appendChild(h('h2', { text: 'Adjust weights' }));
-  box.appendChild(h('p', { class: 'muted small', text: '0 ignores a factor, 5 makes it count the most. Nothing changes until you tap Save.' }));
-  var warnLine = h('p', { class: 'small', style: 'color:var(--warn)', text: '' }), doneBtn;
+  box.appendChild(h('p', { text: '0 ignores a factor, 5 makes it count the most. Nothing changes until you tap Save.' }));
+  var warnLine = h('p', { class: 'warn', text: '' }), doneBtn;
   function refresh() {   // an organic label alone never gives a score, so at least one other factor must be weighted
     var inf = 0;
     METRICS.forEach(function (met) { if (met.key !== 'organic') inf += draft.weights[met.key] || 0; });
     doneBtn.disabled = !inf;
     warnLine.textContent = inf ? '' : 'Nothing that can be scored is weighted (an organic label alone gives no score). Raise at least one other factor.';
   }
+  var list = h('div', { class: 'group' });
   METRICS.forEach(function (met) {
     var val = h('span', { class: 'wv', text: String(draft.weights[met.key] || 0) });
-    var range = h('input', { type: 'range', min: '0', max: '5', step: '1', 'data-metric': met.key, value: String(draft.weights[met.key] || 0) });
+    var range = h('input', { type: 'range', min: '0', max: '5', step: '1', 'data-metric': met.key, value: String(draft.weights[met.key] || 0), 'aria-label': met.label + ' weight' });
     range.addEventListener('input', function () { draft.weights[met.key] = parseInt(range.value, 10) || 0; val.textContent = range.value; refresh(); });
     var dirNote = (met.dir === 'low' || met.dir === 'high') ? (metricDir(draft, met) === 'high' ? ' (more is better)' : ' (less is better)') : '';
-    box.appendChild(h('div', { class: 'wrow' }, [h('span', { class: 'wl', text: met.label + dirNote }), range, val]));
+    list.appendChild(h('div', { class: 'wrow' }, [h('span', { class: 'wl', text: met.label + dirNote }), range, val]));
   });
-  doneBtn = h('button', { class: 'btn primary grow', type: 'button', id: 'obDone', onclick: function () {
+  box.appendChild(list);
+  doneBtn = h('button', { class: 'btn primary', type: 'button', id: 'obDone', onclick: function () {
     if (JSON.stringify(draft.weights) !== JSON.stringify(profile.weights) && String(draft.name || '').indexOf('(adjusted)') < 0) draft.name = (draft.name || 'Custom') + ' (adjusted)';
     saveProfile(draft); closeOnboarding(); toast('Weights saved');
   } }, 'Save');
   box.appendChild(warnLine);
-  box.appendChild(h('div', { class: 'ob-nav' }, [h('button', { class: 'btn grow', type: 'button', id: 'obCancel', onclick: closeOnboarding }, 'Cancel'), doneBtn]));
+  box.appendChild(h('div', { class: 'ob-nav' }, [h('button', { class: 'btn', type: 'button', id: 'obCancel', onclick: closeOnboarding }, 'Cancel'), doneBtn]));
   refresh();
 }
 
@@ -1725,143 +1848,139 @@ function renderWeightsEditor(box) {
 var current = null;
 function renderLoading(code) {
   var box = clear($('result'));
-  clear($('missingLine'));
-  box.appendChild(h('div', { class: 'card' }, [h('div', { class: 'muted', text: 'Looking up ' + code + '…' })]));
+  clear($('missingLine')); clear($('resultMore'));
+  box.appendChild(h('div', { class: 'loading' }, [h('span', { class: 'spinner', 'aria-hidden': 'true' }), h('span', { text: 'Looking up ' + code + '…' })]));
+  openSheet(null);
 }
 function renderError(code, err) {
   var box = clear($('result'));
-  clear($('missingLine'));
-  box.appendChild(h('div', { class: 'card' }, [
-    h('div', { class: 'status err', text: 'Lookup failed for ' + code + ': ' + (err && err.message || err) }),
-    h('div', { class: 'row', style: 'margin-top:10px' }, [h('button', { class: 'btn small', type: 'button', onclick: function () { handleCode(code, null, 'manual'); } }, 'Retry')])
+  clear($('missingLine')); clear($('resultMore'));
+  box.appendChild(h('div', { class: 'state red' }, [
+    h('div', { class: 'glyph', html: SVG_ALERT }),
+    h('h3', { text: 'Lookup failed' }),
+    h('div', { class: 'code', text: code }),
+    h('div', { class: 'foot', style: 'margin-top:6px', text: String(err && err.message || err) })
   ]));
+  box.appendChild(h('div', { class: 'actions' }, [h('button', { class: 'btn small', type: 'button', onclick: function () { handleCode(code, null, 'manual'); } }, 'Try again')]));
+  openSheet(null);
 }
-function sourceLine(entry) {
-  var parts = [];
+// One row per source, in plain words: what happened and, when it worked, which code form matched.
+function sourceRows(entry) {
   var o = entry.off, u = entry.usda;
-  parts.push(h('span', { class: 'chip ' + (o.status === 'found' ? 'ok' : o.status === 'error' ? 'warn' : 'bad'),
-    text: 'OFF ' + statusMark(o.status) + (o.status === 'found' ? ' as ' + o.codeUsed : o.status === 'not_found' ? ' (tried ' + (o.tried || []).join(', ') + ')' : o.status === 'error' ? ' ' + o.error : '') }));
-  if (u.status === 'skipped') parts.push(h('span', { class: 'chip', text: u.error ? 'USDA – skipped after a recent error (' + u.error + '); retried in a minute' : 'USDA – no key' }));
-  else parts.push(h('span', { class: 'chip ' + (u.status === 'found' ? 'ok' : u.status === 'error' ? 'warn' : 'bad'),
-    text: 'USDA ' + statusMark(u.status) + (u.status === 'found' ? ' as ' + u.codeUsed + ' (fdcId ' + u.fdcId + ')' : u.status === 'not_found' ? ' (tried ' + (u.tried || []).join(', ') + ')' : u.status === 'error' ? ' ' + u.error : '') }));
-  return h('div', { class: 'chips' }, parts);
+  function row(name, status, detail) {
+    return h('li', {}, [h('span', { class: 'dot ' + statusColor(status) }), h('div', { class: 'grow' }, [h('div', { text: name }), h('div', { class: 'd', text: detail })])]);
+  }
+  var od = o.status === 'found' ? 'Found as ' + o.codeUsed : o.status === 'not_found' ? 'Not found (tried ' + (o.tried || []).join(', ') + ')' : o.status === 'error' ? 'Error: ' + o.error : 'Skipped';
+  var ud = u.status === 'skipped' ? (u.error ? 'Skipped after a recent error (' + u.error + '); retried in a minute' : 'No key')
+    : u.status === 'found' ? 'Found as ' + u.codeUsed + ' (fdcId ' + u.fdcId + ')' : u.status === 'not_found' ? 'Not found (tried ' + (u.tried || []).join(', ') + ')' : 'Error: ' + u.error;
+  return h('ul', { class: 'src' }, [row('Open Food Facts', o.status, od), row('USDA FoodData Central', u.status, ud)]);
 }
+function noImage() { return h('div', { class: 'thumb noimg', html: SVG_PHOTO }); }
 function renderResult(res) {
   current = res;
   var e = res.entry, m = res.merged;
-  var box = clear($('result'));
-  var card = h('div', { class: 'card' });
+  var box = clear($('result')), more = clear($('resultMore')), ml = clear($('missingLine'));
   if (!m.found) {
     var errored = e.off.status === 'error' || e.usda.status === 'error';
-    card.appendChild(h('div', { class: 'prod' }, [
-      h('div', { class: 'noimg', text: errored ? 'error' : 'no data' }),
+    box.appendChild(h('div', { class: 'sh-head peek' }, [
+      noImage(),
       h('div', { class: 'grow' }, [
         h('div', { class: 'name', text: errored ? 'Lookup failed' : 'Not found' }),
-        h('div', { class: 'brand mono', text: e.barcode + (e.format ? ' (' + e.format + ')' : '') }),
-        h('div', { class: 'tiny muted', text: (res.fromCache ? 'cached result · ' : '') + e.fetchedAt })
+        h('div', { class: 'brand', text: e.barcode + (e.format ? ' (' + e.format + ')' : '') }),
+        h('div', { class: 'meta', text: (res.fromCache ? 'Cached, checked ' : 'Checked ') + shortTime(e.fetchedAt) })
       ])
     ]));
-    card.appendChild(sourceLine(e));
-    card.appendChild(h('div', { class: 'row wrap', style: 'margin-top:12px' }, [
-      h('button', { class: 'btn small', type: 'button', onclick: function () { refetch(e); } }, 'Re-fetch (bypass cache)'),
-      h('a', { class: 'btn small', href: 'https://world.openfoodfacts.org/cgi/product.pl?type=add&code=' + encodeURIComponent(e.off.tried && e.off.tried.length ? e.off.tried[e.off.tried.length - 1] : e.barcode), target: '_blank', rel: 'noopener noreferrer' }, 'Add to OFF'),
+    ml.appendChild(h('div', { class: 'missing bad' }, [h('span', { class: 'dot red' }), errored ? 'Lookup failed, no data. Counted as a lookup error, not as "not found". Refresh to try again.' : 'Missing fields: everything. The product was not found in any source.']));
+    more.appendChild(h('section', { class: 'sec sep' }, [h('div', { class: 'sec-h', text: 'Sources' }), sourceRows(e)]));
+    more.appendChild(h('div', { class: 'actions' }, [
+      h('button', { class: 'btn small', type: 'button', onclick: function () { refetch(e); } }, 'Refresh'),
+      h('a', { class: 'btn small', href: 'https://world.openfoodfacts.org/cgi/product.pl?type=add&code=' + encodeURIComponent(e.off.tried && e.off.tried.length ? e.off.tried[e.off.tried.length - 1] : e.barcode), target: '_blank', rel: 'noopener noreferrer' }, 'Add to Open Food Facts'),
       h('button', { class: 'btn small', type: 'button', onclick: function () { copyText(JSON.stringify(e, null, 2)).then(function (ok) { toast(ok ? 'Copied JSON' : 'Copy failed'); }); } }, 'Copy JSON')
     ]));
-    box.appendChild(card);
-    var ml = clear($('missingLine'));
-    ml.appendChild(h('div', { class: 'missing bad', text: errored ? 'Lookup failed — no data (counted as a lookup error, not as "not found"). Re-fetch to try again.' : 'Missing fields: everything — product not found in any source.' }));
     return;
   }
-  var head = h('div', { class: 'prod' });
-  if (m.image.v) head.appendChild(h('img', { src: m.image.v, alt: '', loading: 'lazy', referrerpolicy: 'no-referrer', onerror: function () { this.replaceWith(h('div', { class: 'noimg', text: 'no image' })); } }));
-  else head.appendChild(h('div', { class: 'noimg', text: 'no image' }));
+  var head = h('div', { class: 'sh-head peek' });
+  if (m.image.v) head.appendChild(h('img', { class: 'thumb', src: m.image.v, alt: '', loading: 'lazy', referrerpolicy: 'no-referrer', onerror: function () { this.replaceWith(noImage()); } }));
+  else head.appendChild(noImage());
   head.appendChild(h('div', { class: 'grow' }, [
     h('div', { class: 'name', text: m.name.v || '(no name)' }),
-    h('div', { class: 'brand', text: [m.brand.v, m.quantity.v].filter(Boolean).join(' · ') }),
-    h('div', { class: 'tiny muted mono', text: e.barcode + (e.format ? ' (' + e.format + ')' : '') + (res.fromCache ? ' · cached' : '') })
+    h('div', { class: 'brand', text: [m.brand.v, m.quantity.v].filter(Boolean).join(', ') }),
+    h('div', { class: 'meta', text: e.barcode + (e.format ? ' (' + e.format + ')' : '') + (res.fromCache ? ', cached' : '') })
   ]));
-  card.appendChild(head);
+  box.appendChild(head);
   var sc = scoreProduct(m, e, profile || { mode: 'standard' });
-  if (sc) card.appendChild(renderScore(sc));
-  if (!profile) card.appendChild(h('div', { class: 'tiny muted', text: 'Showing the standard score; choose or customize scoring in Settings.' }));
+  if (sc) {
+    var scoreSec = renderScore(sc);
+    if (!profile) scoreSec.appendChild(h('div', { class: 'sec-f', text: 'Showing the standard score. Choose or customize scoring in Settings.' }));
+    box.appendChild(scoreSec);
+  }
   var av = avoidFlags(m, e, profile);
-  if (av) card.appendChild(renderAvoid(av));
-  card.appendChild(h('div', { class: 'kv' }, [h('b', {}, 'Serving size: '), m.servingSize.v ? (m.servingSize.v + ' ') : '— ', m.servingSize.from ? h('span', { class: 'tiny muted', text: '(' + m.servingSize.from + ')' }) : null]));
-  // nutrients table
-  var tbl = h('table', { class: 'nut' });
-  tbl.appendChild(h('tr', {}, [h('th', { text: 'Nutrient' }), h('th', { text: 'Per serving' }), h('th', { text: 'Per 100 ' + (m.basis || 'g') })]));
-  NUT_ROWS.forEach(function (r) {
-    var k = r[0];
-    var tr = h('tr', { class: k === 'netCarbs' ? 'calc' : null }, [
-      h('td', { text: r[1] + (k === 'netCarbs' ? ' (carbs − fiber)' : '') }),   // label column may wrap on narrow phones
-      h('td', { text: fmtVal(m.perServing[k], r[2]) }),
-      h('td', { text: fmtVal(m.per100[k], r[2]) })
-    ]);
-    tbl.appendChild(tr);
-  });
-  card.appendChild(tbl);
+  if (av) box.appendChild(renderAvoid(av));
+  // nutrients: one value per row, per serving or per 100 g/ml behind a segmented control; net carbs on top
+  var basisLabel = 'Per 100 ' + (m.basis || 'g');
+  var hasServing = NUT_KEYS.concat(['netCarbs']).some(function (k) { return m.perServing[k] !== null && m.perServing[k] !== undefined; });
+  var nut = h('section', { class: 'sec nut ' + (hasServing ? 'basis-s' : 'basis-h') });
+  var segS, segH;
+  function setBasis(b) {
+    nut.classList.toggle('basis-s', b === 's'); nut.classList.toggle('basis-h', b === 'h');
+    segS.setAttribute('aria-pressed', String(b === 's')); segH.setAttribute('aria-pressed', String(b === 'h'));
+  }
+  segS = h('button', { type: 'button', 'aria-pressed': String(hasServing), onclick: function () { setBasis('s'); } }, 'Per serving');
+  segH = h('button', { type: 'button', 'aria-pressed': String(!hasServing), onclick: function () { setBasis('h'); } }, basisLabel);
+  nut.appendChild(h('div', { class: 'segmented', id: 'basisSeg', role: 'group', 'aria-label': 'Values shown' }, [segS, segH]));
+  function vals(k, unit) { return [h('span', { class: 'v s', text: fmtVal(m.perServing[k], unit) }), h('span', { class: 'v h', text: fmtVal(m.per100[k], unit) })]; }
+  nut.appendChild(h('div', { class: 'nut-hero' }, [h('span', { class: 'hl', text: 'Net carbs' }), h('span', { class: 'hv' }, vals('netCarbs', 'g'))]));
+  var list = h('ul', { class: 'nlist' });
+  NUT_ROWS.forEach(function (r) { if (r[0] === 'netCarbs') return; list.appendChild(h('li', {}, [h('span', { text: r[1] }), h('span', { class: 'vv' }, vals(r[0], r[2]))])); });
+  nut.appendChild(list);
+  nut.appendChild(h('div', { class: 'sec-f', text: 'Serving size ' + (m.servingSize.v || 'unknown') + (m.servingSize.from ? ' (' + m.servingSize.from + ')' : '') + '. Net carbs are carbs minus fiber.' }));
   var nutLabel = {};
   NUT_ROWS.forEach(function (r) { nutLabel[r[0]] = r[1].toLowerCase(); });
   var provenance = NUT_KEYS.filter(function (k) { return m.perServingFrom[k] && m.perServingFrom[k].indexOf('×') > 0; });
   var given = NUT_KEYS.filter(function (k) { return m.perServing[k] !== null; });
-  if (provenance.length) card.appendChild(h('div', { class: 'tiny muted', style: 'margin-top:4px',
+  if (provenance.length) nut.appendChild(h('div', { class: 'sec-f',
     text: (provenance.length === given.length ? 'All per-serving values are' : 'Per-serving ' + provenance.map(function (k) { return nutLabel[k]; }).join(', ') + ' are') + ' computed from per-100 ' + (m.basis || 'g') + ' × serving size (' + m.servingSize.v + ').' }));
   var foreign = NUT_KEYS.filter(function (k) { return m.perServingFrom[k] && m.perServingFrom[k].indexOf('own serving') > 0; });
-  if (foreign.length) card.appendChild(h('div', { class: 'tiny muted', text: 'Per-serving ' + foreign.map(function (k) { return nutLabel[k]; }).join(', ') + ': ' + uniqueList(foreign.map(function (k) { return m.perServingFrom[k]; })).join('; ') + ' — not the serving shown above.' }));
-  if (m.sources.length > 1) card.appendChild(h('div', { class: 'tiny muted', text: 'Per-100 ' + (m.basis || 'g') + ' values come from ' + uniqueList(NUT_KEYS.map(function (k) { return m.per100From[k]; })).join(' + ') + '; per-serving from ' + (m.servingSize.from || '—') + '.' }));
-  // ingredients
+  if (foreign.length) nut.appendChild(h('div', { class: 'sec-f', text: 'Per-serving ' + foreign.map(function (k) { return nutLabel[k]; }).join(', ') + ': ' + uniqueList(foreign.map(function (k) { return m.perServingFrom[k]; })).join('; ') + ', not the serving shown above.' }));
+  if (m.sources.length > 1) nut.appendChild(h('div', { class: 'sec-f', text: 'Per-100 ' + (m.basis || 'g') + ' values come from ' + uniqueList(NUT_KEYS.map(function (k) { return m.per100From[k]; })).join(' + ') + '; per-serving from ' + (m.servingSize.from || 'no source') + '.' }));
+  box.appendChild(nut);
+  if (m.missing.length) ml.appendChild(h('div', { class: 'missing' }, [h('span', { class: 'dot orange' }), 'Missing fields: ' + m.missing.join(', ')]));
+  else ml.appendChild(h('div', { class: 'missing ok' }, [h('span', { class: 'dot green' }), 'Missing fields: none. All six tracked fields are present.']));
+  // ingredients and labels
   var ingr = m.ingredients.v;
-  var det = h('details', { open: ingr && ingr.length < 240 ? '' : null }, [
-    h('summary', { text: 'Ingredients' + (ingr ? '' : ' — missing') + (m.ingredients.from ? ' (' + m.ingredients.from + ')' : '') }),
+  var s1 = h('section', { class: 'sec sep' });
+  s1.appendChild(h('details', { class: 'disc', open: ingr && ingr.length < 240 ? '' : null }, [
+    h('summary', {}, [h('span', { text: 'Ingredients' }), h('span', { class: 'rv', text: ingr ? (m.ingredients.from || '') : 'missing' })]),
     h('p', { class: 'ingr', text: ingr || 'No ingredients text in any source.' })
-  ]);
-  card.appendChild(det);
-  // badges
-  var kv = h('div', { class: 'kv' });
-  kv.appendChild(h('div', {}, [h('b', {}, 'NOVA group: '), m.nova.v !== null ? String(m.nova.v) + (NOVA_LABELS[m.nova.v] ? ' — ' + NOVA_LABELS[m.nova.v] : '') : '—']));
+  ]));
+  var kv = h('ul', { class: 'kv' });
+  function kvRow(k, v) { kv.appendChild(h('li', {}, [h('span', { class: 'k', text: k }), h('span', { class: 'v' }, v)])); }
+  kvRow('NOVA group', m.nova.v !== null ? [String(m.nova.v), NOVA_LABELS[m.nova.v] ? h('span', { class: 'd', style: 'display:block', text: capitalize(NOVA_LABELS[m.nova.v]) }) : null] : 'unknown');
   var ns = (m.nutriscore.v && /^[a-e]$/i.test(String(m.nutriscore.v))) ? String(m.nutriscore.v).toLowerCase() : null;
   var nsNote = (e.off.norm && e.off.norm.nutriscoreNote) ? String(e.off.norm.nutriscoreNote).replace(/-/g, ' ') : null;
-  var nsNode = ns ? h('span', { class: 'nutri ' + ns, text: ns.toUpperCase() }) : (nsNote ? h('span', { class: 'muted', text: nsNote + ' (no grade)' }) : '—');
-  kv.appendChild(h('div', {}, [h('b', {}, 'Nutri-Score: '), nsNode]));
+  kvRow('Nutri-Score', ns ? h('span', { class: 'nutri ' + ns, text: ns.toUpperCase(), 'aria-label': 'Nutri-Score ' + ns.toUpperCase() }) : (nsNote ? nsNote + ' (no grade)' : 'unknown'));
   var adds = m.additives.v || [];
-  kv.appendChild(h('div', {}, [h('b', {}, 'Additives: '), adds.length ? h('span', { class: 'chips', style: 'display:inline-flex' }, adds.map(function (a) { return h('span', { class: 'chip', text: a }); })) : ((e.off.norm && e.off.norm.additivesAnalysed) ? 'none (ingredients analysed)' : '—')]));
-  kv.appendChild(h('div', {}, [h('b', {}, 'Categories: '), m.categories.v || '—']));
-  card.appendChild(kv);
-  // sources
-  card.appendChild(h('div', { class: 'kv' }, [h('b', {}, 'Sources')]));
-  card.appendChild(sourceLine(e));
-  // coverage table
+  kvRow('Additives', adds.length ? h('span', { class: 'chips' }, adds.map(function (a) { return h('span', { class: 'chip', text: a }); })) : ((e.off.norm && e.off.norm.additivesAnalysed) ? 'none (ingredients analysed)' : 'unknown'));
+  kvRow('Categories', m.categories.v || 'unknown');
+  s1.appendChild(kv);
+  more.appendChild(s1);
+  // sources and per-source coverage
   var cov = h('table', { class: 'cov' });
   cov.appendChild(h('tr', {}, [h('th', { text: 'Field' })].concat(m.sources.map(function (s) { return h('th', { text: s }); }))));
   m.coverage.forEach(function (row) {
-    cov.appendChild(h('tr', {}, [h('td', { text: row.label })].concat(row.by.map(function (b) { return h('td', { text: b.has ? '✓' : '–', style: b.has ? 'color:var(--ok)' : 'color:var(--muted)' }); }))));
+    cov.appendChild(h('tr', {}, [h('td', { text: row.label })].concat(row.by.map(function (b) { return h('td', { class: b.has ? 'has' : 'no', text: b.has ? '✓' : '–' }); }))));
   });
-  card.appendChild(h('details', {}, [h('summary', { text: 'Per-source coverage' }), cov]));
-  // actions
-  var actions = h('div', { class: 'row wrap', style: 'margin-top:12px' });
-  actions.appendChild(h('button', { class: 'btn small', type: 'button', onclick: function () { refetch(e); } }, 'Re-fetch'));
-  if (m.urls.OFF) actions.appendChild(h('a', { class: 'btn small', href: m.urls.OFF, target: '_blank', rel: 'noopener noreferrer' }, 'Open on OFF'));
-  if (m.urls.USDA) actions.appendChild(h('a', { class: 'btn small', href: m.urls.USDA, target: '_blank', rel: 'noopener noreferrer' }, 'Open on USDA'));
+  more.appendChild(h('section', { class: 'sec' }, [h('div', { class: 'sec-h', text: 'Sources' }), sourceRows(e), h('details', { class: 'disc' }, [h('summary', { text: 'Coverage by source' }), cov])]));
+  var actions = h('div', { class: 'actions' });
+  actions.appendChild(h('button', { class: 'btn small', type: 'button', onclick: function () { refetch(e); } }, 'Refresh'));
+  if (m.urls.OFF) actions.appendChild(h('a', { class: 'btn small', href: m.urls.OFF, target: '_blank', rel: 'noopener noreferrer' }, 'Open in Open Food Facts'));
+  if (m.urls.USDA) actions.appendChild(h('a', { class: 'btn small', href: m.urls.USDA, target: '_blank', rel: 'noopener noreferrer' }, 'Open in USDA'));
   actions.appendChild(h('button', { class: 'btn small', type: 'button', onclick: function () { copyText(JSON.stringify({ entry: e, merged: m }, null, 2)).then(function (ok) { toast(ok ? 'Copied JSON' : 'Copy failed'); }); } }, 'Copy JSON'));
-  card.appendChild(actions);
-  box.appendChild(card);
-  var ml = clear($('missingLine'));
-  if (m.missing.length) ml.appendChild(h('div', { class: 'missing', text: 'Missing fields: ' + m.missing.join(', ') }));
-  else ml.appendChild(h('div', { class: 'missing ok', text: 'Missing fields: none — all six tracked fields present (serving size, carbs, sugars, fiber, protein, ingredients).' }));
+  more.appendChild(actions);
 }
-// After a lookup, bring the result into view. While the camera runs, keep the viewfinder on screen (scroll it to just
-// below the header so the card starts right under it); otherwise scroll the card itself into view.
+// After a lookup, present the sheet: half height while the camera runs so the viewfinder stays usable, full otherwise.
 function revealResult() {
-  try {
-    if (cam.scanning) {
-      var hdr = document.querySelector('.top').offsetHeight || 0;
-      var vpTop = $('viewport').getBoundingClientRect().top + window.scrollY;
-      window.scrollTo({ top: Math.max(0, vpTop - hdr - 8), behavior: 'smooth' });
-      return;
-    }
-    var r = $('result'), rect = r.getBoundingClientRect();
-    if (rect.top > window.innerHeight * 0.55 || rect.top < 0) r.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  } catch (e) { /* ignore */ }
+  try { openSheet(cam.scanning ? 'half' : 'full'); } catch (e) { /* ignore */ }
 }
 function uniqueList(arr) { var out = []; arr.forEach(function (x) { if (x && out.indexOf(x) < 0) out.push(x); }); return out; }
 function refetch(entry) {
@@ -1909,7 +2028,9 @@ var cam = { stream: null, track: null, scanning: false, decoder: null, detector:
   frames: 0, decodeMs: 0, nativeErrors: 0, lastCode: null, lastAt: 0, pending: { code: null, count: 0, at: 0 }, wakeLock: null, audio: null,
   canvas: null, ctx: null, frameSource: null, torchOn: false, queued: null, paused: false, startSeq: 0 };
 var video = null;
-function setCamStatus(msg, isErr) { var el = $('camStatus'); el.textContent = msg; el.className = 'status' + (isErr ? ' err' : ''); }
+function setCamStatus(msg, isErr) { var el = $('camStatus'); el.textContent = msg; el.className = 'status' + (isErr ? ' err' : '') + (msg === 'Camera off' ? ' quiet' : ''); }
+function scanStatusText() { return manualFocused ? 'Paused while you type' : activeTab !== 'scan' ? 'Paused while you view the ' + activeTab + ' tab' : 'Hold a barcode inside the frame'; }
+function refreshScanStatus() { if (cam.scanning) setCamStatus(scanStatusText()); }
 function initAudio() {
   try {
     var AC = window.AudioContext || window.webkitAudioContext;
@@ -2083,14 +2204,14 @@ function startCamera() {
     if (playP && playP.catch) playP.catch(function (e) { dbg('warn', 'video.play() rejected: ' + e.name + ' ' + e.message); });
     if (cam.track) {
       try { dbg('log', 'Track: ' + cam.track.label + ' settings=' + JSON.stringify(cam.track.getSettings ? cam.track.getSettings() : {})); } catch (e) { /* ignore */ }
-      cam.track.addEventListener('ended', function () { dbg('warn', 'Camera track ended'); if (cam.scanning) stopCamera('Camera track ended (backgrounded or taken by another app). Tap Start camera.'); });
+      cam.track.addEventListener('ended', function () { dbg('warn', 'Camera track ended'); if (cam.scanning) stopCamera('Camera stopped: another app took it or the feed ended.'); });
     }
     return waitForVideo(video, 6000);
   }).then(function () {
     if (startId !== cam.startSeq) throw { name: 'AbortedStart' };
     $('viewport').classList.add('live');
     $('btnStart').classList.add('hidden'); $('btnStop').classList.remove('hidden');   // Stop must be available while the decoder loads
-    setCamStatus('Camera on — loading barcode decoder…');
+    setCamStatus('Loading the barcode decoder…');
     return pickDecoder();
   }).then(function (dec) {
     if (startId !== cam.startSeq) throw { name: 'AbortedStart' };
@@ -2100,12 +2221,12 @@ function startCamera() {
     cam.pending = { code: null, count: 0, at: 0 }; cam.queued = null;
     if (!cam.canvas) { cam.canvas = document.createElement('canvas'); cam.ctx = cam.canvas.getContext('2d', { willReadFrequently: true }) || cam.canvas.getContext('2d'); }
     $('btnStart').classList.add('hidden'); $('btnStop').classList.remove('hidden');
-    $('manualForm').classList.add('hidden'); $('btnTypeCode').classList.remove('hidden'); $('btnTypeCode').textContent = 'Type a barcode'; $('btnTypeCode').setAttribute('aria-expanded', 'false');   // keeps the card close to the viewfinder; the button brings the field back
+    $('manualForm').classList.add('hidden'); $('btnTypeCode').classList.remove('hidden'); $('btnTypeCode').textContent = 'Enter a code'; $('btnTypeCode').setAttribute('aria-expanded', 'false');   // the floating button brings the field back
     $('btnStart').disabled = false;
     setupTrackControls();
     requestWakeLock();
     dbg('log', 'Scanning with ' + dec.kind + ' (' + dec.formats.join(',') + ') at ' + video.videoWidth + 'x' + video.videoHeight);
-    setCamStatus('Scanning (' + (dec.kind === 'native' ? 'native BarcodeDetector' : 'ZXing') + ')…');
+    setCamStatus(scanStatusText());
     scanLoop();
   }).catch(function (err) {
     $('btnStart').disabled = false;
@@ -2116,7 +2237,7 @@ function startCamera() {
     else if (name === 'NotReadableError') hint = ' Camera is busy in another app.';
     console.error('Camera start failed: ' + name + ': ' + msg);
     stopCamera();                       // restores the Start/Stop/manual-entry state and releases the stream
-    setCamStatus('Camera failed: ' + (name ? name + ' — ' : '') + msg + hint, true);
+    setCamStatus('Camera failed: ' + (name ? name + ', ' : '') + msg + hint, true);
   });
 }
 function waitForVideo(v, timeoutMs) {
@@ -2152,7 +2273,7 @@ function stopCamera(statusMsg) {
   $('camCtl').classList.add('hidden');
   var fps = cam.frames && cam.decodeMs ? ' avg decode ' + Math.round(cam.decodeMs / cam.frames) + 'ms over ' + cam.frames + ' frames' : '';
   dbg('log', 'Camera stopped.' + fps);
-  setCamStatus(statusMsg || 'Camera off.');
+  setCamStatus(statusMsg || 'Camera off');
 }
 function scanLoop() {
   if (!cam.scanning) return;
@@ -2165,7 +2286,7 @@ function scanLoop() {
     if (!cam.scanning) return;
     cam.frames++; cam.decodeMs += now() - t0;
     if (hit) onRead(hit);
-    if (cam.frames % 50 === 0) setCamStatus('Scanning (' + (cam.decoder.kind === 'native' ? 'native' : 'ZXing') + ') · ' + Math.round(cam.decodeMs / cam.frames) + ' ms/frame · ' + cam.frames + ' frames');
+    if (cam.frames % 200 === 0) dbg('log', 'Decoding with ' + cam.decoder.kind + ': ' + Math.round(cam.decodeMs / cam.frames) + ' ms/frame over ' + cam.frames + ' frames');
   }, function (err) {
     if (!cam.scanning) return;
     cam.frames++;
@@ -2176,8 +2297,8 @@ function scanLoop() {
       if (cam.nativeErrors >= 5) {
         console.warn('Native BarcodeDetector keeps failing; switching to ZXing');
         return ensureZXing().then(function (ok) {
-          if (ok) { if (!cam.zx) cam.zx = makeZXingReader(); cam.decoder = { kind: 'zxing', formats: ['ean_13', 'ean_8', 'upc_a', 'upc_e'] }; cam.nativeErrors = 0; setCamStatus('Scanning (ZXing, after native failure)…'); }
-          else stopCamera('The native decoder keeps failing and ZXing could not be loaded. Check the connection and tap Start camera.');
+          if (ok) { if (!cam.zx) cam.zx = makeZXingReader(); cam.decoder = { kind: 'zxing', formats: ['ean_13', 'ean_8', 'upc_a', 'upc_e'] }; cam.nativeErrors = 0; refreshScanStatus(); }
+          else stopCamera('The native decoder keeps failing and ZXing could not be loaded. Check the connection and start the camera again.');
         });
       }
     } else {
@@ -2286,10 +2407,10 @@ function setupTrackControls() {
   try { dbg('log', 'Track capabilities: ' + JSON.stringify(caps)); } catch (e) { /* ignore */ }
   var any = false;
   if (caps.torch) {
-    any = true; torchBtn.classList.remove('hidden'); cam.torchOn = false; torchBtn.textContent = 'Torch on';
+    any = true; torchBtn.classList.remove('hidden'); cam.torchOn = false; torchBtn.setAttribute('aria-pressed', 'false');
     torchBtn.onclick = function () {
       var on = !cam.torchOn;
-      cam.track.applyConstraints({ advanced: [{ torch: on }] }).then(function () { cam.torchOn = on; torchBtn.textContent = on ? 'Torch off' : 'Torch on'; },
+      cam.track.applyConstraints({ advanced: [{ torch: on }] }).then(function () { cam.torchOn = on; torchBtn.setAttribute('aria-pressed', String(on)); },
         function (e) { console.warn('Torch failed: ' + e.name + ' ' + e.message); toast('Torch not available'); });
     };
   }
@@ -2367,21 +2488,29 @@ function topWeights(p) {
     .sort(function (a, b) { return b[1] - a[1]; }).slice(0, 3).map(function (x) { return x[0].toLowerCase() + ' ' + x[1]; }).join(', ');
 }
 function renderSettings() {
-  $('scoringInfo').textContent = 'Current: ' + profileName(profile) + (profile ? (profile.mode === 'custom' ? ' — top weights: ' + topWeights(profile) + '.' + (profile.avoid && profile.avoid.length ? ' Warnings for ' + profile.avoid.map(function (k) { return AVOID_LABEL[k].toLowerCase(); }).join(', ') + '.' : '') : ' — Nutri-Score 50%, additives 25%, processing 15%, organic 10%.') : ' — choose one to score products.');
+  var si = clear($('scoringInfo'));
+  function row(t, d, v) { si.appendChild(h('div', { class: 'row' }, [h('span', { class: 'rl' }, [h('span', { class: 't', text: t }), d ? h('span', { class: 'd', text: d }) : null]), v ? h('span', { class: 'rv', text: v }) : null])); }
+  if (!profile) row('Method', 'Choose one to score products.', 'Not chosen');
+  else if (profile.mode === 'standard') row('Method', 'Nutri-Score 50%, additives 25%, processing 15%, organic 10%.', 'Standard');
+  else {
+    row('Method', profile.name || 'custom', 'Custom');
+    row('Top weights', topWeights(profile));
+    if (profile.avoid && profile.avoid.length) row('Warnings for', profile.avoid.map(function (k) { return AVOID_LABEL[k].toLowerCase(); }).join(', '));
+  }
   $('btnWeights').classList.toggle('hidden', !(profile && profile.mode === 'custom'));
   $('btnCopyProfile').classList.toggle('hidden', !profile);
   var key = getUsdaKey();
   $('usdaKey').value = key;
-  $('keyStatus').textContent = key ? 'Key saved (' + key.length + ' chars). USDA will be queried on every lookup.' : 'No key saved — USDA lookups are skipped.';
+  $('keyStatus').textContent = key ? 'Key saved (' + key.length + ' characters). USDA is queried on every lookup.' : 'No key saved, so USDA lookups are skipped.';
   $('btnCopyLink').classList.toggle('hidden', !key);
   $('linkHint').textContent = key
-    ? 'To set this key automatically on this or another phone, open the copied link once and add that page to the Home Screen. The link contains your key, so keep it to yourself.'
-    : 'Tip: opening the app as …/#usda=YOURKEY saves the key automatically — handy as a Home Screen bookmark.';
+    ? 'To set this key on this or another phone, open the copied link once and add that page to the Home Screen. The link contains your key, so keep it to yourself.'
+    : 'Opening the app as …/#usda=YOURKEY saves the key automatically, which makes a handy Home Screen bookmark.';
   $('decoderPref').value = store.get(LS.decoder, 'auto');
   var native = typeof window.BarcodeDetector === 'function';
-  $('decoderInfo').textContent = 'This browser ' + (native ? 'exposes' : 'does not expose') + ' BarcodeDetector. ZXing ' + (window.ZXingBrowser ? 'is loaded' : 'is NOT loaded') + '. Storage ' + (store.available ? 'OK' : 'UNAVAILABLE (private mode?)') + '.';
+  $('decoderInfo').textContent = 'Automatic uses the browser\'s BarcodeDetector when it has one and ZXing otherwise. This browser ' + (native ? 'has' : 'does not have') + ' BarcodeDetector; ZXing ' + (window.ZXingBrowser ? 'is loaded' : 'is not loaded') + '. Storage ' + (store.available ? 'is available' : 'is unavailable (private browsing?)') + '.';
   var cacheKeys = store.keys(LS.cachePrefix);
-  $('storageInfo').textContent = cacheKeys.length + ' cached product' + (cacheKeys.length === 1 ? '' : 's') + ', ' + scanLog.length + ' log entries, ~' + Math.round(store.bytes() / 1024) + ' KB used of ~5 MB.';
+  $('storageInfo').textContent = cacheKeys.length + ' cached product' + (cacheKeys.length === 1 ? '' : 's') + ', ' + scanLog.length + ' log entr' + (scanLog.length === 1 ? 'y' : 'ies') + ', about ' + Math.round(store.bytes() / 1024) + ' KB of roughly 5 MB used.';
 }
 function testUsdaKey() {
   var key = $('usdaKey').value.trim();
@@ -2429,28 +2558,109 @@ function initDebugPanel() {
   });
 }
 
+/* ---------------------------------------------------------------- sheet */
+// The result lives in a bottom sheet with three snap points. Dragging moves it; a fast flick goes one snap in that
+// direction, a slow release lands on the nearest one, and dropping it below the peek dismisses it. At full height the
+// list inside scrolls and decoding pauses (the viewfinder is covered); at half and peek the viewfinder stays usable.
+var sheet = { snap: 'hidden', y: 0, drag: null };
+function sheetHeight() { return $('sheet').offsetHeight || window.innerHeight; }
+function peekHeight() { var head = document.querySelector('#result .peek'); return ($('sheetGrab').offsetHeight || 26) + (head ? head.offsetHeight : 80) + 6; }
+function snapY(snap) { var H = sheetHeight(); return snap === 'full' ? 0 : snap === 'half' ? Math.round(H * 0.5) : snap === 'peek' ? Math.max(0, H - peekHeight()) : H; }
+function setSheetY(y) { sheet.y = y; $('sheet').style.transform = 'translateY(' + y + 'px)'; }
+function snapTo(snap) {
+  var el = $('sheet');
+  sheet.snap = snap;
+  el.setAttribute('data-snap', snap);
+  el.classList.toggle('open', snap !== 'hidden');
+  setSheetY(snapY(snap));
+  if (snap !== 'full') $('sheetBody').scrollTop = 0;
+  document.documentElement.style.setProperty('--sheet-up', snap === 'peek' ? peekHeight() + 'px' : '0px');   // parked at peek, the camera controls move up above it
+  updatePaused();
+}
+function openSheet(snap) { snapTo(snap || (sheet.snap === 'hidden' ? 'half' : sheet.snap)); }
+function closeSheet() { snapTo('hidden'); }
+function nearestSnap(y, v, base) {
+  var order = ['full', 'half', 'peek', 'hidden'], ys = order.map(snapY), i;
+  if (v > 0.5) { for (i = 0; i < order.length; i++) { if (ys[i] > base + 1) return order[i]; } return 'hidden'; }      // flicked down
+  if (v < -0.5) { for (i = order.length - 1; i >= 0; i--) { if (ys[i] < base - 1) return order[i]; } return 'full'; }  // flicked up
+  var best = 'peek', bd = Infinity;
+  order.forEach(function (s, k) { if (s === 'hidden' && y <= ys[2]) return; var d = Math.abs(ys[k] - y); if (d < bd) { bd = d; best = s; } });
+  return best;
+}
+function initSheet() {
+  var el = $('sheet'), body = $('sheetBody');
+  function point(e) { return e.touches ? e.touches[0] : e; }
+  function start(e) {
+    if (sheet.snap === 'hidden') return;
+    var p = point(e);
+    sheet.drag = { x0: p.clientX, y0: p.clientY, base: snapY(sheet.snap), inBody: body.contains(e.target), moved: false, cancelled: false, lastY: p.clientY, lastT: now(), v: 0 };
+  }
+  function move(e) {
+    var d = sheet.drag;
+    if (!d || d.cancelled) return;
+    var p = point(e), dy = p.clientY - d.y0, dx = p.clientX - d.x0;
+    if (!d.moved) {
+      if (Math.abs(dy) < 6 && Math.abs(dx) < 6) return;
+      if ((d.inBody && sheet.snap === 'full' && (body.scrollTop > 0 || dy < 0)) || Math.abs(dx) > Math.abs(dy)) { d.cancelled = true; return; }   // the list scrolls instead
+      d.moved = true; el.classList.add('dragging');
+    }
+    setSheetY(Math.max(0, d.base + dy));
+    var t = now();
+    if (t > d.lastT) d.v = (p.clientY - d.lastY) / (t - d.lastT);
+    d.lastY = p.clientY; d.lastT = t;
+    if (e.cancelable) e.preventDefault();
+  }
+  function end() {
+    var d = sheet.drag;
+    sheet.drag = null;
+    if (!d || !d.moved) return;
+    el.classList.remove('dragging');
+    snapTo(nearestSnap(sheet.y, d.v, d.base));
+  }
+  el.addEventListener('touchstart', start, { passive: true });
+  el.addEventListener('touchmove', move, { passive: false });
+  el.addEventListener('touchend', end);
+  el.addEventListener('touchcancel', end);
+  el.addEventListener('mousedown', function (e) {   // desktop: drag with the mouse
+    if (e.button !== 0 || e.target.closest('button, a, input, select, summary')) return;
+    start(e);
+    function mm(ev) { move(ev); }
+    function mu() { end(); window.removeEventListener('mousemove', mm); window.removeEventListener('mouseup', mu); }
+    window.addEventListener('mousemove', mm); window.addEventListener('mouseup', mu);
+  });
+  $('sheetGrab').addEventListener('click', function () { if (sheet.snap !== 'hidden') snapTo(sheet.snap === 'full' ? 'half' : 'full'); });   // tap or keyboard: toggle
+  $('sheetClose').addEventListener('click', closeSheet);
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && sheet.snap !== 'hidden' && !$('onboard').classList.contains('open') && !$('dbgPanel').classList.contains('open')) closeSheet(); });
+  window.addEventListener('resize', function () { if (sheet.snap !== 'hidden' && !sheet.drag) setSheetY(snapY(sheet.snap)); });
+}
+
 /* ----------------------------------------------------------------- tabs */
 var activeTab = 'scan', manualFocused = false;
-function updatePaused() { cam.paused = activeTab !== 'scan' || manualFocused; }
+function updatePaused() { cam.paused = activeTab !== 'scan' || manualFocused || sheet.snap === 'full'; }
 function showTab(name) {
   ['scan', 'log', 'settings'].forEach(function (t) {
     $('tab-' + t).classList.toggle('active', t === name);
+    document.body.classList.toggle('tab-' + t, t === name);
   });
-  Array.prototype.forEach.call($('tabs').querySelectorAll('button'), function (b) { b.classList.toggle('active', b.getAttribute('data-tab') === name); });
+  Array.prototype.forEach.call($('tabs').querySelectorAll('button'), function (b) {
+    var on = b.getAttribute('data-tab') === name;
+    b.classList.toggle('active', on);
+    if (on) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current');
+  });
   if (name === 'settings') renderSettings();
   if (name === 'log') { renderTally(); renderLog(); }
   activeTab = name;
   updatePaused();
-  if (cam.scanning) setCamStatus(cam.paused ? 'Scanning paused while on the ' + name + ' tab.' : 'Scanning (' + (cam.decoder && cam.decoder.kind === 'native' ? 'native BarcodeDetector' : 'ZXing') + ')…');
+  refreshScanStatus();
   window.scrollTo(0, 0);
 }
 
 /* ----------------------------------------------------------------- init */
 function init() {
-  $('verLabel').textContent = 'v' + APP_VERSION;
-  $('verLabel2').textContent = APP_VERSION;
+  $('verLabel').textContent = APP_VERSION;
   video = $('video');
   initDebugPanel();
+  initSheet();
   loadPersisted();
   loadProfile();
   renderTally(); renderLog(); renderSettings();
@@ -2465,18 +2675,18 @@ function init() {
   $('btnTypeCode').addEventListener('click', function () {
     var open = !$('manualForm').classList.toggle('hidden');
     this.setAttribute('aria-expanded', String(open));
-    this.textContent = open ? 'Hide barcode field' : 'Type a barcode';
+    this.textContent = open ? 'Cancel' : 'Enter a code';
     if (open) $('manualCode').focus();      // inside the tap handler so iOS shows the keyboard
   });
-  $('manualCode').addEventListener('focus', function () { manualFocused = true; updatePaused(); if (cam.scanning) setCamStatus('Scanning paused while you type.'); });
-  $('manualCode').addEventListener('blur', function () { manualFocused = false; updatePaused(); if (cam.scanning && !cam.paused) setCamStatus('Scanning (' + (cam.decoder && cam.decoder.kind === 'native' ? 'native BarcodeDetector' : 'ZXing') + ')…'); });
+  $('manualCode').addEventListener('focus', function () { manualFocused = true; updatePaused(); refreshScanStatus(); });
+  $('manualCode').addEventListener('blur', function () { manualFocused = false; updatePaused(); refreshScanStatus(); });
   $('manualForm').addEventListener('submit', function (ev) {
     ev.preventDefault();
     var input = $('manualCode');
     var code = digitsOnly(input.value);
     if (!code) { toast('Enter a barcode'); return; }
-    if (!(code.length === 8 || (code.length >= 12 && code.length <= 14))) toast('Unusual length (' + code.length + ' digits) — trying anyway');
-    else if (!readIsValid(code, null)) toast('Check digit does not match — trying anyway');
+    if (!(code.length === 8 || (code.length >= 12 && code.length <= 14))) toast('Unusual length (' + code.length + ' digits), trying anyway');
+    else if (!readIsValid(code, null)) toast('Check digit does not match, trying anyway');
     input.blur();
     handleCode(code, null, 'manual');
   });
@@ -2487,7 +2697,7 @@ function init() {
     var csv = toCSV(scanLog.slice().reverse());
     var box = $('exportBox');
     copyText(csv).then(function (ok) {
-      toast(ok ? 'CSV copied (' + scanLog.length + ' rows)' : 'Copy failed — select the text below');
+      toast(ok ? 'CSV copied (' + scanLog.length + ' rows)' : 'Copy failed. Select the text below.');
       box.value = csv; box.classList.remove('hidden');
     });
   });
@@ -2499,7 +2709,7 @@ function init() {
   }
 
   // Settings tab
-  $('btnShowKey').addEventListener('click', function () { var i = $('usdaKey'); var hidden = i.classList.toggle('secret'); this.textContent = hidden ? 'Show' : 'Hide'; });
+  $('btnShowKey').addEventListener('click', function () { var i = $('usdaKey'); var hidden = i.classList.toggle('secret'); this.textContent = hidden ? 'Show' : 'Hide'; this.setAttribute('aria-label', hidden ? 'Show key' : 'Hide key'); });
   $('btnSaveKey').addEventListener('click', function () {
     var k = $('usdaKey').value.trim();
     if (!k) { store.remove(LS.usdaKey); } else { store.set(LS.usdaKey, k); }
@@ -2515,9 +2725,9 @@ function init() {
     copyText(buildSeedLink()).then(function (ok) { toast(ok ? 'Link copied (scoring profile' + (getUsdaKey() ? ' + key' : '') + ')' : 'Copy failed'); });
   });
   $('btnCopyLink').addEventListener('click', function () {
-    copyText(buildSeedLink()).then(function (ok) { toast(ok ? 'Link copied (key' + (profile ? ' + scoring profile' : '') + ') — open it, then Add to Home Screen' : 'Copy failed'); });
+    copyText(buildSeedLink()).then(function (ok) { toast(ok ? 'Link copied (key' + (profile ? ' + scoring profile' : '') + '). Open it, then add it to the Home Screen.' : 'Copy failed'); });
   });
-  $('decoderPref').addEventListener('change', function () { store.set(LS.decoder, this.value); dbg('log', 'Decoder preference: ' + this.value); if (cam.scanning) { stopCamera('Decoder changed — tap Start camera.'); } });
+  $('decoderPref').addEventListener('change', function () { store.set(LS.decoder, this.value); dbg('log', 'Decoder preference: ' + this.value); if (cam.scanning) { stopCamera('Decoder changed. Start the camera again.'); } });
   $('btnClearCache').addEventListener('click', function () {
     var keys = store.keys(LS.cachePrefix);
     keys.forEach(store.remove.bind(store));
@@ -2533,7 +2743,7 @@ function init() {
   });
 
   document.addEventListener('visibilitychange', function () {
-    if (document.hidden && (cam.scanning || cam.stream)) { dbg('log', 'Page hidden — stopping camera'); stopCamera('Camera stopped while the page was in the background. Tap Start camera.'); }
+    if (document.hidden && (cam.scanning || cam.stream)) { dbg('log', 'Page hidden — stopping camera'); stopCamera('Camera stopped while the app was in the background.'); }
   });
   window.addEventListener('pagehide', function () { if (cam.scanning || cam.stream) stopCamera(); });
 
@@ -2580,7 +2790,7 @@ window.FS = {
   startCamera: startCamera, stopCamera: stopCamera, pickDecoder: pickDecoder,
   scoreProduct: scoreProduct, computeNutriScore: computeNutriScore, answersToProfile: answersToProfile, additivesScore: additivesScore, encodeProfile: encodeProfile, decodeProfile: decodeProfile, sanitizeProfile: sanitizeProfile, normAnswers: normAnswers, avoidFlags: avoidFlags, allergensFromText: allergensFromText, allergensNamed: allergensNamed, isBeverage: isBeverage, nutriKind: nutriKind, nutriScoreOf: nutriScoreOf, additiveLevel: additiveLevel, dedupeAdditives: dedupeAdditives,
   profile: function () { return profile; }, openOnboarding: openOnboarding,
-  state: function () { return { cam: cam, tally: tally, log: scanLog, current: current }; },
+  state: function () { return { cam: cam, tally: tally, log: scanLog, current: current, sheet: sheet.snap }; }, sheet: snapTo,
   _setFrameSource: function (el) { cam.frameSource = el; }
 };
 
