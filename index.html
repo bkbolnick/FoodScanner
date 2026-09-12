@@ -126,17 +126,16 @@ input[type=range] { accent-color: var(--accent); width: 100%; margin: 0; }
 .seg { display: flex; background: var(--seg-track); border-radius: 9px; padding: 2px; margin-top: 8px; }
 .seg-btn { min-height: 44px; }
 .seg-btn b { display: block; font-weight: inherit; }
-.seg-btn .lv2 { display: block; font-size: 0.706rem; color: var(--label2); }
-.seg-btn.on .lv2 { color: var(--label); }
+.seg-btn .lv2 { display: block; font-size: 0.706rem; }
 /* ----------------------------------------------------------- scan screen */
 #tab-scan { position: fixed; top: 0; right: 0; bottom: 0; left: 0; background: var(--bg); }
 .viewport { position: absolute; top: 0; right: 0; bottom: 0; left: 0; overflow: hidden; background: var(--bg); }
 .viewport.live { background: #000; }
 .viewport video { width: 100%; height: 100%; object-fit: cover; display: block; opacity: 0; }   /* stays rendered: iOS only decodes a rendered video */
 .viewport.live video { opacity: 1; }
-.viewport .guide { position: absolute; left: 10%; right: 10%; top: 22%; height: 24%; display: none; pointer-events: none; border-radius: 12px; box-shadow: 0 0 0 200vmax rgba(0, 0, 0, 0.45); transition: transform 0.25s var(--ease), box-shadow 0.25s; }
+.viewport .guide { position: absolute; left: 10%; right: 10%; top: 20%; height: 18%; display: none; pointer-events: none; border-radius: 12px; box-shadow: 0 0 0 200vmax rgba(0, 0, 0, 0.45); transition: transform 0.25s var(--ease), box-shadow 0.25s; }
 .viewport.live .guide { display: block; }
-.guide .c { position: absolute; width: 24px; height: 24px; border: 0 solid #FFFFFF; transition: border-color 0.15s; }
+.guide .c { position: absolute; width: 24px; height: 24px; border: 0 solid #FFFFFF; transition: border-color 0.15s; filter: drop-shadow(0 0 1px rgba(0, 0, 0, 0.6)); }   /* readable over a white label too */
 .guide .c.tl { left: -1px; top: -1px; border-top-width: 2.5px; border-left-width: 2.5px; border-top-left-radius: 12px; }
 .guide .c.tr { right: -1px; top: -1px; border-top-width: 2.5px; border-right-width: 2.5px; border-top-right-radius: 12px; }
 .guide .c.bl { left: -1px; bottom: -1px; border-bottom-width: 2.5px; border-left-width: 2.5px; border-bottom-left-radius: 12px; }
@@ -176,8 +175,8 @@ input[type=range] { accent-color: var(--accent); width: 100%; margin: 0; }
 /* -------------------------------------------------------------- result sheet */
 .sheet { position: fixed; left: 0; right: 0; bottom: calc(var(--tabbar) + var(--safe-b)); top: calc(var(--safe-t) + 10px); z-index: 30; max-width: 640px; margin: 0 auto;
   background: var(--cell); border-radius: 16px 16px 0 0; display: flex; flex-direction: column; transform: translateY(100%); visibility: hidden; will-change: transform;
-  transition: transform 0.42s var(--ease), visibility 0s linear 0.42s; }
-.sheet.open { visibility: visible; transition: transform 0.42s var(--ease), visibility 0s; }
+  transition: transform 0.42s var(--ease), clip-path 0.42s var(--ease), -webkit-clip-path 0.42s var(--ease), visibility 0s linear 0.42s; }
+.sheet.open { visibility: visible; transition: transform 0.42s var(--ease), clip-path 0.42s var(--ease), -webkit-clip-path 0.42s var(--ease), visibility 0s; }
 .sheet.dragging { transition: none; }
 body:not(.tab-scan) .sheet { visibility: hidden; transform: translateY(100%) !important; transition: none; }
 .sheet-grab { flex: none; height: 26px; display: flex; align-items: center; justify-content: center; touch-action: none; cursor: grab; }
@@ -201,10 +200,22 @@ body:not(.tab-scan) .sheet { visibility: hidden; transform: translateY(100%) !im
 .score-n { font-size: 1.647rem; font-weight: 700; line-height: 1; min-width: 2.2em; }
 .score-n.none { color: var(--label3); }
 .band { font-size: 1rem; font-weight: 600; display: flex; align-items: center; }
-.why { list-style: none; margin: 10px 0 0; padding: 0; font-size: 0.882rem; }
-.why li { padding: 3px 0; display: flex; gap: 8px; }
-.why .sign { flex: none; width: 1em; text-align: center; font-weight: 600; }
-.why .pos .sign { color: var(--green); } .why .neg .sign { color: var(--red); }
+.rsn { list-style: none; margin: 12px 0 0; padding: 0; }
+.rsn li { display: flex; align-items: center; gap: 10px; min-height: 40px; padding: 6px 0; border-top: 1px solid var(--sep); font-size: 1rem; }
+.rsn li:first-child { border-top: 0; }
+.rsn .rt { flex: 1 1 auto; min-width: 0; }
+.rsn .rd { flex: none; max-width: 48%; text-align: right; color: var(--label2); font-size: 0.882rem; }
+.fac { list-style: none; margin: 0; padding: 0; }
+.fac li { padding: 10px 0; border-top: 1px solid var(--sep); }
+.fac li:first-child { border-top: 0; }
+.fac .fh { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.fac .ft { font-size: 1rem; font-weight: 600; }
+.fac .fs { font-size: 1rem; font-weight: 600; white-space: nowrap; }
+.fac .fw { font-size: 0.706rem; font-weight: 400; color: var(--label2); margin-left: 6px; }
+.fac .fd { font-size: 0.765rem; color: var(--label2); line-height: 1.35; margin-top: 2px; }
+.fbar { height: 4px; border-radius: 2px; background: var(--fill2); margin-top: 8px; overflow: hidden; }
+.fbar span { display: block; height: 100%; border-radius: 2px; background: var(--label3); }
+.fbar .good { background: var(--green); } .fbar .bad { background: var(--red); }
 .lowconf { font-size: 0.765rem; color: var(--orange); margin-top: 6px; }
 details.disc { margin-top: 6px; }
 details.disc summary { list-style: none; display: flex; align-items: center; min-height: 44px; font-size: 1rem; cursor: pointer; position: relative; padding-right: 26px; }
@@ -212,10 +223,10 @@ details.disc summary::-webkit-details-marker { display: none; }
 details.disc summary::after { content: ""; position: absolute; right: 8px; top: 50%; width: 8px; height: 8px; border-right: 2px solid var(--label3); border-bottom: 2px solid var(--label3); transform: translateY(-60%) rotate(45deg); transition: transform 0.2s; }
 details.disc[open] summary::after { transform: translateY(-30%) rotate(-135deg); }
 details.disc summary .rv { margin-left: auto; color: var(--label2); font-size: 0.882rem; }
-table.sc, table.cov { width: 100%; border-collapse: collapse; font-size: 0.765rem; }
-table.sc th, table.sc td, table.cov th, table.cov td { padding: 8px 4px; text-align: right; vertical-align: top; border-top: 1px solid var(--sep); }
-table.sc th, table.cov th { font-weight: 400; color: var(--label2); border-top: 0; }
-table.sc th:first-child, table.sc td:first-child, table.cov th:first-child, table.cov td:first-child { text-align: left; padding-left: 0; }
+table.cov { width: 100%; border-collapse: collapse; font-size: 0.765rem; }
+table.cov th, table.cov td { padding: 8px 4px; text-align: right; vertical-align: top; border-top: 1px solid var(--sep); }
+table.cov th { font-weight: 400; color: var(--label2); border-top: 0; }
+table.cov th:first-child, table.cov td:first-child { text-align: left; padding-left: 0; }
 table.cov td, table.cov th { text-align: center; }
 table.cov .has { color: var(--green); } table.cov .no { color: var(--label3); }
 .avoid-row { display: flex; align-items: center; min-height: 32px; font-size: 1rem; }
@@ -248,9 +259,10 @@ table.cov .has { color: var(--green); } table.cov .no { color: var(--label3); }
 .actions { display: flex; flex-wrap: wrap; gap: 8px; padding-top: 14px; }
 .actions .btn { flex: 1 1 auto; }
 .state { display: flex; flex-direction: column; align-items: center; text-align: center; padding: 8px 8px 12px; }
-.state .glyph { width: 44px; height: 44px; margin-bottom: 8px; }
+.state .glyph { width: 44px; height: 44px; margin-bottom: 8px; color: var(--label3); }
 .state .glyph svg { width: 100%; height: 100%; }
 .state.red .glyph { color: var(--red); }
+.state .foot { margin-top: 4px; }
 .state h3 { font-size: 1.294rem; font-weight: 700; margin: 0 0 4px; }
 .state .code { font-size: 0.882rem; color: var(--label2); }
 .spinner { width: 20px; height: 20px; border-radius: 50%; border: 2px solid var(--fill2); border-top-color: var(--accent); animation: spin 0.8s linear infinite; flex: none; }
@@ -617,12 +629,17 @@ function capitalize(s) { s = String(s || ''); return s.charAt(0).toUpperCase() +
 // Inline glyphs (app-authored SVG, used through h()'s html attribute).
 var SVG_PHOTO = '<svg viewBox="0 0 28 28" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="22" height="18" rx="3"/><circle cx="10" cy="11" r="2"/><path d="M25 18l-6-6-9 9"/></svg>';
 var SVG_ALERT = '<svg viewBox="0 0 44 44" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><circle cx="22" cy="22" r="18"/><path d="M22 13v11"/><circle cx="22" cy="30.5" r="1.4" fill="currentColor" stroke="none"/></svg>';
+var SVG_SEARCH = '<svg viewBox="0 0 44 44" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><circle cx="19" cy="19" r="12"/><path d="M28 28l10 10"/><path d="M14 15v8M18 15v8M22 15v8M25 15v8"/></svg>';
+var FORMAT_NAMES = { ean_13: 'EAN-13', ean_8: 'EAN-8', upc_a: 'UPC-A', upc_e: 'UPC-E' };
+function formatName(f) { if (!f) return ''; return FORMAT_NAMES[f] || String(f).toUpperCase().replace(/_/g, '-'); }
+function sourceName(s) { return String(s || '').replace(/\bOFF\b/g, 'Open Food Facts'); }   // data sources are named in full on screen
 function emptyNut() { var o = {}; NUT_KEYS.forEach(function (k) { o[k] = null; }); return o; }
 function now() { return Date.now(); }
 function isoNow() { return new Date().toISOString(); }
 function shortTime(iso) {
   var d = new Date(iso);
   if (isNaN(d.getTime())) return iso;
+  try { return d.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }); } catch (e) { /* fall through */ }
   var mm = d.getMonth() + 1, dd = d.getDate(), hh = d.getHours(), mi = d.getMinutes();
   return mm + '/' + dd + ' ' + (hh < 10 ? '0' : '') + hh + ':' + (mi < 10 ? '0' : '') + mi;
 }
@@ -1096,7 +1113,7 @@ function renderLog() {
   if (!scanLog.length) { ul.appendChild(h('li', { class: 'empty', text: 'No scans yet. Every lookup is listed here.' })); return; }
   scanLog.slice(0, 200).forEach(function (e) {
     var found = e.off === 'found' || e.usda === 'found';
-    var srcs = h('span', { class: 'srcs' }, [h('span', {}, [h('span', { class: 'dot ' + statusColor(e.off) }), 'OFF'])]);
+    var srcs = h('span', { class: 'srcs' }, [h('span', {}, [h('span', { class: 'dot ' + statusColor(e.off) }), 'Open Food Facts'])]);
     if (e.usda !== 'skipped') srcs.appendChild(h('span', {}, [h('span', { class: 'dot ' + statusColor(e.usda) }), 'USDA']));
     var hasMissing = found && e.missing && e.missing.length;
     var right = h('div', { class: 'sc' });
@@ -1186,11 +1203,12 @@ function additivesScore(m, e) {
   var off = e.off && e.off.norm;
   if (!off || (!off.additivesAnalysed && !(off.additives && off.additives.length))) return null;   // no ingredient analysis available
   var adds = dedupeAdditives(off.additives || []);
-  if (!adds.length) return { score: 100, worst: -2, text: 'no additives' };
-  var worst = -1, names = [];
-  adds.forEach(function (a) { var l = additiveLevel(a); if (l > worst) worst = l; names.push(a + (l >= 0 ? ' (' + ADDITIVE_LEVEL_LABEL[l] + ')' : ' (unrated)')); });
+  if (!adds.length) return { score: 100, worst: -2, count: 0, worstCount: 0, text: 'no additives' };
+  var worst = -1, names = [], levels = [];
+  adds.forEach(function (a) { var l = additiveLevel(a); levels.push(l); if (l > worst) worst = l; names.push(a + (l >= 0 ? ' (' + ADDITIVE_LEVEL_LABEL[l] + ')' : ' (unrated)')); });
   var base = worst < 0 ? 85 : [100, 80, 35, 0][worst];   // an unrated additive is a small penalty, never worse than a rated 'limited concern' one
-  return { score: Math.max(0, base - 5 * (adds.length - 1)), worst: worst, text: names.slice(0, 3).join(', ') + (names.length > 3 ? ' +' + (names.length - 3) + ' more' : '') };
+  return { score: Math.max(0, base - 5 * (adds.length - 1)), worst: worst, count: adds.length, worstCount: levels.filter(function (l) { return l === worst; }).length,
+    text: names.slice(0, 3).join(', ') + (names.length > 3 ? ' +' + (names.length - 3) + ' more' : '') };
 }
 function organicOf(e) { var off = e.off && e.off.norm; if (!off || !off.labelsKnown) return null; return !!off.organic; }
 // Open Food Facts category lists carry every ancestor ("plant based foods and beverages, breads"), so tags are matched whole.
@@ -1311,11 +1329,11 @@ function standardScore(m, e) {
   if (ns && ns.notApplicable) { nsText = 'Nutri-Score not applicable to this category (per Open Food Facts)'; ns = null; }
   else if (ns) nsText = 'Nutri-Score ' + ns.grade.toUpperCase() + (ns.estimated ? ' (estimated from the nutrients' + (ns.kind === 'fat' ? ', fats/oils table' : ns.kind === 'cheese' ? ', cheese rule' : ns.kind === 'beverage' ? ', beverage table' : '') + (ns.sweetenerFromText ? ', sweetener found in the ingredients' : '') + ')' : '');
   else nsText = 'not enough nutrition data' + (needs.length ? ' (needs ' + needs.join(', ') + ')' : ' (needs total fat for oils and nuts)');
-  comps.push({ key: 'nutrition', label: 'Nutritional quality', max: 50, score: ns ? Math.round(nutritionPoints60(ns) * 50 / 60) : null, text: nsText });
+  comps.push({ key: 'nutrition', label: 'Nutritional quality', max: 50, score: ns ? Math.round(nutritionPoints60(ns) * 50 / 60) : null, text: nsText, grade: ns ? ns.grade : null, estimated: !!(ns && ns.estimated) });
   var ad = additivesScore(m, e);
-  comps.push({ key: 'additives', label: 'Additives', max: 25, score: ad ? Math.round(ad.score * 0.25) : null, text: ad ? ad.text : 'no additive analysis (Open Food Facts only)' });
+  comps.push({ key: 'additives', label: 'Additives', max: 25, score: ad ? Math.round(ad.score * 0.25) : null, text: ad ? ad.text : 'no additive analysis (Open Food Facts only)', ad: ad });
   var nova = m.nova.v, novaKnown = nova !== null && nova !== undefined && NOVA_SCORE[nova] !== undefined;
-  comps.push({ key: 'processing', label: 'Processing', max: 15, score: novaKnown ? Math.round(NOVA_SCORE[nova] * 0.15) : null, text: novaKnown ? 'NOVA ' + nova + ' (' + NOVA_LABELS[nova] + ')' : 'NOVA group unknown (Open Food Facts only)' });
+  comps.push({ key: 'processing', label: 'Processing', max: 15, score: novaKnown ? Math.round(NOVA_SCORE[nova] * 0.15) : null, text: novaKnown ? 'NOVA ' + nova + ' (' + NOVA_LABELS[nova] + ')' : 'NOVA group unknown (Open Food Facts only)', nova: novaKnown ? nova : null });
   var org = organicOf(e);
   comps.push({ key: 'organic', label: 'Organic', max: 10, score: org === null ? null : (org ? 10 : 0), text: org === null ? 'unknown' : (org ? 'organic label' : 'no organic label') });
   var have = comps.filter(function (c) { return c.score !== null; });
@@ -1324,7 +1342,7 @@ function standardScore(m, e) {
   var informative = have.some(function (c) { return c.key !== 'organic'; });   // a label alone is not a score
   var score = (max && informative) ? Math.round(sum / max * 100) : null;
   if (score !== null && !isFinite(score)) score = null;
-  var why = have.map(function (c) { return { positive: c.score / c.max >= 0.5, text: c.label + ': ' + c.text + ' (' + c.score + '/' + c.max + ')', weight: Math.abs(c.score / c.max - 0.5) * c.max }; })
+  var why = have.map(function (c) { return { key: c.key, positive: c.score / c.max >= 0.5, text: c.label + ': ' + c.text + ' (' + c.score + '/' + c.max + ')', weight: Math.abs(c.score / c.max - 0.5) * c.max }; })
     .sort(function (a, b) { return b.weight - a.weight; });
   return { mode: 'standard', score: score, band: bandOf(score), components: comps, why: why,
     coverageNote: have.length < comps.length ? 'based on ' + have.length + ' of ' + comps.length + ' components' : '', lowConfidence: score !== null && comps[0].score === null,
@@ -1349,33 +1367,34 @@ function customScore(m, e, prof) {
     var w = Number(prof.weights && prof.weights[met.key]) || 0;
     if (w <= 0) return;
     totalW += w;
-    var v, s = null, text = '', dir = metricDir(prof, met), label = met.label + (dir !== met.dir ? (dir === 'high' ? ' (more is better)' : ' (less is better)') : '');
+    var v = null, s = null, text = '', dir = metricDir(prof, met), label = met.label + (dir !== met.dir ? (dir === 'high' ? ' (more is better)' : ' (less is better)') : ''), extra = {};
     if (met.dir === 'low' || met.dir === 'high') {
       v = m.per100[met.key];
+      extra.th = th[met.key];
       if (v !== null && v !== undefined) { s = linScore(v, th[met.key], dir); text = fmtVal(v, met.unit) + '/100 ' + (m.basis || 'g'); }
     } else if (met.key === 'processing') {
       var nova = m.nova.v;
-      if (nova !== null && nova !== undefined && NOVA_SCORE[nova] !== undefined) { s = NOVA_SCORE[nova]; text = 'NOVA ' + nova; }
+      if (nova !== null && nova !== undefined && NOVA_SCORE[nova] !== undefined) { s = NOVA_SCORE[nova]; text = 'NOVA ' + nova; extra.nova = nova; }
     } else if (met.key === 'additives') {
       var ad = additivesScore(m, e);
-      if (ad) { s = ad.score; text = ad.text; }
+      if (ad) { s = ad.score; text = ad.text; extra.ad = ad; }
     } else if (met.key === 'organic') {
       var org = organicOf(e);
       if (org !== null) { s = org ? 100 : 0; text = org ? 'organic label' : 'no organic label'; }
     }
-    if (s === null) { missW += w; rows.push({ key: met.key, label: label, w: w, s: null, text: 'no data' }); return; }
+    if (s === null) { missW += w; rows.push(Object.assign({ key: met.key, label: label, w: w, s: null, v: null, dir: dir, text: 'no data' }, extra)); return; }
     wsum += w; acc += w * s;
-    rows.push({ key: met.key, label: label, w: w, s: s, text: text });
+    rows.push(Object.assign({ key: met.key, label: label, w: w, s: s, v: v, dir: dir, text: text }, extra));
   });
   var informative = rows.some(function (r) { return r.s !== null && r.key !== 'organic'; });
   var enoughWeight = totalW > 0 && wsum / totalW >= 0.5;     // at least half of your weighted factors must have data
   var score = (wsum && informative && enoughWeight) ? Math.round(acc / wsum) : null;
   if (score !== null && !isFinite(score)) score = null;
   var why = rows.filter(function (r) { return r.s !== null; })
-    .map(function (r) { return { positive: r.s >= 50, text: r.label + ' ' + r.text, weight: r.w * Math.abs(r.s - 50) }; })
+    .map(function (r) { return { key: r.key, positive: r.s >= 50, text: r.label + ' ' + r.text, weight: r.w * Math.abs(r.s - 50) }; })
     .sort(function (a, b) { return b.weight - a.weight; }).slice(0, 3);
   var missing = rows.filter(function (r) { return r.s === null; }).map(function (r) { return r.label.toLowerCase(); });
-  return { mode: 'custom', score: score, band: bandOf(score), rows: rows, why: why,
+  return { mode: 'custom', score: score, band: bandOf(score), rows: rows, why: why, drink: drink,
     coverageNote: (missing.length ? 'based on ' + (rows.length - missing.length) + ' of ' + rows.length + ' weighted factors' : '') + (drink ? (missing.length ? ', ' : '') + 'drink cut-offs per 100 ml' : ''),
     lowConfidence: totalW > 0 && missW / totalW > 0.4, missingNote: missing.length ? 'no data for ' + missing.join(', ') : '',
     reason: score !== null ? '' : (!wsum ? 'none of your weighted factors has data' : !informative ? 'only the organic label is known' : 'too little data for your weighted factors' + (missing.length ? ' (no data for ' + missing.join(', ') + ')' : '')) };
@@ -1523,30 +1542,100 @@ function renderAvoid(av) {
   if (!rows.length) rows.push(h('div', { class: 'avoid-row' }, [h('span', { class: 'dot green' }), 'Clear: ' + av.ok.join(', ')]));
   return h('section', { class: 'sec avoid' }, [h('div', { class: 'sec-h', text: 'Avoid list' }), h('div', {}, rows), h('div', { class: 'sec-f', text: 'Does not change the score.' })]);
 }
+// How a factor did, in words a shopper can use: 'good' helps the score, 'bad' hurts it, 'mid' is in between.
+function toneOf(s) { return (s === null || s === undefined) ? 'none' : s >= 67 ? 'good' : s <= 33 ? 'bad' : 'mid'; }
+function toneDot(t) { return h('span', { class: 'dot ' + (t === 'good' ? 'green' : t === 'bad' ? 'red' : '') }); }
+function metricByKey(k) { for (var i = 0; i < METRICS.length; i++) { if (METRICS[i].key === k) return METRICS[i]; } return null; }
+var PLAIN_NUTRIENT = { sugars: 'sugar', fat: 'fat', kcal: 'calories', netCarbs: 'net carbs', satFat: 'saturated fat', sodiumMg: 'sodium', fiber: 'fiber', protein: 'protein' };
+function cutoffPhrase(met, pair, dir) {   // the two cut-offs of a nutrient factor, as a sentence
+  if (!pair) return '';
+  var lo = cutoffText(pair[0], met.unit), hi = cutoffText(pair[1], met.unit);
+  return dir === 'low' ? 'Full marks at ' + lo + ' or less, none at ' + hi + ' or more' : 'Full marks at ' + hi + ' or more, none at ' + lo + ' or less';
+}
+function additiveWords(ad) {
+  if (!ad) return { title: 'Additives', detail: 'not analysed' };
+  if (!ad.count) return { title: 'No additives', detail: '' };
+  var title = ad.count + ' additive' + (ad.count === 1 ? '' : 's');
+  var detail = ad.worst < 0 ? 'none rated' : ad.worst === 0 ? 'none of known concern' : ad.worstCount + ' of ' + ADDITIVE_LEVEL_LABEL[ad.worst];
+  return { title: title, detail: detail };
+}
+// One custom-score factor in words: {title, detail, tone}.
+function factorWords(r, basis) {
+  var met = metricByKey(r.key), tone = toneOf(r.s);
+  if (!met) return { title: r.label, detail: r.text, tone: tone };
+  if (r.s === null) return { title: met.label, detail: 'no data, left out', tone: 'none' };
+  if (met.dir === 'low' || met.dir === 'high') {
+    var name = PLAIN_NUTRIENT[met.key] || met.label.toLowerCase(), title;
+    if (r.dir === 'low') title = tone === 'good' ? 'Low in ' + name : tone === 'bad' ? 'High in ' + name : 'Moderate ' + name;
+    else title = tone === 'good' ? 'High in ' + name : tone === 'bad' ? 'Low in ' + name : 'Some ' + name;
+    return { title: title, detail: fmtVal(r.v, met.unit) + ' per 100 ' + basis, tone: tone };
+  }
+  if (r.key === 'processing') return { title: capitalize(NOVA_LABELS[r.nova] || 'NOVA ' + r.nova), detail: 'NOVA group ' + r.nova, tone: tone };
+  if (r.key === 'additives') { var aw = additiveWords(r.ad); return { title: aw.title, detail: aw.detail, tone: tone }; }
+  if (r.key === 'organic') return { title: r.s ? 'Organic label' : 'No organic label', detail: '', tone: tone };
+  return { title: r.label, detail: r.text, tone: tone };
+}
+// One standard-score component in words.
+function componentWords(c) {
+  var tone = c.score === null ? 'none' : toneOf(Math.round(100 * c.score / c.max)), pts = c.score === null ? 'no data' : c.score + ' of ' + c.max + ' points';
+  if (c.key === 'nutrition') return { title: c.grade ? 'Nutri-Score ' + String(c.grade).toUpperCase() + (c.estimated ? ' (estimated)' : '') : (c.score === null ? 'Nutritional quality unknown' : 'Nutritional quality'), detail: pts, tone: tone };
+  if (c.key === 'additives') { var aw = additiveWords(c.ad); return { title: c.score === null ? 'Additives not analysed' : aw.title + (aw.detail ? ', ' + aw.detail : ''), detail: pts, tone: tone }; }
+  if (c.key === 'processing') return { title: c.nova !== null && c.nova !== undefined ? capitalize(NOVA_LABELS[c.nova]) : 'Processing unknown', detail: (c.nova !== null && c.nova !== undefined ? 'NOVA ' + c.nova + ', ' : '') + pts, tone: tone };
+  if (c.key === 'organic') return { title: c.score === null ? 'Organic label unknown' : (c.score ? 'Organic label' : 'No organic label'), detail: pts, tone: tone };
+  return { title: c.label, detail: pts, tone: tone };
+}
 function renderScore(sc) {
   var sec = h('section', { class: 'sec score' });
   if (sc.score === null) {
     sec.appendChild(h('div', { class: 'score-row' }, [h('div', { class: 'score-n none', text: '–', 'aria-hidden': 'true' }), h('div', { class: 'grow' }, [h('div', { class: 'band', text: 'No score' }), h('div', { class: 'foot', text: capitalize(sc.reason) + '.' })])]));
     return sec;
   }
+  var basis = (current && current.merged && current.merged.basis) || 'g';
   var foot = [h('div', { class: 'foot', text: sc.mode === 'standard' ? 'Standard score' : 'Custom score' })];
   if (sc.mode === 'custom') foot.push(h('div', { class: 'foot', text: (profile && profile.name) || 'custom' }));
-  if (sc.coverageNote) foot.push(h('div', { class: 'foot', text: capitalize(sc.coverageNote) + '.' }));
+  if (sc.drink) foot.push(h('div', { class: 'foot', text: 'Scored with drink cut-offs per 100 ml.' }));
   sec.appendChild(h('div', { class: 'score-row' }, [
     h('div', { class: 'score-n', text: String(sc.score), 'aria-label': 'Score ' + sc.score + ' of 100' }),
     h('div', { class: 'grow' }, [h('div', { class: 'band' }, [h('span', { class: 'dot ' + (sc.lowConfidence ? '' : bandColor(sc.band.key)) }), sc.lowConfidence ? 'Low confidence' : sc.band.label])].concat(foot))
   ]));
-  if (sc.why && sc.why.length) sec.appendChild(h('ul', { class: 'why' }, sc.why.slice(0, 3).map(function (w) { return h('li', { class: w.positive ? 'pos' : 'neg' }, [h('span', { class: 'sign', 'aria-hidden': 'true', text: w.positive ? '+' : '−' }), h('span', { text: w.text })]); })));
+  // the three factors that moved the score most, in words
+  var byKey = {};
+  (sc.mode === 'standard' ? sc.components : sc.rows).forEach(function (x) { byKey[x.key] = x; });
+  if (sc.why && sc.why.length) sec.appendChild(h('ul', { class: 'rsn' }, sc.why.slice(0, 3).map(function (w) {
+    var x = byKey[w.key], words = x ? (sc.mode === 'standard' ? componentWords(x) : factorWords(x, basis)) : { title: w.text, detail: '', tone: w.positive ? 'good' : 'bad' };
+    return h('li', {}, [toneDot(words.tone), h('span', { class: 'rt', text: words.title }), words.detail ? h('span', { class: 'rd', text: words.detail }) : null]);
+  })));
   if (sc.lowConfidence) sec.appendChild(h('div', { class: 'lowconf', text: 'Low confidence: ' + (sc.missingNote || 'key data is missing') + '.' }));
-  var tbl = h('table', { class: 'sc' });
+  else if (sc.missingNote) sec.appendChild(h('div', { class: 'foot', style: 'margin-top:8px', text: capitalize(sc.missingNote) + ', left out.' }));
+  // every factor with its value, cut-offs, sub-score and weight, plus how they add up
+  var list = h('ul', { class: 'fac' }), explain;
   if (sc.mode === 'standard') {
-    tbl.appendChild(h('tr', {}, [h('th', { text: 'Component' }), h('th', { text: 'Points' })]));
-    sc.components.forEach(function (c) { tbl.appendChild(h('tr', {}, [h('td', { text: c.label + ' — ' + c.text }), h('td', { text: (c.score === null ? '–' : c.score) + '/' + c.max })])); });
+    sc.components.forEach(function (c) {
+      var t = c.score === null ? 'none' : toneOf(Math.round(100 * c.score / c.max));
+      list.appendChild(h('li', {}, [
+        h('div', { class: 'fh' }, [h('span', { class: 'ft', text: c.label }), h('span', { class: 'fs', text: c.score === null ? 'no data' : c.score + ' of ' + c.max })]),
+        h('div', { class: 'fd', text: capitalize(c.text) + (c.score === null ? '. Left out.' : '.') }),
+        c.score === null ? null : h('div', { class: 'fbar' }, h('span', { class: t, style: 'width:' + Math.round(100 * c.score / c.max) + '%' }))
+      ]));
+    });
+    explain = 'Nutritional quality counts up to 50 points, additives 25, processing 15 and organic 10. Components without data are left out and the total is scaled to 100.';
   } else {
-    tbl.appendChild(h('tr', {}, [h('th', { text: 'Factor' }), h('th', { text: 'Weight' }), h('th', { text: 'Score' })]));
-    sc.rows.forEach(function (r) { tbl.appendChild(h('tr', {}, [h('td', { text: r.label + (r.text ? ' — ' + r.text : '') }), h('td', { text: String(r.w) }), h('td', { text: r.s === null ? '–' : String(r.s) })])); });
+    sc.rows.forEach(function (r) {
+      var met = metricByKey(r.key), words = factorWords(r, basis), detail;
+      if (r.s === null) detail = 'No data, left out.';
+      else if (met && (met.dir === 'low' || met.dir === 'high')) detail = words.detail + '. ' + cutoffPhrase(met, r.th, r.dir) + '.';
+      else if (r.key === 'processing') detail = 'NOVA group ' + r.nova + ', ' + NOVA_LABELS[r.nova] + '. NOVA 1 scores 100, 2 scores 80, 3 scores 50, 4 scores 10.';
+      else if (r.key === 'additives') detail = capitalize(r.text) + '. The worst rated additive sets the ceiling; each extra one costs 5.';
+      else detail = capitalize(r.text) + '.';
+      list.appendChild(h('li', {}, [
+        h('div', { class: 'fh' }, [h('span', { class: 'ft', text: met ? met.label + (r.dir && met.dir !== r.dir ? ' (more is better)' : '') : r.label }), h('span', { class: 'fs' }, [r.s === null ? 'no data' : String(r.s), h('span', { class: 'fw', text: 'weight ' + r.w })])]),
+        h('div', { class: 'fd', text: detail }),
+        r.s === null ? null : h('div', { class: 'fbar' }, h('span', { class: words.tone, style: 'width:' + r.s + '%' }))
+      ]));
+    });
+    explain = 'Each factor scores 0 to 100 against your cut-offs and counts as many times as its weight (strict preference 5, medium 3, slight 1). The score is that average; factors without data are left out.';
   }
-  sec.appendChild(h('details', { class: 'disc' }, [h('summary', { text: 'Details' }), tbl,
+  sec.appendChild(h('details', { class: 'disc' }, [h('summary', { text: 'How the score adds up' }), list, h('div', { class: 'sec-f', text: explain }),
     h('div', { class: 'sec-f', text: 'Scores are a guide computed from public data, not medical advice. Additive risk levels are this app\'s own editorial classification.' })]));
   return sec;
 }
@@ -1708,11 +1797,13 @@ function renderOnboarding() {
   if (ob.step === 0) {
     box.appendChild(h('h2', { text: 'How should products be scored?' }));
     box.appendChild(h('p', { text: 'Every product gets a 0–100 score. Use the standard score, or tailor one to your own goals. You can change this any time in Settings. Scores are a guide from public data, not medical advice.' }));
-    box.appendChild(h('button', { class: 'ob-choice', type: 'button', id: 'obStandard', onclick: function () { saveProfile({ mode: 'standard', version: 1 }); closeOnboarding(); toast('Standard scoring on'); } },
-      [h('b', {}, 'Standard'), h('span', { class: 'small', text: 'Nutritional quality via Nutri-Score (50%), additives weighed by risk level (25%), NOVA processing (15%) and organic certification (10%).' })]));
-    box.appendChild(h('button', { class: 'ob-choice', type: 'button', id: 'obCustom', onclick: function () { ob.step = 1; renderOnboarding(); } },
-      [h('b', {}, 'Customize'), h('span', { class: 'small', text: 'Five quick questions build a personal score: what to limit, what to get more of, how strong each preference is, processing, and what to avoid. Nothing to type.' })]));
-    if (profile) box.appendChild(h('button', { class: 'btn block', type: 'button', id: 'obKeep', onclick: closeOnboarding }, 'Keep current: ' + profileName(profile)));
+    box.appendChild(h('div', { class: 'group' }, [
+      h('button', { class: 'row nav', type: 'button', id: 'obStandard', onclick: function () { saveProfile({ mode: 'standard', version: 1 }); closeOnboarding(); toast('Standard scoring on'); } },
+        h('span', { class: 'rl' }, [h('span', { class: 't', text: 'Standard' }), h('span', { class: 'd', text: 'Nutritional quality via Nutri-Score (50%), additives weighed by risk level (25%), NOVA processing (15%) and organic certification (10%).' })])),
+      h('button', { class: 'row nav', type: 'button', id: 'obCustom', onclick: function () { ob.step = 1; renderOnboarding(); } },
+        h('span', { class: 'rl' }, [h('span', { class: 't', text: 'Customize' }), h('span', { class: 'd', text: 'Five quick questions build a personal score: what to limit, what to get more of, how strong each preference is, processing, and what to avoid. Nothing to type.' })]))
+    ]));
+    if (profile) box.appendChild(h('button', { class: 'btn block', type: 'button', id: 'obKeep', onclick: closeOnboarding }, profile.mode === 'standard' ? 'Keep the standard score' : 'Keep my custom score'));
     return;
   }
   var qi = ob.step - 1;
@@ -1789,11 +1880,6 @@ function renderQuestion(box, q, qi) {
   ]));
 }
 function cutoffText(x, unit) { return ((unit === 'kcal' || unit === 'mg') ? Math.round(x) : Math.round(x * 100) / 100) + ' ' + unit; }   // exact, unlike the 1-decimal display rounding
-function thresholdText(met, th, dir) {
-  var t = th[met.key];
-  if (!t) return '';
-  return dir === 'low' ? '100 at ≤' + cutoffText(t[0], met.unit) + ', 0 at ≥' + cutoffText(t[1], met.unit) + ' per 100 g' : '0 at ≤' + cutoffText(t[0], met.unit) + ', 100 at ≥' + cutoffText(t[1], met.unit) + ' per 100 g';
-}
 function renderSummary(box) {
   var p = answersToProfile(ob.answers), total = 0, informative = 0;
   METRICS.forEach(function (met) { var w = p.weights[met.key] || 0; total += w; if (met.key !== 'organic') informative += w; });   // an organic label alone never gives a score
@@ -1804,8 +1890,8 @@ function renderSummary(box) {
   METRICS.slice().sort(function (x, y) { return (p.weights[y.key] || 0) - (p.weights[x.key] || 0); }).forEach(function (met) {   // heaviest first
     var w = p.weights[met.key] || 0;
     if (!w) return;
-    var dir = metricDir(p, met), tt = thresholdText(met, p.thresholds, dir), lv = p.answers.strict[met.key];
-    list.appendChild(h('div', { class: 'wrow' }, [h('span', { class: 'wl' }, [met.label + (dir !== met.dir ? ' (more is better)' : ''), tt ? h('span', { class: 'foot', text: (lv ? STRICTNESS[lv].label + '. ' : '') + capitalize(tt) }) : null]), h('span', { class: 'wv', text: String(w) })]));
+    var dir = metricDir(p, met), tt = cutoffPhrase(met, p.thresholds[met.key], dir), lv = p.answers.strict[met.key];
+    list.appendChild(h('div', { class: 'wrow' }, [h('span', { class: 'wl' }, [met.label + (dir !== met.dir ? ' (more is better)' : ''), tt ? h('span', { class: 'foot', text: (lv ? STRICTNESS[lv].label + '. ' : '') + tt + ' per 100 g.' }) : null]), h('span', { class: 'wv', text: String(w) })]));
   });
   box.appendChild(list);
   if (p.avoid.length) box.appendChild(h('p', { text: 'Warnings for: ' + p.avoid.map(function (k) { return AVOID_LABEL[k].toLowerCase(); }).join(', ') + '. These do not change the score.' }));
@@ -1855,14 +1941,14 @@ function renderLoading(code) {
 function renderError(code, err) {
   var box = clear($('result'));
   clear($('missingLine')); clear($('resultMore'));
-  box.appendChild(h('div', { class: 'state red' }, [
+  box.appendChild(h('div', { class: 'state red peek' }, [
     h('div', { class: 'glyph', html: SVG_ALERT }),
     h('h3', { text: 'Lookup failed' }),
     h('div', { class: 'code', text: code }),
-    h('div', { class: 'foot', style: 'margin-top:6px', text: String(err && err.message || err) })
+    h('div', { class: 'foot', text: String(err && err.message || err) })
   ]));
   box.appendChild(h('div', { class: 'actions' }, [h('button', { class: 'btn small', type: 'button', onclick: function () { handleCode(code, null, 'manual'); } }, 'Try again')]));
-  openSheet(null);
+  openSheet(sheet.snap === 'hidden' || sheet.snap === 'peek' ? 'half' : sheet.snap);   // the reason and Try again must be in view
 }
 // One row per source, in plain words: what happened and, when it worked, which code form matched.
 function sourceRows(entry) {
@@ -1870,7 +1956,7 @@ function sourceRows(entry) {
   function row(name, status, detail) {
     return h('li', {}, [h('span', { class: 'dot ' + statusColor(status) }), h('div', { class: 'grow' }, [h('div', { text: name }), h('div', { class: 'd', text: detail })])]);
   }
-  var od = o.status === 'found' ? 'Found as ' + o.codeUsed : o.status === 'not_found' ? 'Not found (tried ' + (o.tried || []).join(', ') + ')' : o.status === 'error' ? 'Error: ' + o.error : 'Skipped';
+  var od = o.status === 'found' ? 'Found as ' + o.codeUsed : o.status === 'not_found' ? 'Not found (tried ' + (o.tried || []).join(', ') + ')' : o.status === 'error' ? 'Error: ' + sourceName(o.error) : 'Skipped';
   var ud = u.status === 'skipped' ? (u.error ? 'Skipped after a recent error (' + u.error + '); retried in a minute' : 'No key')
     : u.status === 'found' ? 'Found as ' + u.codeUsed + ' (fdcId ' + u.fdcId + ')' : u.status === 'not_found' ? 'Not found (tried ' + (u.tried || []).join(', ') + ')' : 'Error: ' + u.error;
   return h('ul', { class: 'src' }, [row('Open Food Facts', o.status, od), row('USDA FoodData Central', u.status, ud)]);
@@ -1882,13 +1968,11 @@ function renderResult(res) {
   var box = clear($('result')), more = clear($('resultMore')), ml = clear($('missingLine'));
   if (!m.found) {
     var errored = e.off.status === 'error' || e.usda.status === 'error';
-    box.appendChild(h('div', { class: 'sh-head peek' }, [
-      noImage(),
-      h('div', { class: 'grow' }, [
-        h('div', { class: 'name', text: errored ? 'Lookup failed' : 'Not found' }),
-        h('div', { class: 'brand', text: e.barcode + (e.format ? ' (' + e.format + ')' : '') }),
-        h('div', { class: 'meta', text: (res.fromCache ? 'Cached, checked ' : 'Checked ') + shortTime(e.fetchedAt) })
-      ])
+    box.appendChild(h('div', { class: 'state peek' + (errored ? ' red' : '') }, [
+      h('div', { class: 'glyph', html: errored ? SVG_ALERT : SVG_SEARCH }),
+      h('h3', { text: errored ? 'Lookup failed' : 'Not found' }),
+      h('div', { class: 'code', text: e.barcode + (e.format ? ' (' + formatName(e.format) + ')' : '') }),
+      h('div', { class: 'foot', text: (res.fromCache ? 'Cached, checked ' : 'Checked ') + shortTime(e.fetchedAt) })
     ]));
     ml.appendChild(h('div', { class: 'missing bad' }, [h('span', { class: 'dot red' }), errored ? 'Lookup failed, no data. Counted as a lookup error, not as "not found". Refresh to try again.' : 'Missing fields: everything. The product was not found in any source.']));
     more.appendChild(h('section', { class: 'sec sep' }, [h('div', { class: 'sec-h', text: 'Sources' }), sourceRows(e)]));
@@ -1905,7 +1989,7 @@ function renderResult(res) {
   head.appendChild(h('div', { class: 'grow' }, [
     h('div', { class: 'name', text: m.name.v || '(no name)' }),
     h('div', { class: 'brand', text: [m.brand.v, m.quantity.v].filter(Boolean).join(', ') }),
-    h('div', { class: 'meta', text: e.barcode + (e.format ? ' (' + e.format + ')' : '') + (res.fromCache ? ', cached' : '') })
+    h('div', { class: 'meta', text: e.barcode + (e.format ? ' (' + formatName(e.format) + ')' : '') + (res.fromCache ? ', cached' : '') })
   ]));
   box.appendChild(head);
   var sc = scoreProduct(m, e, profile || { mode: 'standard' });
@@ -1933,7 +2017,7 @@ function renderResult(res) {
   var list = h('ul', { class: 'nlist' });
   NUT_ROWS.forEach(function (r) { if (r[0] === 'netCarbs') return; list.appendChild(h('li', {}, [h('span', { text: r[1] }), h('span', { class: 'vv' }, vals(r[0], r[2]))])); });
   nut.appendChild(list);
-  nut.appendChild(h('div', { class: 'sec-f', text: 'Serving size ' + (m.servingSize.v || 'unknown') + (m.servingSize.from ? ' (' + m.servingSize.from + ')' : '') + '. Net carbs are carbs minus fiber.' }));
+  nut.appendChild(h('div', { class: 'sec-f', text: 'Serving size ' + (m.servingSize.v || 'unknown') + (m.servingSize.from ? ' (' + sourceName(m.servingSize.from) + ')' : '') + '. Net carbs are carbs minus fiber.' }));
   var nutLabel = {};
   NUT_ROWS.forEach(function (r) { nutLabel[r[0]] = r[1].toLowerCase(); });
   var provenance = NUT_KEYS.filter(function (k) { return m.perServingFrom[k] && m.perServingFrom[k].indexOf('×') > 0; });
@@ -1941,8 +2025,8 @@ function renderResult(res) {
   if (provenance.length) nut.appendChild(h('div', { class: 'sec-f',
     text: (provenance.length === given.length ? 'All per-serving values are' : 'Per-serving ' + provenance.map(function (k) { return nutLabel[k]; }).join(', ') + ' are') + ' computed from per-100 ' + (m.basis || 'g') + ' × serving size (' + m.servingSize.v + ').' }));
   var foreign = NUT_KEYS.filter(function (k) { return m.perServingFrom[k] && m.perServingFrom[k].indexOf('own serving') > 0; });
-  if (foreign.length) nut.appendChild(h('div', { class: 'sec-f', text: 'Per-serving ' + foreign.map(function (k) { return nutLabel[k]; }).join(', ') + ': ' + uniqueList(foreign.map(function (k) { return m.perServingFrom[k]; })).join('; ') + ', not the serving shown above.' }));
-  if (m.sources.length > 1) nut.appendChild(h('div', { class: 'sec-f', text: 'Per-100 ' + (m.basis || 'g') + ' values come from ' + uniqueList(NUT_KEYS.map(function (k) { return m.per100From[k]; })).join(' + ') + '; per-serving from ' + (m.servingSize.from || 'no source') + '.' }));
+  if (foreign.length) nut.appendChild(h('div', { class: 'sec-f', text: 'Per-serving ' + foreign.map(function (k) { return nutLabel[k]; }).join(', ') + ': ' + sourceName(uniqueList(foreign.map(function (k) { return m.perServingFrom[k]; })).join('; ')) + ', not the serving shown above.' }));
+  if (m.sources.length > 1) nut.appendChild(h('div', { class: 'sec-f', text: 'Per-100 ' + (m.basis || 'g') + ' values come from ' + sourceName(uniqueList(NUT_KEYS.map(function (k) { return m.per100From[k]; })).join(' and ')) + '; per-serving from ' + sourceName(m.servingSize.from || 'no source') + '.' }));
   box.appendChild(nut);
   if (m.missing.length) ml.appendChild(h('div', { class: 'missing' }, [h('span', { class: 'dot orange' }), 'Missing fields: ' + m.missing.join(', ')]));
   else ml.appendChild(h('div', { class: 'missing ok' }, [h('span', { class: 'dot green' }), 'Missing fields: none. All six tracked fields are present.']));
@@ -1950,7 +2034,7 @@ function renderResult(res) {
   var ingr = m.ingredients.v;
   var s1 = h('section', { class: 'sec sep' });
   s1.appendChild(h('details', { class: 'disc', open: ingr && ingr.length < 240 ? '' : null }, [
-    h('summary', {}, [h('span', { text: 'Ingredients' }), h('span', { class: 'rv', text: ingr ? (m.ingredients.from || '') : 'missing' })]),
+    h('summary', {}, [h('span', { text: 'Ingredients' }), h('span', { class: 'rv', text: ingr ? sourceName(m.ingredients.from || '') : 'missing' })]),
     h('p', { class: 'ingr', text: ingr || 'No ingredients text in any source.' })
   ]));
   var kv = h('ul', { class: 'kv' });
@@ -2311,11 +2395,21 @@ function scanLoop() {
   });
 }
 // The part of the camera frame actually shown in the viewport (object-fit: cover), in frame pixels.
+// The part of the camera frame the user can actually see: the object-fit cover crop, minus whatever the result sheet
+// and the tab bar cover, so a barcode hidden under the sheet cannot replace the result being read.
 function visibleRect(vw, vh) {
   var vp = $('viewport'), bw = vp.clientWidth || vw, bh = vp.clientHeight || vh;
   var scale = Math.max(bw / vw, bh / vh);
   var w = Math.min(vw, Math.round(bw / scale)), h = Math.min(vh, Math.round(bh / scale));
-  return { x: Math.round((vw - w) / 2), y: Math.round((vh - h) / 2), w: w, h: h };
+  var shown = bh;
+  try {
+    var top = vp.getBoundingClientRect().top;
+    var tabs = $('tabs').getBoundingClientRect().top - top;
+    var sh = sheet.snap !== 'hidden' ? $('sheet').getBoundingClientRect().top - top : Infinity;
+    shown = Math.max(Math.round(bh * 0.25), Math.min(bh, Math.floor(tabs), Math.floor(sh)));
+  } catch (e) { /* keep the full crop */ }
+  var hv = Math.min(h, Math.round(shown / scale));
+  return { x: Math.round((vw - w) / 2), y: Math.round((vh - h) / 2), w: w, h: hv };
 }
 function detectNative() {
   var vw = video.videoWidth || 0, vh = video.videoHeight || 0;
@@ -2566,7 +2660,10 @@ var sheet = { snap: 'hidden', y: 0, drag: null };
 function sheetHeight() { return $('sheet').offsetHeight || window.innerHeight; }
 function peekHeight() { var head = document.querySelector('#result .peek'); return ($('sheetGrab').offsetHeight || 26) + (head ? head.offsetHeight : 80) + 6; }
 function snapY(snap) { var H = sheetHeight(); return snap === 'full' ? 0 : snap === 'half' ? Math.round(H * 0.5) : snap === 'peek' ? Math.max(0, H - peekHeight()) : H; }
-function setSheetY(y) { sheet.y = y; $('sheet').style.transform = 'translateY(' + y + 'px)'; }
+function setSheetY(y) {   // the part pushed below the tab bar is clipped, so nothing ghosts through the bar's material
+  var el = $('sheet'), clip = 'inset(0 0 ' + Math.max(0, y) + 'px 0)';
+  sheet.y = y; el.style.transform = 'translateY(' + y + 'px)'; el.style.clipPath = clip; el.style.webkitClipPath = clip;
+}
 function snapTo(snap) {
   var el = $('sheet');
   sheet.snap = snap;
@@ -2574,7 +2671,7 @@ function snapTo(snap) {
   el.classList.toggle('open', snap !== 'hidden');
   setSheetY(snapY(snap));
   if (snap !== 'full') $('sheetBody').scrollTop = 0;
-  document.documentElement.style.setProperty('--sheet-up', snap === 'peek' ? peekHeight() + 'px' : '0px');   // parked at peek, the camera controls move up above it
+  document.documentElement.style.setProperty('--sheet-up', (snap === 'peek' || snap === 'half') ? (sheetHeight() - snapY(snap)) + 'px' : '0px');   // at peek and half the camera controls stay reachable above the sheet
   updatePaused();
 }
 function openSheet(snap) { snapTo(snap || (sheet.snap === 'hidden' ? 'half' : sheet.snap)); }

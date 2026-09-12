@@ -70,7 +70,9 @@ On first open the app asks how products should be scored. Both choices can be ch
   the chosen cut-offs (drinks, whose data is per 100 ml, use the roughly half-size FSA drink cut-offs, scaled the
   same way for strict preferences); the score is
   the weighted average over the factors that have data, and is withheld when less than half of the weighted factors
-  have data. The card lists the three factors that moved the score most. Weights can be fine-tuned under **Adjust
+  have data. The result names the three factors that moved the score most in plain words ("High in sugar",
+  "Low in fiber", "Ultra-processed") with the value next to each, and **How the score adds up** lists every factor
+  with its value, its cut-offs, its 0–100 sub-score and its weight. Weights can be fine-tuned under **Adjust
   weights** (custom profiles only).
 - **Avoid list** (question 5): allergens (milk, eggs, gluten, peanuts, tree nuts, soy, fish, shellfish, sesame,
   celery, mustard, lupin, sulphites), non-vegan or non-vegetarian ingredients (the "I am vegan" and "I am vegetarian"
