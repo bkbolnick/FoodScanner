@@ -32,13 +32,14 @@
   --sep: rgba(60, 60, 67, 0.29);
   --accent: #5856D6;                     /* indigo */
   --accent-fill: #5856D6;
+  --accent-btn: #4B49C9;                 /* text on the tinted button, 5.2:1 over the tint on the grouped background */
   --accent-tint: rgba(88, 86, 214, 0.12);
-  --green: #1F7A35; --orange: #B25E00; --red: #D70015;
+  --green: #1F7A35; --orange: #A35500; --red: #D70015;   /* orange 4.9:1 on the grouped background */
   --bar: rgba(249, 249, 249, 0.94);      /* tab bar, nav bars */
   --seg-track: #E5E5EA; --seg-thumb: #FFFFFF;
   --toast: rgba(28, 28, 30, 0.92);
   --cam-mat: rgba(28, 28, 30, 0.62);     /* frosted material over the camera */
-  --safe-t: env(safe-area-inset-top, 0px); --safe-b: env(safe-area-inset-bottom, 0px);
+  --safe-t: env(safe-area-inset-top, 0px); --safe-b: env(safe-area-inset-bottom, 0px); --safe-l: env(safe-area-inset-left, 0px); --safe-r: env(safe-area-inset-right, 0px);
   --tabbar: 49px;
   --ease: cubic-bezier(0.32, 0.72, 0, 1);
 }
@@ -47,7 +48,7 @@
     --bg: #000000; --cell: #1C1C1E; --fill: #2C2C2E; --fill2: #3A3A3C;
     --label: #FFFFFF; --label2: #98989D; --label3: #8E8E93;
     --sep: rgba(84, 84, 88, 0.65);
-    --accent: #8A88FF; --accent-fill: #5E5CE6; --accent-tint: rgba(138, 136, 255, 0.14);
+    --accent: #8A88FF; --accent-fill: #5E5CE6; --accent-btn: #8A88FF; --accent-tint: rgba(138, 136, 255, 0.14);
     --green: #30D158; --orange: #FF9F0A; --red: #FF453A;
     --bar: rgba(29, 29, 31, 0.90);
     --seg-track: #2C2C2E; --seg-thumb: #636366;
@@ -70,8 +71,11 @@ button, input, select, textarea { font: inherit; color: inherit; }
 button { touch-action: manipulation; cursor: pointer; background: none; border: 0; padding: 0; margin: 0; text-align: inherit; }
 a { color: var(--accent); text-decoration: none; }
 p { margin: 0 0 12px; }
-:focus { outline: none; }
+:focus:not(:focus-visible) { outline: none; }   /* dropped as a whole where :focus-visible is unknown, so the browser ring survives there */
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.group :focus-visible, .loglist li:focus-visible, .sheet-grab:focus-visible { outline-offset: -2px; }   /* rows fill a clipped group */
+.sheet:focus, h2:focus { outline: none; }   /* regions and headings take focus for VoiceOver, not for a ring */
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 input[type=text]:focus-visible, textarea:focus-visible { outline: none; }   /* the caret and keyboard already show focus */
 .hidden { display: none !important; }
 .grow { flex: 1 1 auto; min-width: 0; }
@@ -82,7 +86,7 @@ input[type=text]:focus-visible, textarea:focus-visible { outline: none; }   /* t
 /* --------------------------------------------------------------- screens */
 .tab { display: none; }
 .tab.active { display: block; }
-.page { padding: calc(var(--safe-t) + 8px) 16px calc(var(--tabbar) + var(--safe-b) + 28px); max-width: 640px; margin: 0 auto; }
+.page { padding: calc(var(--safe-t) + 8px) max(16px, var(--safe-r)) calc(var(--tabbar) + var(--safe-b) + 28px) max(16px, var(--safe-l)); max-width: 640px; margin: 0 auto; }
 .page h1 { font-size: 2rem; font-weight: 700; line-height: 1.2; letter-spacing: 0.01em; margin: 12px 0 18px; }
 .group-h { font-size: 0.765rem; color: var(--label2); margin: 0 16px 7px; }
 .group-h span { font-weight: 400; }
@@ -103,7 +107,7 @@ input[type=text]:focus-visible, textarea:focus-visible { outline: none; }   /* t
 .row.nav::after { content: ""; position: absolute; right: 14px; top: 50%; width: 8px; height: 8px; border-right: 2px solid var(--label3); border-bottom: 2px solid var(--label3); transform: translateY(-50%) rotate(-45deg); }
 .inline-act { color: var(--accent); font-size: 1rem; min-height: 44px; padding: 0 4px; flex: none; }
 /* ------------------------------------------------------------- controls */
-.btn { display: inline-flex; align-items: center; justify-content: center; min-height: 50px; padding: 12px 20px; border-radius: 12px; background: var(--accent-tint); color: var(--accent); font-weight: 600; font-size: 1rem; white-space: nowrap; text-decoration: none; }
+.btn { display: inline-flex; align-items: center; justify-content: center; min-height: 50px; padding: 12px 20px; border-radius: 12px; background: var(--accent-tint); color: var(--accent-btn); font-weight: 600; font-size: 1rem; white-space: nowrap; text-decoration: none; }
 .btn.primary { background: var(--accent-fill); color: #FFFFFF; }
 .btn.small { min-height: 44px; padding: 8px 16px; font-size: 0.882rem; border-radius: 10px; }
 .btn.block { width: 100%; }
@@ -113,7 +117,7 @@ input[type=text], input[type=search], textarea {
   width: 100%; min-height: 44px; padding: 8px 0; border: 0; background: transparent; color: var(--label);
   font-size: max(16px, 1rem); -webkit-appearance: none; appearance: none; border-radius: 0;
 }
-input::placeholder, textarea::placeholder { color: var(--label3); }
+input::placeholder, textarea::placeholder { color: var(--label2); }
 input.secret { -webkit-text-security: disc; }
 textarea { min-height: 120px; line-height: 1.35; padding: 10px 16px; background: var(--cell); border-radius: 10px; margin: -14px 0 24px; }
 select { -webkit-appearance: none; appearance: none; border: 0; background: transparent; color: var(--label2); font-size: 1rem; padding: 6px 22px 6px 0; direction: rtl; max-width: 60%;
@@ -121,22 +125,22 @@ select { -webkit-appearance: none; appearance: none; border: 0; background: tran
 select option { direction: ltr; }
 input[type=range] { accent-color: var(--accent); width: 100%; margin: 0; }
 .segmented { display: flex; background: var(--seg-track); border-radius: 9px; padding: 2px; }
-.segmented button, .seg-btn { flex: 1 1 0; min-height: 32px; border-radius: 7px; font-size: 0.765rem; font-weight: 500; color: var(--label); text-align: center; padding: 4px 6px; line-height: 1.2; }
+.segmented button, .seg-btn { flex: 1 1 0; min-height: 32px; border-radius: 7px; font-size: 0.765rem; font-weight: 500; color: var(--label); text-align: center; padding: 4px 6px; line-height: 1.2; position: relative; }
+.segmented button::before { content: ""; position: absolute; left: 0; right: 0; top: -6px; bottom: -6px; }   /* 44 pt hit area behind the 32 pt control */
 .segmented button[aria-pressed=true], .seg-btn.on { background: var(--seg-thumb); font-weight: 600; }
 .seg { display: flex; background: var(--seg-track); border-radius: 9px; padding: 2px; margin-top: 8px; }
 .seg-btn { min-height: 44px; }
 .seg-btn b { display: block; font-weight: inherit; }
-.seg-btn .lv2 { display: block; font-size: 0.706rem; color: var(--label2); }
-.seg-btn.on .lv2 { color: var(--label); }
+.seg-btn .lv2 { display: block; font-size: 0.706rem; }
 /* ----------------------------------------------------------- scan screen */
 #tab-scan { position: fixed; top: 0; right: 0; bottom: 0; left: 0; background: var(--bg); }
 .viewport { position: absolute; top: 0; right: 0; bottom: 0; left: 0; overflow: hidden; background: var(--bg); }
 .viewport.live { background: #000; }
 .viewport video { width: 100%; height: 100%; object-fit: cover; display: block; opacity: 0; }   /* stays rendered: iOS only decodes a rendered video */
 .viewport.live video { opacity: 1; }
-.viewport .guide { position: absolute; left: 10%; right: 10%; top: 22%; height: 24%; display: none; pointer-events: none; border-radius: 12px; box-shadow: 0 0 0 200vmax rgba(0, 0, 0, 0.45); transition: transform 0.25s var(--ease), box-shadow 0.25s; }
+.viewport .guide { position: absolute; left: 10%; right: 10%; top: 20%; height: 18%; display: none; pointer-events: none; border-radius: 12px; box-shadow: 0 0 0 200vmax rgba(0, 0, 0, 0.45); transition: transform 0.25s var(--ease), box-shadow 0.25s; }
 .viewport.live .guide { display: block; }
-.guide .c { position: absolute; width: 24px; height: 24px; border: 0 solid #FFFFFF; transition: border-color 0.15s; }
+.guide .c { position: absolute; width: 24px; height: 24px; border: 0 solid #FFFFFF; transition: border-color 0.15s; filter: drop-shadow(0 0 1px rgba(0, 0, 0, 0.6)); }   /* readable over a white label too */
 .guide .c.tl { left: -1px; top: -1px; border-top-width: 2.5px; border-left-width: 2.5px; border-top-left-radius: 12px; }
 .guide .c.tr { right: -1px; top: -1px; border-top-width: 2.5px; border-right-width: 2.5px; border-top-right-radius: 12px; }
 .guide .c.bl { left: -1px; bottom: -1px; border-bottom-width: 2.5px; border-left-width: 2.5px; border-bottom-left-radius: 12px; }
@@ -156,7 +160,7 @@ input[type=range] { accent-color: var(--accent); width: 100%; margin: 0; }
 .viewport.live .status { position: absolute; left: 50%; top: calc(var(--safe-t) + 12px); transform: translateX(-50%); width: max-content; max-width: calc(100% - 32px); z-index: 2;
   padding: 7px 14px; border-radius: 999px; background: var(--cam-mat); color: #FFFFFF; text-align: center; -webkit-backdrop-filter: blur(20px) saturate(180%); backdrop-filter: blur(20px) saturate(180%); }
 .viewport.live .status.err { color: #FF6B60; }
-.scan-ui { position: absolute; left: 16px; right: 16px; bottom: calc(var(--tabbar) + var(--safe-b) + 16px + var(--sheet-up, 0px)); z-index: 3; transition: bottom 0.42s var(--ease); display: flex; flex-direction: column; gap: 10px; align-items: stretch; max-width: 608px; margin: 0 auto; }
+.scan-ui { position: absolute; left: max(16px, var(--safe-l)); right: max(16px, var(--safe-r)); bottom: calc(var(--tabbar) + var(--safe-b) + 16px + var(--sheet-up, 0px)); z-index: 3; transition: bottom 0.42s var(--ease); display: flex; flex-direction: column; gap: 10px; align-items: stretch; max-width: 608px; margin: 0 auto; }
 .manual { display: flex; align-items: center; gap: 8px; background: var(--cell); border-radius: 12px; padding: 2px 8px 2px 16px; }
 .manual input { flex: 1 1 auto; min-width: 0; }
 .viewport.live + .scan-ui .manual { background: var(--cam-mat); -webkit-backdrop-filter: blur(20px) saturate(180%); backdrop-filter: blur(20px) saturate(180%); }
@@ -176,11 +180,11 @@ input[type=range] { accent-color: var(--accent); width: 100%; margin: 0; }
 /* -------------------------------------------------------------- result sheet */
 .sheet { position: fixed; left: 0; right: 0; bottom: calc(var(--tabbar) + var(--safe-b)); top: calc(var(--safe-t) + 10px); z-index: 30; max-width: 640px; margin: 0 auto;
   background: var(--cell); border-radius: 16px 16px 0 0; display: flex; flex-direction: column; transform: translateY(100%); visibility: hidden; will-change: transform;
-  transition: transform 0.42s var(--ease), visibility 0s linear 0.42s; }
-.sheet.open { visibility: visible; transition: transform 0.42s var(--ease), visibility 0s; }
+  transition: transform 0.42s var(--ease), clip-path 0.42s var(--ease), -webkit-clip-path 0.42s var(--ease), visibility 0s linear 0.42s; }
+.sheet.open { visibility: visible; transition: transform 0.42s var(--ease), clip-path 0.42s var(--ease), -webkit-clip-path 0.42s var(--ease), visibility 0s; }
 .sheet.dragging { transition: none; }
 body:not(.tab-scan) .sheet { visibility: hidden; transform: translateY(100%) !important; transition: none; }
-.sheet-grab { flex: none; height: 26px; display: flex; align-items: center; justify-content: center; touch-action: none; cursor: grab; }
+.sheet-grab { flex: none; width: 100%; height: 44px; margin-bottom: -18px; position: relative; z-index: 1; display: flex; align-items: flex-start; justify-content: center; padding-top: 10px; touch-action: none; cursor: grab; }
 .grabber { width: 36px; height: 5px; border-radius: 3px; background: var(--label3); opacity: 0.5; }
 .sheet-close { position: absolute; right: 6px; top: 4px; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; color: var(--label2); z-index: 2; }
 .sheet-close svg { width: 30px; height: 30px; display: block; }
@@ -201,10 +205,24 @@ body:not(.tab-scan) .sheet { visibility: hidden; transform: translateY(100%) !im
 .score-n { font-size: 1.647rem; font-weight: 700; line-height: 1; min-width: 2.2em; }
 .score-n.none { color: var(--label3); }
 .band { font-size: 1rem; font-weight: 600; display: flex; align-items: center; }
-.why { list-style: none; margin: 10px 0 0; padding: 0; font-size: 0.882rem; }
-.why li { padding: 3px 0; display: flex; gap: 8px; }
-.why .sign { flex: none; width: 1em; text-align: center; font-weight: 600; }
-.why .pos .sign { color: var(--green); } .why .neg .sign { color: var(--red); }
+.rsn { list-style: none; margin: 12px 0 0; padding: 0; }
+.rsn li { display: flex; align-items: center; gap: 10px; min-height: 40px; padding: 6px 0; border-top: 1px solid var(--sep); font-size: 1rem; }
+.rsn li:first-child { border-top: 0; }
+.rsn .rt { flex: 1 1 auto; min-width: 0; }
+.rsn .rd { flex: none; max-width: 48%; text-align: right; white-space: nowrap; color: var(--label2); font-size: 0.882rem; }
+.score .note { margin-top: 8px; }
+.fac { list-style: none; margin: 0; padding: 0; }
+.fac li { padding: 10px 0; border-top: 1px solid var(--sep); }
+.fac li:first-child { border-top: 0; }
+.fac .fh { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.fac .ft { flex: 1 1 auto; min-width: 0; font-size: 1rem; }
+.fac .fs { flex: none; display: flex; flex-direction: column; align-items: flex-end; font-size: 1rem; font-weight: 600; white-space: nowrap; }
+.fac .fw { font-size: 0.765rem; font-weight: 400; color: var(--label2); margin-top: 2px; }
+.fac .fd { font-size: 0.765rem; color: var(--label2); line-height: 1.35; margin-top: 2px; word-break: break-word; }
+.fac li.none .ft, .fac li.none .fs { color: var(--label2); }
+.fbar { height: 4px; border-radius: 2px; background: var(--fill2); margin-top: 8px; overflow: hidden; }
+.fbar span { display: block; height: 100%; border-radius: 2px; background: var(--label3); }
+.fbar .good { background: var(--green); } .fbar .bad { background: var(--red); }
 .lowconf { font-size: 0.765rem; color: var(--orange); margin-top: 6px; }
 details.disc { margin-top: 6px; }
 details.disc summary { list-style: none; display: flex; align-items: center; min-height: 44px; font-size: 1rem; cursor: pointer; position: relative; padding-right: 26px; }
@@ -212,10 +230,10 @@ details.disc summary::-webkit-details-marker { display: none; }
 details.disc summary::after { content: ""; position: absolute; right: 8px; top: 50%; width: 8px; height: 8px; border-right: 2px solid var(--label3); border-bottom: 2px solid var(--label3); transform: translateY(-60%) rotate(45deg); transition: transform 0.2s; }
 details.disc[open] summary::after { transform: translateY(-30%) rotate(-135deg); }
 details.disc summary .rv { margin-left: auto; color: var(--label2); font-size: 0.882rem; }
-table.sc, table.cov { width: 100%; border-collapse: collapse; font-size: 0.765rem; }
-table.sc th, table.sc td, table.cov th, table.cov td { padding: 8px 4px; text-align: right; vertical-align: top; border-top: 1px solid var(--sep); }
-table.sc th, table.cov th { font-weight: 400; color: var(--label2); border-top: 0; }
-table.sc th:first-child, table.sc td:first-child, table.cov th:first-child, table.cov td:first-child { text-align: left; padding-left: 0; }
+table.cov { width: 100%; border-collapse: collapse; font-size: 0.765rem; }
+table.cov th, table.cov td { padding: 8px 4px; text-align: right; vertical-align: top; border-top: 1px solid var(--sep); }
+table.cov th { font-weight: 400; color: var(--label2); border-top: 0; }
+table.cov th:first-child, table.cov td:first-child { text-align: left; padding-left: 0; }
 table.cov td, table.cov th { text-align: center; }
 table.cov .has { color: var(--green); } table.cov .no { color: var(--label3); }
 .avoid-row { display: flex; align-items: center; min-height: 32px; font-size: 1rem; }
@@ -248,9 +266,10 @@ table.cov .has { color: var(--green); } table.cov .no { color: var(--label3); }
 .actions { display: flex; flex-wrap: wrap; gap: 8px; padding-top: 14px; }
 .actions .btn { flex: 1 1 auto; }
 .state { display: flex; flex-direction: column; align-items: center; text-align: center; padding: 8px 8px 12px; }
-.state .glyph { width: 44px; height: 44px; margin-bottom: 8px; }
+.state .glyph { width: 44px; height: 44px; margin-bottom: 8px; color: var(--label3); }
 .state .glyph svg { width: 100%; height: 100%; }
 .state.red .glyph { color: var(--red); }
+.state .foot { margin-top: 4px; }
 .state h3 { font-size: 1.294rem; font-weight: 700; margin: 0 0 4px; }
 .state .code { font-size: 0.882rem; color: var(--label2); }
 .spinner { width: 20px; height: 20px; border-radius: 50%; border: 2px solid var(--fill2); border-top-color: var(--accent); animation: spin 0.8s linear infinite; flex: none; }
@@ -269,29 +288,29 @@ table.cov .has { color: var(--green); } table.cov .no { color: var(--label3); }
 .loglist .sc .n { font-size: 1rem; font-weight: 600; display: flex; align-items: center; justify-content: flex-end; }
 .loglist .sc .m { font-size: 0.706rem; color: var(--label2); }
 /* --------------------------------------------------------------- tab bar */
-nav.tabs { position: fixed; left: 0; right: 0; bottom: 0; z-index: 40; display: flex; justify-content: center; background: var(--bar); -webkit-backdrop-filter: blur(20px) saturate(180%); backdrop-filter: blur(20px) saturate(180%); padding-bottom: var(--safe-b); }
+nav.tabs { position: fixed; left: 0; right: 0; bottom: 0; z-index: 40; display: flex; justify-content: center; background: var(--bar); -webkit-backdrop-filter: blur(20px) saturate(180%); backdrop-filter: blur(20px) saturate(180%); padding: 0 var(--safe-r) var(--safe-b) var(--safe-l); }
 nav.tabs::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 1px; background: var(--sep); transform: scaleY(0.5); transform-origin: 0 0; }
-nav.tabs button { flex: 1 1 0; max-width: 200px; height: var(--tabbar); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; color: var(--label2); font-size: 0.647rem; font-weight: 500; }
-nav.tabs button svg { width: 26px; height: 26px; display: block; }
+nav.tabs button { flex: 1 1 0; max-width: 200px; min-height: var(--tabbar); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; color: var(--label2); font-size: 0.647rem; font-weight: 500; }
+nav.tabs button svg { width: 26px; height: 26px; display: block; flex: none; }
 nav.tabs button.active { color: var(--accent); }
 /* ---------------------------------------------------------- modal screens */
 .modal { position: fixed; top: 0; right: 0; bottom: 0; left: 0; z-index: 60; background: var(--bg); display: none; flex-direction: column; }
 .modal.open { display: flex; }
-.navbar { flex: none; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: calc(var(--safe-t) + 4px) 8px 4px; background: var(--bar); -webkit-backdrop-filter: blur(20px) saturate(180%); backdrop-filter: blur(20px) saturate(180%); position: relative; }
+.navbar { flex: none; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: calc(var(--safe-t) + 4px) max(8px, var(--safe-r)) 4px max(8px, var(--safe-l)); background: var(--bar); -webkit-backdrop-filter: blur(20px) saturate(180%); backdrop-filter: blur(20px) saturate(180%); position: relative; }
 .navbar::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 1px; background: var(--sep); transform: scaleY(0.5); transform-origin: 0 100%; }
 .navbar .title { font-size: 1rem; font-weight: 600; flex: 1 1 auto; text-align: center; }
 .navbar .side { flex: 1 1 0; display: flex; gap: 4px; }
 .navbar .side.r { justify-content: flex-end; }
 .navbar button { color: var(--accent); font-size: 1rem; min-height: 44px; padding: 0 10px; }
 .navbar button.bold { font-weight: 600; }
-#dbgLines { flex: 1 1 auto; overflow: auto; -webkit-overflow-scrolling: touch; padding: 8px 16px calc(var(--safe-b) + 16px); font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.706rem; line-height: 1.4; }
+#dbgLines { flex: 1 1 auto; overflow: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; padding: 8px max(16px, var(--safe-r)) calc(var(--safe-b) + 16px) max(16px, var(--safe-l)); font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.706rem; line-height: 1.4; }
 #dbgLines div { white-space: pre-wrap; word-break: break-all; padding: 3px 0; border-bottom: 1px solid var(--sep); }
 #dbgLines .warn { color: var(--orange); } #dbgLines .error { color: var(--red); } #dbgLines .net { color: var(--accent); } #dbgLines .log { color: var(--label); }
 /* --------------------------------------------------------------- toast */
 #toast { position: fixed; left: 50%; bottom: calc(var(--tabbar) + var(--safe-b) + 16px); transform: translate(-50%, 6px); background: var(--toast); color: #FFFFFF; padding: 10px 16px; border-radius: 999px; font-size: 0.882rem; z-index: 70; opacity: 0; transition: opacity 0.2s, transform 0.2s; pointer-events: none; max-width: calc(100vw - 32px); text-align: center; }
 #toast.show { opacity: 1; transform: translate(-50%, 0); }
 /* ----------------------------------------------------- scoring setup */
-#onboard { position: fixed; top: 0; right: 0; bottom: 0; left: 0; z-index: 50; background: var(--bg); overflow: auto; -webkit-overflow-scrolling: touch; display: none; padding: calc(var(--safe-t) + 16px) 16px calc(var(--safe-b) + 28px); }
+#onboard { position: fixed; top: 0; right: 0; bottom: 0; left: 0; z-index: 50; background: var(--bg); overflow: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; display: none; padding: calc(var(--safe-t) + 16px) max(16px, var(--safe-r)) calc(var(--safe-b) + 28px) max(16px, var(--safe-l)); }
 #onboard.open { display: block; }
 body.ob-open, body.dbg-open { overflow: hidden; }
 .ob-inner { max-width: 560px; margin: 0 auto; }
@@ -505,8 +524,8 @@ body.ob-open, body.dbg-open { overflow: hidden; }
   </section>
 </main>
 
-<div class="sheet" id="sheet" role="region" aria-label="Result" data-snap="hidden">
-  <div class="sheet-grab" id="sheetGrab"><span class="grabber"></span></div>
+<div class="sheet" id="sheet" role="region" aria-label="Result" data-snap="hidden" tabindex="-1">
+  <button class="sheet-grab" id="sheetGrab" type="button" aria-label="Expand result" aria-expanded="false"><span class="grabber"></span></button>
   <button class="sheet-close" id="sheetClose" type="button" aria-label="Close"><svg viewBox="0 0 30 30" aria-hidden="true"><circle cx="15" cy="15" r="15" fill="currentColor" opacity="0.18"/><path d="M10.5 10.5l9 9M19.5 10.5l-9 9" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg></button>
   <div class="sheet-body" id="sheetBody">
     <div id="result"></div>
@@ -614,15 +633,21 @@ function fmtVal(v, unit) {
 }
 function digitsOnly(s) { return String(s || '').replace(/\D/g, ''); }
 function capitalize(s) { s = String(s || ''); return s.charAt(0).toUpperCase() + s.slice(1); }
+function joinPlain(list) { return list.length < 2 ? (list[0] || '') : list.slice(0, -1).join(', ') + ' and ' + list[list.length - 1]; }
 // Inline glyphs (app-authored SVG, used through h()'s html attribute).
 var SVG_PHOTO = '<svg viewBox="0 0 28 28" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="22" height="18" rx="3"/><circle cx="10" cy="11" r="2"/><path d="M25 18l-6-6-9 9"/></svg>';
 var SVG_ALERT = '<svg viewBox="0 0 44 44" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><circle cx="22" cy="22" r="18"/><path d="M22 13v11"/><circle cx="22" cy="30.5" r="1.4" fill="currentColor" stroke="none"/></svg>';
+var SVG_SEARCH = '<svg viewBox="0 0 44 44" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><circle cx="19" cy="19" r="12"/><path d="M28 28l10 10"/><path d="M14 15v8M18 15v8M22 15v8M25 15v8"/></svg>';
+var FORMAT_NAMES = { ean_13: 'EAN-13', ean_8: 'EAN-8', upc_a: 'UPC-A', upc_e: 'UPC-E' };
+function formatName(f) { if (!f) return ''; return FORMAT_NAMES[f] || String(f).toUpperCase().replace(/_/g, '-'); }
+function sourceName(s) { return String(s || '').replace(/\bOFF\b/g, 'Open Food Facts'); }   // data sources are named in full on screen
 function emptyNut() { var o = {}; NUT_KEYS.forEach(function (k) { o[k] = null; }); return o; }
 function now() { return Date.now(); }
 function isoNow() { return new Date().toISOString(); }
 function shortTime(iso) {
   var d = new Date(iso);
   if (isNaN(d.getTime())) return iso;
+  try { return d.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }); } catch (e) { /* fall through */ }
   var mm = d.getMonth() + 1, dd = d.getDate(), hh = d.getHours(), mi = d.getMinutes();
   return mm + '/' + dd + ' ' + (hh < 10 ? '0' : '') + hh + ':' + (mi < 10 ? '0' : '') + mi;
 }
@@ -1096,13 +1121,14 @@ function renderLog() {
   if (!scanLog.length) { ul.appendChild(h('li', { class: 'empty', text: 'No scans yet. Every lookup is listed here.' })); return; }
   scanLog.slice(0, 200).forEach(function (e) {
     var found = e.off === 'found' || e.usda === 'found';
-    var srcs = h('span', { class: 'srcs' }, [h('span', {}, [h('span', { class: 'dot ' + statusColor(e.off) }), 'OFF'])]);
-    if (e.usda !== 'skipped') srcs.appendChild(h('span', {}, [h('span', { class: 'dot ' + statusColor(e.usda) }), 'USDA']));
+    function statusWord(s) { return s === 'found' ? 'found' : s === 'not_found' ? 'not found' : s === 'error' ? 'error' : 'skipped'; }
+    var srcs = h('span', { class: 'srcs' }, [h('span', {}, [h('span', { class: 'dot ' + statusColor(e.off), 'aria-hidden': 'true' }), 'Open Food Facts', h('span', { class: 'sr', text: ' ' + statusWord(e.off) })])]);
+    if (e.usda !== 'skipped') srcs.appendChild(h('span', {}, [h('span', { class: 'dot ' + statusColor(e.usda), 'aria-hidden': 'true' }), 'USDA', h('span', { class: 'sr', text: ' ' + statusWord(e.usda) })]));
     var hasMissing = found && e.missing && e.missing.length;
     var right = h('div', { class: 'sc' });
     if (e.score !== null && e.score !== undefined) {
       var sb = bandOf(e.score);
-      right.appendChild(h('div', { class: 'n' }, [h('span', { class: 'dot ' + (e.lowConfidence ? '' : bandColor(sb.key)) }), String(e.score)]));
+      right.appendChild(h('div', { class: 'n' }, [h('span', { class: 'dot ' + (e.lowConfidence ? '' : bandColor(sb.key)), 'aria-hidden': 'true' }), String(e.score), h('span', { class: 'sr', text: ', ' + (e.lowConfidence ? 'low confidence' : sb.label) })]));
       right.appendChild(h('div', { class: 'm', text: (e.scoreMode === 'custom' ? 'Custom' : 'Standard') + (e.lowConfidence ? ', low confidence' : '') }));
     }
     function open() { showTab('scan'); handleCode(e.barcode, e.format || null, 'log'); }
@@ -1152,6 +1178,9 @@ var LIQUID_FOOD = /soup|sauce|\boil|vinegar|dressing|syrup|honey|cream\b/i;
 // Used only when a stored or linked custom profile carries no usable weights at all (never offered as a choice).
 var FALLBACK_WEIGHTS = { sugars: 3, satFat: 2, sodiumMg: 2, kcal: 1, fiber: 2, protein: 2, processing: 2, additives: 2 };
 var NOVA_SCORE = { 1: 100, 2: 80, 3: 50, 4: 10 };
+// Plain nouns for the factors, used wherever the score is explained in words.
+var PLAIN_NUTRIENT = { sugars: 'sugar', fat: 'fat', kcal: 'calories', netCarbs: 'net carbs', satFat: 'saturated fat', sodiumMg: 'sodium', fiber: 'fiber', protein: 'protein' };
+function factorNoun(key) { return PLAIN_NUTRIENT[key] || (key === 'processing' ? 'processing' : key === 'additives' ? 'additives' : key === 'organic' ? 'the organic label' : key); }
 // Editorial additive risk levels (0 none, 1 limited, 2 moderate, 3 high), informed by public EFSA and regulatory opinions
 // and widely used consumer classifications. Not medical advice. Additives not listed count as 'unrated' (a small penalty).
 var ADDITIVE_RISK = (function () {
@@ -1186,11 +1215,12 @@ function additivesScore(m, e) {
   var off = e.off && e.off.norm;
   if (!off || (!off.additivesAnalysed && !(off.additives && off.additives.length))) return null;   // no ingredient analysis available
   var adds = dedupeAdditives(off.additives || []);
-  if (!adds.length) return { score: 100, worst: -2, text: 'no additives' };
-  var worst = -1, names = [];
-  adds.forEach(function (a) { var l = additiveLevel(a); if (l > worst) worst = l; names.push(a + (l >= 0 ? ' (' + ADDITIVE_LEVEL_LABEL[l] + ')' : ' (unrated)')); });
+  if (!adds.length) return { score: 100, worst: -2, count: 0, worstCount: 0, text: 'no additives' };
+  var worst = -1, names = [], levels = [];
+  adds.forEach(function (a) { var l = additiveLevel(a); levels.push(l); if (l > worst) worst = l; names.push(a + (l >= 0 ? ' (' + ADDITIVE_LEVEL_LABEL[l] + ')' : ' (unrated)')); });
   var base = worst < 0 ? 85 : [100, 80, 35, 0][worst];   // an unrated additive is a small penalty, never worse than a rated 'limited concern' one
-  return { score: Math.max(0, base - 5 * (adds.length - 1)), worst: worst, text: names.slice(0, 3).join(', ') + (names.length > 3 ? ' +' + (names.length - 3) + ' more' : '') };
+  return { score: Math.max(0, base - 5 * (adds.length - 1)), worst: worst, count: adds.length, worstCount: levels.filter(function (l) { return l === worst; }).length, names: adds.slice(), levels: levels,
+    text: names.slice(0, 3).join(', ') + (names.length > 3 ? ' +' + (names.length - 3) + ' more' : '') };
 }
 function organicOf(e) { var off = e.off && e.off.norm; if (!off || !off.labelsKnown) return null; return !!off.organic; }
 // Open Food Facts category lists carry every ancestor ("plant based foods and beverages, breads"), so tags are matched whole.
@@ -1311,11 +1341,11 @@ function standardScore(m, e) {
   if (ns && ns.notApplicable) { nsText = 'Nutri-Score not applicable to this category (per Open Food Facts)'; ns = null; }
   else if (ns) nsText = 'Nutri-Score ' + ns.grade.toUpperCase() + (ns.estimated ? ' (estimated from the nutrients' + (ns.kind === 'fat' ? ', fats/oils table' : ns.kind === 'cheese' ? ', cheese rule' : ns.kind === 'beverage' ? ', beverage table' : '') + (ns.sweetenerFromText ? ', sweetener found in the ingredients' : '') + ')' : '');
   else nsText = 'not enough nutrition data' + (needs.length ? ' (needs ' + needs.join(', ') + ')' : ' (needs total fat for oils and nuts)');
-  comps.push({ key: 'nutrition', label: 'Nutritional quality', max: 50, score: ns ? Math.round(nutritionPoints60(ns) * 50 / 60) : null, text: nsText });
+  comps.push({ key: 'nutrition', label: 'Nutritional quality', max: 50, score: ns ? Math.round(nutritionPoints60(ns) * 50 / 60) : null, text: nsText, grade: ns ? ns.grade : null, estimated: !!(ns && ns.estimated) });
   var ad = additivesScore(m, e);
-  comps.push({ key: 'additives', label: 'Additives', max: 25, score: ad ? Math.round(ad.score * 0.25) : null, text: ad ? ad.text : 'no additive analysis (Open Food Facts only)' });
+  comps.push({ key: 'additives', label: 'Additives', max: 25, score: ad ? Math.round(ad.score * 0.25) : null, text: ad ? ad.text : 'no additive analysis (Open Food Facts only)', ad: ad });
   var nova = m.nova.v, novaKnown = nova !== null && nova !== undefined && NOVA_SCORE[nova] !== undefined;
-  comps.push({ key: 'processing', label: 'Processing', max: 15, score: novaKnown ? Math.round(NOVA_SCORE[nova] * 0.15) : null, text: novaKnown ? 'NOVA ' + nova + ' (' + NOVA_LABELS[nova] + ')' : 'NOVA group unknown (Open Food Facts only)' });
+  comps.push({ key: 'processing', label: 'Processing', max: 15, score: novaKnown ? Math.round(NOVA_SCORE[nova] * 0.15) : null, text: novaKnown ? 'NOVA ' + nova + ' (' + NOVA_LABELS[nova] + ')' : 'NOVA group unknown (Open Food Facts only)', nova: novaKnown ? nova : null });
   var org = organicOf(e);
   comps.push({ key: 'organic', label: 'Organic', max: 10, score: org === null ? null : (org ? 10 : 0), text: org === null ? 'unknown' : (org ? 'organic label' : 'no organic label') });
   var have = comps.filter(function (c) { return c.score !== null; });
@@ -1324,12 +1354,12 @@ function standardScore(m, e) {
   var informative = have.some(function (c) { return c.key !== 'organic'; });   // a label alone is not a score
   var score = (max && informative) ? Math.round(sum / max * 100) : null;
   if (score !== null && !isFinite(score)) score = null;
-  var why = have.map(function (c) { return { positive: c.score / c.max >= 0.5, text: c.label + ': ' + c.text + ' (' + c.score + '/' + c.max + ')', weight: Math.abs(c.score / c.max - 0.5) * c.max }; })
+  var why = have.map(function (c) { return { key: c.key, positive: c.score / c.max >= 0.5, text: c.label + ': ' + c.text + ' (' + c.score + '/' + c.max + ')', weight: Math.abs(c.score / c.max - 0.5) * c.max }; })
     .sort(function (a, b) { return b.weight - a.weight; });
   return { mode: 'standard', score: score, band: bandOf(score), components: comps, why: why,
     coverageNote: have.length < comps.length ? 'based on ' + have.length + ' of ' + comps.length + ' components' : '', lowConfidence: score !== null && comps[0].score === null,
     missingNote: comps.filter(function (c) { return c.score === null; }).map(function (c) { return c.label.toLowerCase() + ' unknown'; }).join(', '),
-    reason: score !== null ? '' : (max ? 'only the organic label is known' : 'no nutrition, additive, processing or organic data') };
+    reason: score !== null ? '' : (max ? 'only the organic label is known, and a label alone is not enough for a score' : 'no nutrition, additive, processing or organic data') };
 }
 // A profile can flip a nutrient's direction (prof.dirs), e.g. total fat or calories as something to get more of.
 function metricDir(prof, met) { var d = prof && prof.dirs && prof.dirs[met.key]; return (d === 'low' || d === 'high') && (met.dir === 'low' || met.dir === 'high') ? d : met.dir; }
@@ -1349,36 +1379,39 @@ function customScore(m, e, prof) {
     var w = Number(prof.weights && prof.weights[met.key]) || 0;
     if (w <= 0) return;
     totalW += w;
-    var v, s = null, text = '', dir = metricDir(prof, met), label = met.label + (dir !== met.dir ? (dir === 'high' ? ' (more is better)' : ' (less is better)') : '');
+    var v = null, s = null, text = '', dir = metricDir(prof, met), label = met.label + (dir !== met.dir ? (dir === 'high' ? ' (more is better)' : ' (less is better)') : ''), extra = {};
     if (met.dir === 'low' || met.dir === 'high') {
       v = m.per100[met.key];
+      extra.th = th[met.key];
+      extra.lv = (prof.answers && prof.answers.strict && Object.prototype.hasOwnProperty.call(prof.answers.strict, met.key)) ? levelOf(prof.answers.strict[met.key]) : null;
       if (v !== null && v !== undefined) { s = linScore(v, th[met.key], dir); text = fmtVal(v, met.unit) + '/100 ' + (m.basis || 'g'); }
     } else if (met.key === 'processing') {
       var nova = m.nova.v;
-      if (nova !== null && nova !== undefined && NOVA_SCORE[nova] !== undefined) { s = NOVA_SCORE[nova]; text = 'NOVA ' + nova; }
+      if (nova !== null && nova !== undefined && NOVA_SCORE[nova] !== undefined) { s = NOVA_SCORE[nova]; text = 'NOVA ' + nova; extra.nova = nova; }
     } else if (met.key === 'additives') {
       var ad = additivesScore(m, e);
-      if (ad) { s = ad.score; text = ad.text; }
+      if (ad) { s = ad.score; text = ad.text; extra.ad = ad; }
     } else if (met.key === 'organic') {
       var org = organicOf(e);
       if (org !== null) { s = org ? 100 : 0; text = org ? 'organic label' : 'no organic label'; }
     }
-    if (s === null) { missW += w; rows.push({ key: met.key, label: label, w: w, s: null, text: 'no data' }); return; }
+    if (s === null) { missW += w; rows.push(Object.assign({ key: met.key, label: label, w: w, s: null, v: null, dir: dir, text: 'no data' }, extra)); return; }
     wsum += w; acc += w * s;
-    rows.push({ key: met.key, label: label, w: w, s: s, text: text });
+    rows.push(Object.assign({ key: met.key, label: label, w: w, s: s, v: v, dir: dir, text: text }, extra));
   });
   var informative = rows.some(function (r) { return r.s !== null && r.key !== 'organic'; });
   var enoughWeight = totalW > 0 && wsum / totalW >= 0.5;     // at least half of your weighted factors must have data
   var score = (wsum && informative && enoughWeight) ? Math.round(acc / wsum) : null;
   if (score !== null && !isFinite(score)) score = null;
   var why = rows.filter(function (r) { return r.s !== null; })
-    .map(function (r) { return { positive: r.s >= 50, text: r.label + ' ' + r.text, weight: r.w * Math.abs(r.s - 50) }; })
+    .map(function (r) { return { key: r.key, positive: r.s >= 50, text: r.label + ' ' + r.text, weight: r.w * Math.abs(r.s - 50) }; })
     .sort(function (a, b) { return b.weight - a.weight; }).slice(0, 3);
   var missing = rows.filter(function (r) { return r.s === null; }).map(function (r) { return r.label.toLowerCase(); });
-  return { mode: 'custom', score: score, band: bandOf(score), rows: rows, why: why,
+  var missingNouns = rows.filter(function (r) { return r.s === null; }).map(function (r) { return factorNoun(r.key); });
+  return { mode: 'custom', score: score, band: bandOf(score), rows: rows, why: why, drink: drink, basis: m.basis || 'g',
     coverageNote: (missing.length ? 'based on ' + (rows.length - missing.length) + ' of ' + rows.length + ' weighted factors' : '') + (drink ? (missing.length ? ', ' : '') + 'drink cut-offs per 100 ml' : ''),
     lowConfidence: totalW > 0 && missW / totalW > 0.4, missingNote: missing.length ? 'no data for ' + missing.join(', ') : '',
-    reason: score !== null ? '' : (!wsum ? 'none of your weighted factors has data' : !informative ? 'only the organic label is known' : 'too little data for your weighted factors' + (missing.length ? ' (no data for ' + missing.join(', ') + ')' : '')) };
+    reason: score !== null ? '' : (!wsum ? 'none of the things you asked about has data for this product' : !informative ? 'only the organic label is known, and a label alone is not enough for a score' : 'too little data on what you asked about' + (missingNouns.length ? ': no data on ' + joinPlain(missingNouns) : '')) };
 }
 function scoreProduct(m, e, prof) {
   if (!m || !m.found) return null;
@@ -1523,30 +1556,114 @@ function renderAvoid(av) {
   if (!rows.length) rows.push(h('div', { class: 'avoid-row' }, [h('span', { class: 'dot green' }), 'Clear: ' + av.ok.join(', ')]));
   return h('section', { class: 'sec avoid' }, [h('div', { class: 'sec-h', text: 'Avoid list' }), h('div', {}, rows), h('div', { class: 'sec-f', text: 'Does not change the score.' })]);
 }
+// ---- the score in words. Tier (0 best … 3 worst) drives the wording, tone drives the colour: green above 50, red below,
+// grey at exactly 50 or with no data. Words and colours therefore never disagree.
+function tierOf(s) { return s >= 75 ? 0 : s >= 50 ? 1 : s >= 25 ? 2 : 3; }
+function toneOf(s) { return (s === null || s === undefined) ? 'none' : s > 50 ? 'good' : s < 50 ? 'bad' : 'mid'; }
+function toneDot(t) { return h('span', { class: 'dot ' + (t === 'good' ? 'green' : t === 'bad' ? 'red' : ''), 'aria-hidden': 'true' }); }
+function metricByKey(k) { for (var i = 0; i < METRICS.length; i++) { if (METRICS[i].key === k) return METRICS[i]; } return null; }
+function cutoffPhrase(met, pair, dir) {   // the two cut-offs of a nutrient factor, as a sentence
+  if (!pair) return '';
+  var lo = cutoffText(pair[0], met.unit), hi = cutoffText(pair[1], met.unit);
+  return dir === 'low' ? 'Full marks at ' + lo + ' or less, none at ' + hi + ' or more' : 'Full marks at ' + hi + ' or more, none at ' + lo + ' or less';
+}
+var NOVA_WORDS = { 1: 'Unprocessed or minimally processed', 2: 'A basic cooking ingredient (oil, butter, sugar, salt)', 3: 'Processed, not ultra-processed', 4: 'Ultra-processed' };
+function additiveTitle(ad) {
+  if (!ad) return 'Additives unknown';
+  if (!ad.count) return 'No additives';
+  var n = ad.count, head = n + ' additive' + (n === 1 ? '' : 's');
+  if (ad.worst < 0) return head + ', none rated';
+  if (ad.worst === 0) return head + (n === 1 ? ', no known concern' : ', none of concern');
+  if (ad.worstCount === n) return head + (n === 1 ? ', of ' : ', all of ') + ADDITIVE_LEVEL_LABEL[ad.worst];
+  return head + ', ' + ad.worstCount + ' of ' + ADDITIVE_LEVEL_LABEL[ad.worst];
+}
+function additiveNames(ad) {
+  if (!ad || !ad.count) return 'None found in the ingredients.';
+  var parts = ad.names.map(function (t, i) { var l = ad.levels[i]; return t + (l > 0 ? ' (' + ADDITIVE_LEVEL_LABEL[l] + ')' : l < 0 ? ' (unrated)' : ''); });
+  return (parts.length > 8 ? parts.slice(0, 8).join(', ') + ' and ' + (parts.length - 8) + ' more' : parts.join(', ')) + '.';
+}
+function nutrientTitle(key, dir, s) {
+  var noun = PLAIN_NUTRIENT[key] || key, t = tierOf(s);
+  if (dir === 'low') return ['Low in ', 'Fairly low in ', 'Fairly high in ', 'High in '][t] + noun;
+  var fewer = key === 'kcal';
+  return ['Plenty of ' + noun, 'A fair amount of ' + noun, (fewer ? 'Fewer ' : 'Less ') + noun + ' than you want', (fewer ? 'Much fewer ' : 'Much less ') + noun + ' than you want'][t];
+}
+function nutrientValue(r, met, basis) { return fmtVal(r.v, met.unit) + (met.unit === 'kcal' ? ' kcal' : '') + ' per 100 ' + basis; }
+// One custom-score factor as {title, value, detail, tone, noun}: the title doubles as the reason line and the details row title.
+function factorWords(r, sc) {
+  var met = metricByKey(r.key), noun = factorNoun(r.key), tone = toneOf(r.s);
+  if (r.s === null) return { title: capitalize(noun) + ' unknown', value: '', detail: 'No data, not counted.', tone: 'none', noun: noun };
+  if (met && (met.dir === 'low' || met.dir === 'high')) {
+    var value = nutrientValue(r, met, sc.basis || 'g');
+    var paren = [sc.drink ? 'drink cut-offs' : '', r.lv ? STRICTNESS[r.lv].label.toLowerCase() : ''].filter(Boolean).join(', ');
+    return { title: nutrientTitle(met.key, r.dir, r.s), value: value, detail: value + '. ' + cutoffPhrase(met, r.th, r.dir) + (sc.drink ? ' per 100 ml' : '') + (paren ? ' (' + paren + ')' : '') + '.', tone: tone, noun: noun };
+  }
+  if (r.key === 'processing') return { title: NOVA_WORDS[r.nova] || 'NOVA group ' + r.nova, value: 'NOVA group ' + r.nova, detail: 'NOVA group ' + r.nova + '. Groups 1 to 4 score 100, 80, 50 and 10.', tone: tone, noun: noun };
+  if (r.key === 'additives') return { title: additiveTitle(r.ad), value: '', detail: additiveNames(r.ad) + (r.ad && r.ad.count ? ' The riskiest additive sets the most marks possible; each extra additive takes 5 off.' : ''), tone: tone, noun: noun };
+  if (r.key === 'organic') return { title: r.s ? 'Organic label' : 'No organic label', value: '', detail: (r.s ? 'Organic label' : 'No organic label') + ' in Open Food Facts.', tone: tone, noun: noun };
+  return { title: r.label, value: '', detail: r.text, tone: tone, noun: noun };
+}
+// One standard-score component, same shape.
+function componentWords(c) {
+  var noun = c.key === 'nutrition' ? 'nutrition' : c.key === 'additives' ? 'additives' : c.key === 'processing' ? 'processing' : 'the organic label';
+  if (c.score === null) return { title: capitalize(noun) + ' unknown', value: '', detail: capitalize(c.text) + '. Not counted.', tone: 'none', noun: noun };
+  var ratio = Math.round(100 * c.score / c.max), tone = toneOf(ratio);
+  if (c.key === 'nutrition') return { title: ['Good nutrition', 'Fairly good nutrition', 'Fairly poor nutrition', 'Poor nutrition'][tierOf(ratio)], value: c.grade ? 'Nutri-Score ' + String(c.grade).toUpperCase() + (c.estimated ? ', estimated' : '') : '', detail: capitalize(c.text) + '. A scores about 48, B 40, C 30, D 18, E 6.', tone: tone, noun: noun };
+  if (c.key === 'additives') return { title: additiveTitle(c.ad), value: '', detail: additiveNames(c.ad) + (c.ad && c.ad.count ? ' The riskiest additive sets the most marks possible; each extra additive takes 5 off. Scaled to 25.' : ''), tone: tone, noun: noun };
+  if (c.key === 'processing') return { title: NOVA_WORDS[c.nova] || 'Processing', value: 'NOVA group ' + c.nova, detail: 'NOVA group ' + c.nova + '. Groups 1 to 4 score 15, 12, 8 and 2.', tone: tone, noun: noun };
+  return { title: c.score ? 'Organic label' : 'No organic label', value: '', detail: (c.score ? 'Organic label' : 'No organic label') + ' in Open Food Facts.', tone: tone, noun: noun };
+}
 function renderScore(sc) {
   var sec = h('section', { class: 'sec score' });
   if (sc.score === null) {
     sec.appendChild(h('div', { class: 'score-row' }, [h('div', { class: 'score-n none', text: '–', 'aria-hidden': 'true' }), h('div', { class: 'grow' }, [h('div', { class: 'band', text: 'No score' }), h('div', { class: 'foot', text: capitalize(sc.reason) + '.' })])]));
     return sec;
   }
-  var foot = [h('div', { class: 'foot', text: sc.mode === 'standard' ? 'Standard score' : 'Custom score' })];
-  if (sc.mode === 'custom') foot.push(h('div', { class: 'foot', text: (profile && profile.name) || 'custom' }));
-  if (sc.coverageNote) foot.push(h('div', { class: 'foot', text: capitalize(sc.coverageNote) + '.' }));
+  var standard = sc.mode === 'standard', items = standard ? sc.components : sc.rows, byKey = {};
+  items.forEach(function (x) { byKey[x.key] = x; });
+  function wordsOf(x) { return standard ? componentWords(x) : factorWords(x, sc); }
+  function has(x) { return (standard ? x.score : x.s) !== null; }
   sec.appendChild(h('div', { class: 'score-row' }, [
     h('div', { class: 'score-n', text: String(sc.score), 'aria-label': 'Score ' + sc.score + ' of 100' }),
-    h('div', { class: 'grow' }, [h('div', { class: 'band' }, [h('span', { class: 'dot ' + (sc.lowConfidence ? '' : bandColor(sc.band.key)) }), sc.lowConfidence ? 'Low confidence' : sc.band.label])].concat(foot))
+    h('div', { class: 'grow' }, [
+      h('div', { class: 'band' }, [h('span', { class: 'dot ' + (sc.lowConfidence ? '' : bandColor(sc.band.key)), 'aria-hidden': 'true' }), sc.lowConfidence ? 'Low confidence' : sc.band.label]),
+      h('div', { class: 'foot', text: standard ? 'Standard score' : 'Your profile: ' + ((profile && profile.name) || 'custom') })
+    ])
   ]));
-  if (sc.why && sc.why.length) sec.appendChild(h('ul', { class: 'why' }, sc.why.slice(0, 3).map(function (w) { return h('li', { class: w.positive ? 'pos' : 'neg' }, [h('span', { class: 'sign', 'aria-hidden': 'true', text: w.positive ? '+' : '−' }), h('span', { text: w.text })]); })));
-  if (sc.lowConfidence) sec.appendChild(h('div', { class: 'lowconf', text: 'Low confidence: ' + (sc.missingNote || 'key data is missing') + '.' }));
-  var tbl = h('table', { class: 'sc' });
-  if (sc.mode === 'standard') {
-    tbl.appendChild(h('tr', {}, [h('th', { text: 'Component' }), h('th', { text: 'Points' })]));
-    sc.components.forEach(function (c) { tbl.appendChild(h('tr', {}, [h('td', { text: c.label + ' — ' + c.text }), h('td', { text: (c.score === null ? '–' : c.score) + '/' + c.max })])); });
+  // the three factors that moved the score most, in words; a factor sitting exactly at 50 moved nothing and is not listed
+  var reasons = (sc.why || []).filter(function (w) { return w.weight > 0 && byKey[w.key]; }).slice(0, 3);
+  if (reasons.length) sec.appendChild(h('ul', { class: 'rsn' }, reasons.map(function (w) {
+    var words = wordsOf(byKey[w.key]);
+    return h('li', {}, [toneDot(words.tone), h('span', { class: 'rt', text: words.title }), words.value ? h('span', { class: 'rd', text: words.value }) : null]);
+  })));
+  var missingNouns = items.filter(function (x) { return !has(x); }).map(function (x) { return wordsOf(x).noun; });
+  if (sc.lowConfidence) sec.appendChild(h('div', { class: 'lowconf', text: standard ? 'Low confidence: no nutrition data, which is half of the standard score.' : 'Low confidence: no data on ' + joinPlain(missingNouns) + ', and those count for a large part of your score.' }));
+  else if (missingNouns.length) sec.appendChild(h('div', { class: 'foot note', text: capitalize(joinPlain(missingNouns)) + ' unknown, not counted.' }));
+  if (sc.drink) sec.appendChild(h('div', { class: 'foot note', text: 'Scored as a drink, with cut-offs per 100 ml.' }));
+  // every factor: title, marks, weight, value, cut-offs; heaviest first, factors without data last; then how they add up
+  var order = items.map(function (x, i) { return { x: x, i: i }; }).sort(function (a, b) { return ((has(a.x) ? 0 : 1) - (has(b.x) ? 0 : 1)) || (standard ? 0 : (b.x.w - a.x.w)) || (a.i - b.i); }).map(function (o) { return o.x; });
+  var list = h('ul', { class: 'fac' });
+  order.forEach(function (x) {
+    var words = wordsOf(x), miss = !has(x), marks = miss ? '–' : String(standard ? x.score : x.s), pct = miss ? 0 : (standard ? Math.round(100 * x.score / x.max) : x.s);
+    list.appendChild(h('li', { class: miss ? 'none' : null }, [
+      h('div', { class: 'fh' }, [h('span', { class: 'ft', text: words.title }), h('span', { class: 'fs' }, [marks, h('span', { class: 'fw', text: standard ? 'of ' + x.max : 'weight ' + x.w + ' of 5' })])]),
+      h('div', { class: 'fd', text: words.detail }),
+      miss ? null : h('div', { class: 'fbar' }, h('span', { class: words.tone, style: 'width:' + pct + '%' }))
+    ]));
+  });
+  var counted = order.filter(has), explain, worked;
+  if (standard) {
+    var pts = 0, max = 0;
+    counted.forEach(function (c) { pts += c.score; max += c.max; });
+    explain = 'Points add up to 100: nutrition 50, additives 25, processing 15, organic 10. Parts with no data are left out and the rest is scaled up to 100.';
+    worked = 'Worked out: ' + (max === 100 ? counted.map(function (c) { return String(c.score); }).join(' + ') + ' = ' + sc.score : pts + ' of ' + max + ' points from the parts with data, scaled to 100: ' + sc.score) + '.';
   } else {
-    tbl.appendChild(h('tr', {}, [h('th', { text: 'Factor' }), h('th', { text: 'Weight' }), h('th', { text: 'Score' })]));
-    sc.rows.forEach(function (r) { tbl.appendChild(h('tr', {}, [h('td', { text: r.label + (r.text ? ' — ' + r.text : '') }), h('td', { text: String(r.w) }), h('td', { text: r.s === null ? '–' : String(r.s) })])); });
+    var wsum = 0;
+    counted.forEach(function (r) { wsum += r.w; });
+    explain = 'Each factor gets 0 to 100 marks. Your score is the average of those marks, with each factor counted as many times as its weight (1 to 5, from your answers; change it in Settings). Factors with no data are left out.';
+    worked = 'Worked out: (' + counted.map(function (r) { return r.w + ' × ' + r.s; }).join(' + ') + ') ÷ ' + wsum + ' = ' + sc.score + '.';
   }
-  sec.appendChild(h('details', { class: 'disc' }, [h('summary', { text: 'Details' }), tbl,
+  sec.appendChild(h('details', { class: 'disc' }, [h('summary', { text: 'How the score adds up' }), list, h('div', { class: 'sec-f', text: explain }), h('div', { class: 'sec-f', text: worked }),
     h('div', { class: 'sec-f', text: 'Scores are a guide computed from public data, not medical advice. Additive risk levels are this app\'s own editorial classification.' })]));
   return sec;
 }
@@ -1696,23 +1813,45 @@ var ob = { step: 0, answers: null };
 function openOnboarding(step) {
   ob.step = step || 0;
   if (!ob.answers) ob.answers = normAnswers(profile && profile.answers);
-  renderOnboarding();
+  ob.prevFocus = document.activeElement;
   $('onboard').classList.add('open');
   document.body.classList.add('ob-open');
+  setBackgroundInert(true);
+  renderOnboarding();
   $('onboard').scrollTop = 0;
 }
-function closeOnboarding() { $('onboard').classList.remove('open'); document.body.classList.remove('ob-open'); }
+function closeOnboarding() {
+  $('onboard').classList.remove('open'); document.body.classList.remove('ob-open');
+  if (!$('dbgPanel').classList.contains('open')) setBackgroundInert(false);
+  restoreFocus(ob.prevFocus); ob.prevFocus = null;
+}
+// While a full-screen dialog is open, everything behind it is inert for keyboards and screen readers.
+function setBackgroundInert(on) {
+  ['main', 'sheet', 'tabs'].forEach(function (id) {
+    var el = id === 'main' ? document.querySelector('main') : $(id);
+    if (!el) return;
+    if (on) { el.setAttribute('inert', ''); el.setAttribute('aria-hidden', 'true'); } else { el.removeAttribute('inert'); el.removeAttribute('aria-hidden'); }
+  });
+}
+function restoreFocus(el) { if (el && document.contains(el) && typeof el.focus === 'function') { try { el.focus({ preventScroll: true }); } catch (e) { /* ignore */ } } }
+function focusHeading(box) { var h2 = box.querySelector('h2'); if (h2) { h2.tabIndex = -1; try { h2.focus({ preventScroll: true }); } catch (e) { /* ignore */ } } }
 function renderOnboarding() {
   var box = clear($('obInner'));
+  renderOnboardingStep(box);
+  focusHeading(box);   // each step announces its question; option taps move focus back to the option afterwards
+}
+function renderOnboardingStep(box) {
   if (ob.step === 'weights') { renderWeightsEditor(box); return; }
   if (ob.step === 0) {
     box.appendChild(h('h2', { text: 'How should products be scored?' }));
     box.appendChild(h('p', { text: 'Every product gets a 0–100 score. Use the standard score, or tailor one to your own goals. You can change this any time in Settings. Scores are a guide from public data, not medical advice.' }));
-    box.appendChild(h('button', { class: 'ob-choice', type: 'button', id: 'obStandard', onclick: function () { saveProfile({ mode: 'standard', version: 1 }); closeOnboarding(); toast('Standard scoring on'); } },
-      [h('b', {}, 'Standard'), h('span', { class: 'small', text: 'Nutritional quality via Nutri-Score (50%), additives weighed by risk level (25%), NOVA processing (15%) and organic certification (10%).' })]));
-    box.appendChild(h('button', { class: 'ob-choice', type: 'button', id: 'obCustom', onclick: function () { ob.step = 1; renderOnboarding(); } },
-      [h('b', {}, 'Customize'), h('span', { class: 'small', text: 'Five quick questions build a personal score: what to limit, what to get more of, how strong each preference is, processing, and what to avoid. Nothing to type.' })]));
-    if (profile) box.appendChild(h('button', { class: 'btn block', type: 'button', id: 'obKeep', onclick: closeOnboarding }, 'Keep current: ' + profileName(profile)));
+    box.appendChild(h('div', { class: 'group' }, [
+      h('button', { class: 'row nav', type: 'button', id: 'obStandard', onclick: function () { saveProfile({ mode: 'standard', version: 1 }); closeOnboarding(); toast('Standard scoring on'); } },
+        h('span', { class: 'rl' }, [h('span', { class: 't', text: 'Standard' }), h('span', { class: 'd', text: 'Nutritional quality via Nutri-Score (50%), additives weighed by risk level (25%), NOVA processing (15%) and organic certification (10%).' })])),
+      h('button', { class: 'row nav', type: 'button', id: 'obCustom', onclick: function () { ob.step = 1; renderOnboarding(); } },
+        h('span', { class: 'rl' }, [h('span', { class: 't', text: 'Customize' }), h('span', { class: 'd', text: 'Five quick questions build a personal score: what to limit, what to get more of, how strong each preference is, processing, and what to avoid. Nothing to type.' })]))
+    ]));
+    if (profile) box.appendChild(h('button', { class: 'btn block', type: 'button', id: 'obKeep', onclick: closeOnboarding }, profile.mode === 'standard' ? 'Keep the standard score' : 'Keep my custom score'));
     return;
   }
   var qi = ob.step - 1;
@@ -1789,11 +1928,6 @@ function renderQuestion(box, q, qi) {
   ]));
 }
 function cutoffText(x, unit) { return ((unit === 'kcal' || unit === 'mg') ? Math.round(x) : Math.round(x * 100) / 100) + ' ' + unit; }   // exact, unlike the 1-decimal display rounding
-function thresholdText(met, th, dir) {
-  var t = th[met.key];
-  if (!t) return '';
-  return dir === 'low' ? '100 at ≤' + cutoffText(t[0], met.unit) + ', 0 at ≥' + cutoffText(t[1], met.unit) + ' per 100 g' : '0 at ≤' + cutoffText(t[0], met.unit) + ', 100 at ≥' + cutoffText(t[1], met.unit) + ' per 100 g';
-}
 function renderSummary(box) {
   var p = answersToProfile(ob.answers), total = 0, informative = 0;
   METRICS.forEach(function (met) { var w = p.weights[met.key] || 0; total += w; if (met.key !== 'organic') informative += w; });   // an organic label alone never gives a score
@@ -1804,8 +1938,8 @@ function renderSummary(box) {
   METRICS.slice().sort(function (x, y) { return (p.weights[y.key] || 0) - (p.weights[x.key] || 0); }).forEach(function (met) {   // heaviest first
     var w = p.weights[met.key] || 0;
     if (!w) return;
-    var dir = metricDir(p, met), tt = thresholdText(met, p.thresholds, dir), lv = p.answers.strict[met.key];
-    list.appendChild(h('div', { class: 'wrow' }, [h('span', { class: 'wl' }, [met.label + (dir !== met.dir ? ' (more is better)' : ''), tt ? h('span', { class: 'foot', text: (lv ? STRICTNESS[lv].label + '. ' : '') + capitalize(tt) }) : null]), h('span', { class: 'wv', text: String(w) })]));
+    var dir = metricDir(p, met), tt = cutoffPhrase(met, p.thresholds[met.key], dir), lv = p.answers.strict[met.key];
+    list.appendChild(h('div', { class: 'wrow' }, [h('span', { class: 'wl' }, [met.label + (dir !== met.dir ? ' (more is better)' : ''), tt ? h('span', { class: 'foot', text: (lv ? STRICTNESS[lv].label + '. ' : '') + tt + ' per 100 g.' }) : null]), h('span', { class: 'wv', text: String(w) })]));
   });
   box.appendChild(list);
   if (p.avoid.length) box.appendChild(h('p', { text: 'Warnings for: ' + p.avoid.map(function (k) { return AVOID_LABEL[k].toLowerCase(); }).join(', ') + '. These do not change the score.' }));
@@ -1855,14 +1989,15 @@ function renderLoading(code) {
 function renderError(code, err) {
   var box = clear($('result'));
   clear($('missingLine')); clear($('resultMore'));
-  box.appendChild(h('div', { class: 'state red' }, [
+  box.appendChild(h('div', { class: 'state red peek' }, [
     h('div', { class: 'glyph', html: SVG_ALERT }),
     h('h3', { text: 'Lookup failed' }),
     h('div', { class: 'code', text: code }),
-    h('div', { class: 'foot', style: 'margin-top:6px', text: String(err && err.message || err) })
+    h('div', { class: 'foot', text: String(err && err.message || err) })
   ]));
   box.appendChild(h('div', { class: 'actions' }, [h('button', { class: 'btn small', type: 'button', onclick: function () { handleCode(code, null, 'manual'); } }, 'Try again')]));
-  openSheet(null);
+  openSheet(sheet.snap === 'hidden' || sheet.snap === 'peek' ? 'half' : sheet.snap);   // the reason and Try again must be in view
+  focusSheet();
 }
 // One row per source, in plain words: what happened and, when it worked, which code form matched.
 function sourceRows(entry) {
@@ -1870,7 +2005,7 @@ function sourceRows(entry) {
   function row(name, status, detail) {
     return h('li', {}, [h('span', { class: 'dot ' + statusColor(status) }), h('div', { class: 'grow' }, [h('div', { text: name }), h('div', { class: 'd', text: detail })])]);
   }
-  var od = o.status === 'found' ? 'Found as ' + o.codeUsed : o.status === 'not_found' ? 'Not found (tried ' + (o.tried || []).join(', ') + ')' : o.status === 'error' ? 'Error: ' + o.error : 'Skipped';
+  var od = o.status === 'found' ? 'Found as ' + o.codeUsed : o.status === 'not_found' ? 'Not found (tried ' + (o.tried || []).join(', ') + ')' : o.status === 'error' ? 'Error: ' + sourceName(o.error) : 'Skipped';
   var ud = u.status === 'skipped' ? (u.error ? 'Skipped after a recent error (' + u.error + '); retried in a minute' : 'No key')
     : u.status === 'found' ? 'Found as ' + u.codeUsed + ' (fdcId ' + u.fdcId + ')' : u.status === 'not_found' ? 'Not found (tried ' + (u.tried || []).join(', ') + ')' : 'Error: ' + u.error;
   return h('ul', { class: 'src' }, [row('Open Food Facts', o.status, od), row('USDA FoodData Central', u.status, ud)]);
@@ -1882,13 +2017,11 @@ function renderResult(res) {
   var box = clear($('result')), more = clear($('resultMore')), ml = clear($('missingLine'));
   if (!m.found) {
     var errored = e.off.status === 'error' || e.usda.status === 'error';
-    box.appendChild(h('div', { class: 'sh-head peek' }, [
-      noImage(),
-      h('div', { class: 'grow' }, [
-        h('div', { class: 'name', text: errored ? 'Lookup failed' : 'Not found' }),
-        h('div', { class: 'brand', text: e.barcode + (e.format ? ' (' + e.format + ')' : '') }),
-        h('div', { class: 'meta', text: (res.fromCache ? 'Cached, checked ' : 'Checked ') + shortTime(e.fetchedAt) })
-      ])
+    box.appendChild(h('div', { class: 'state peek' + (errored ? ' red' : '') }, [
+      h('div', { class: 'glyph', html: errored ? SVG_ALERT : SVG_SEARCH }),
+      h('h3', { text: errored ? 'Lookup failed' : 'Not found' }),
+      h('div', { class: 'code', text: e.barcode + (e.format ? ' (' + formatName(e.format) + ')' : '') }),
+      h('div', { class: 'foot', text: (res.fromCache ? 'Cached, checked ' : 'Checked ') + shortTime(e.fetchedAt) })
     ]));
     ml.appendChild(h('div', { class: 'missing bad' }, [h('span', { class: 'dot red' }), errored ? 'Lookup failed, no data. Counted as a lookup error, not as "not found". Refresh to try again.' : 'Missing fields: everything. The product was not found in any source.']));
     more.appendChild(h('section', { class: 'sec sep' }, [h('div', { class: 'sec-h', text: 'Sources' }), sourceRows(e)]));
@@ -1905,7 +2038,7 @@ function renderResult(res) {
   head.appendChild(h('div', { class: 'grow' }, [
     h('div', { class: 'name', text: m.name.v || '(no name)' }),
     h('div', { class: 'brand', text: [m.brand.v, m.quantity.v].filter(Boolean).join(', ') }),
-    h('div', { class: 'meta', text: e.barcode + (e.format ? ' (' + e.format + ')' : '') + (res.fromCache ? ', cached' : '') })
+    h('div', { class: 'meta', text: e.barcode + (e.format ? ' (' + formatName(e.format) + ')' : '') + (res.fromCache ? ', cached' : '') })
   ]));
   box.appendChild(head);
   var sc = scoreProduct(m, e, profile || { mode: 'standard' });
@@ -1933,7 +2066,7 @@ function renderResult(res) {
   var list = h('ul', { class: 'nlist' });
   NUT_ROWS.forEach(function (r) { if (r[0] === 'netCarbs') return; list.appendChild(h('li', {}, [h('span', { text: r[1] }), h('span', { class: 'vv' }, vals(r[0], r[2]))])); });
   nut.appendChild(list);
-  nut.appendChild(h('div', { class: 'sec-f', text: 'Serving size ' + (m.servingSize.v || 'unknown') + (m.servingSize.from ? ' (' + m.servingSize.from + ')' : '') + '. Net carbs are carbs minus fiber.' }));
+  nut.appendChild(h('div', { class: 'sec-f', text: 'Serving size ' + (m.servingSize.v || 'unknown') + (m.servingSize.from ? ' (' + sourceName(m.servingSize.from) + ')' : '') + '. Net carbs are carbs minus fiber.' }));
   var nutLabel = {};
   NUT_ROWS.forEach(function (r) { nutLabel[r[0]] = r[1].toLowerCase(); });
   var provenance = NUT_KEYS.filter(function (k) { return m.perServingFrom[k] && m.perServingFrom[k].indexOf('×') > 0; });
@@ -1941,8 +2074,8 @@ function renderResult(res) {
   if (provenance.length) nut.appendChild(h('div', { class: 'sec-f',
     text: (provenance.length === given.length ? 'All per-serving values are' : 'Per-serving ' + provenance.map(function (k) { return nutLabel[k]; }).join(', ') + ' are') + ' computed from per-100 ' + (m.basis || 'g') + ' × serving size (' + m.servingSize.v + ').' }));
   var foreign = NUT_KEYS.filter(function (k) { return m.perServingFrom[k] && m.perServingFrom[k].indexOf('own serving') > 0; });
-  if (foreign.length) nut.appendChild(h('div', { class: 'sec-f', text: 'Per-serving ' + foreign.map(function (k) { return nutLabel[k]; }).join(', ') + ': ' + uniqueList(foreign.map(function (k) { return m.perServingFrom[k]; })).join('; ') + ', not the serving shown above.' }));
-  if (m.sources.length > 1) nut.appendChild(h('div', { class: 'sec-f', text: 'Per-100 ' + (m.basis || 'g') + ' values come from ' + uniqueList(NUT_KEYS.map(function (k) { return m.per100From[k]; })).join(' + ') + '; per-serving from ' + (m.servingSize.from || 'no source') + '.' }));
+  if (foreign.length) nut.appendChild(h('div', { class: 'sec-f', text: 'Per-serving ' + foreign.map(function (k) { return nutLabel[k]; }).join(', ') + ': ' + sourceName(uniqueList(foreign.map(function (k) { return m.perServingFrom[k]; })).join('; ')) + ', not the serving shown above.' }));
+  if (m.sources.length > 1) nut.appendChild(h('div', { class: 'sec-f', text: 'Per-100 ' + (m.basis || 'g') + ' values come from ' + sourceName(uniqueList(NUT_KEYS.map(function (k) { return m.per100From[k]; })).join(' and ')) + '; per-serving from ' + sourceName(m.servingSize.from || 'no source') + '.' }));
   box.appendChild(nut);
   if (m.missing.length) ml.appendChild(h('div', { class: 'missing' }, [h('span', { class: 'dot orange' }), 'Missing fields: ' + m.missing.join(', ')]));
   else ml.appendChild(h('div', { class: 'missing ok' }, [h('span', { class: 'dot green' }), 'Missing fields: none. All six tracked fields are present.']));
@@ -1950,7 +2083,7 @@ function renderResult(res) {
   var ingr = m.ingredients.v;
   var s1 = h('section', { class: 'sec sep' });
   s1.appendChild(h('details', { class: 'disc', open: ingr && ingr.length < 240 ? '' : null }, [
-    h('summary', {}, [h('span', { text: 'Ingredients' }), h('span', { class: 'rv', text: ingr ? (m.ingredients.from || '') : 'missing' })]),
+    h('summary', {}, [h('span', { text: 'Ingredients' }), h('span', { class: 'rv', text: ingr ? sourceName(m.ingredients.from || '') : 'missing' })]),
     h('p', { class: 'ingr', text: ingr || 'No ingredients text in any source.' })
   ]));
   var kv = h('ul', { class: 'kv' });
@@ -1981,7 +2114,9 @@ function renderResult(res) {
 // After a lookup, present the sheet: half height while the camera runs so the viewfinder stays usable, full otherwise.
 function revealResult() {
   try { openSheet(cam.scanning ? 'half' : 'full'); } catch (e) { /* ignore */ }
+  focusSheet();
 }
+function focusSheet() { try { $('sheet').focus({ preventScroll: true }); } catch (e) { try { $('sheet').focus(); } catch (e2) { /* ignore */ } } }   // VoiceOver reads the region and its header
 function uniqueList(arr) { var out = []; arr.forEach(function (x) { if (x && out.indexOf(x) < 0) out.push(x); }); return out; }
 function refetch(entry) {
   store.remove(LS.cachePrefix + entry.barcode);
@@ -2311,11 +2446,21 @@ function scanLoop() {
   });
 }
 // The part of the camera frame actually shown in the viewport (object-fit: cover), in frame pixels.
+// The part of the camera frame the user can actually see: the object-fit cover crop, minus whatever the result sheet
+// and the tab bar cover, so a barcode hidden under the sheet cannot replace the result being read.
 function visibleRect(vw, vh) {
   var vp = $('viewport'), bw = vp.clientWidth || vw, bh = vp.clientHeight || vh;
   var scale = Math.max(bw / vw, bh / vh);
   var w = Math.min(vw, Math.round(bw / scale)), h = Math.min(vh, Math.round(bh / scale));
-  return { x: Math.round((vw - w) / 2), y: Math.round((vh - h) / 2), w: w, h: h };
+  var shown = bh;
+  try {
+    var top = vp.getBoundingClientRect().top;
+    var tabs = $('tabs').getBoundingClientRect().top - top;
+    var sh = sheet.snap !== 'hidden' ? $('sheet').getBoundingClientRect().top - top : Infinity;
+    shown = Math.max(Math.round(bh * 0.25), Math.min(bh, Math.floor(tabs), Math.floor(sh)));
+  } catch (e) { /* keep the full crop */ }
+  var hv = Math.min(h, Math.round(shown / scale));
+  return { x: Math.round((vw - w) / 2), y: Math.round((vh - h) / 2), w: w, h: hv };
 }
 function detectNative() {
   var vw = video.videoWidth || 0, vh = video.videoHeight || 0;
@@ -2545,7 +2690,15 @@ function initDebugPanel() {
     window.__dbg.lines.forEach(addLine);
     window.__dbg.subscribe(addLine);
   }
-  function setOpen(open) { panel.classList.toggle('open', open); document.body.classList.toggle('dbg-open', open); if (open) linesEl.scrollTop = linesEl.scrollHeight; }
+  var prevFocus = null;
+  function setOpen(open) {
+    if (open) prevFocus = document.activeElement;
+    panel.classList.toggle('open', open); document.body.classList.toggle('dbg-open', open);
+    setBackgroundInert(open || $('onboard').classList.contains('open'));
+    if (open) { linesEl.scrollTop = linesEl.scrollHeight; try { $('dbgClose').focus({ preventScroll: true }); } catch (e) { /* ignore */ } }
+    else { restoreFocus(prevFocus); prevFocus = null; }
+  }
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && panel.classList.contains('open')) setOpen(false); });
   $('dbgToggle').addEventListener('click', function () { setOpen(!panel.classList.contains('open')); });
   $('dbgClose').addEventListener('click', function () { setOpen(false); });
   $('dbgClear').addEventListener('click', function () { clear(linesEl); if (window.__dbg) window.__dbg.lines.length = 0; count = 0; countEl.textContent = '0'; });
@@ -2566,15 +2719,20 @@ var sheet = { snap: 'hidden', y: 0, drag: null };
 function sheetHeight() { return $('sheet').offsetHeight || window.innerHeight; }
 function peekHeight() { var head = document.querySelector('#result .peek'); return ($('sheetGrab').offsetHeight || 26) + (head ? head.offsetHeight : 80) + 6; }
 function snapY(snap) { var H = sheetHeight(); return snap === 'full' ? 0 : snap === 'half' ? Math.round(H * 0.5) : snap === 'peek' ? Math.max(0, H - peekHeight()) : H; }
-function setSheetY(y) { sheet.y = y; $('sheet').style.transform = 'translateY(' + y + 'px)'; }
+function setSheetY(y) {   // the part pushed below the tab bar is clipped, so nothing ghosts through the bar's material
+  var el = $('sheet'), clip = 'inset(0 0 ' + Math.max(0, y) + 'px 0)';
+  sheet.y = y; el.style.transform = 'translateY(' + y + 'px)'; el.style.clipPath = clip; el.style.webkitClipPath = clip;
+}
 function snapTo(snap) {
   var el = $('sheet');
   sheet.snap = snap;
   el.setAttribute('data-snap', snap);
   el.classList.toggle('open', snap !== 'hidden');
+  $('sheetGrab').setAttribute('aria-expanded', String(snap === 'full'));
+  $('sheetGrab').setAttribute('aria-label', snap === 'full' ? 'Collapse result' : 'Expand result');
   setSheetY(snapY(snap));
   if (snap !== 'full') $('sheetBody').scrollTop = 0;
-  document.documentElement.style.setProperty('--sheet-up', snap === 'peek' ? peekHeight() + 'px' : '0px');   // parked at peek, the camera controls move up above it
+  document.documentElement.style.setProperty('--sheet-up', (snap === 'peek' || snap === 'half') ? (sheetHeight() - snapY(snap)) + 'px' : '0px');   // at peek and half the camera controls stay reachable above the sheet
   updatePaused();
 }
 function openSheet(snap) { snapTo(snap || (sheet.snap === 'hidden' ? 'half' : sheet.snap)); }
@@ -2600,8 +2758,10 @@ function initSheet() {
     if (!d || d.cancelled) return;
     var p = point(e), dy = p.clientY - d.y0, dx = p.clientX - d.x0;
     if (!d.moved) {
+      var canScroll = d.inBody && sheet.snap === 'full' && (body.scrollTop > 0 || dy < 0);
+      if (!canScroll && e.cancelable) e.preventDefault();   // claim the gesture on the very first move, before WebKit hands it to the scroller
       if (Math.abs(dy) < 6 && Math.abs(dx) < 6) return;
-      if ((d.inBody && sheet.snap === 'full' && (body.scrollTop > 0 || dy < 0)) || Math.abs(dx) > Math.abs(dy)) { d.cancelled = true; return; }   // the list scrolls instead
+      if (canScroll || Math.abs(dx) > Math.abs(dy)) { d.cancelled = true; return; }   // the list scrolls instead
       d.moved = true; el.classList.add('dragging');
     }
     setSheetY(Math.max(0, d.base + dy));
@@ -2630,7 +2790,11 @@ function initSheet() {
   });
   $('sheetGrab').addEventListener('click', function () { if (sheet.snap !== 'hidden') snapTo(sheet.snap === 'full' ? 'half' : 'full'); });   // tap or keyboard: toggle
   $('sheetClose').addEventListener('click', closeSheet);
-  document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && sheet.snap !== 'hidden' && !$('onboard').classList.contains('open') && !$('dbgPanel').classList.contains('open')) closeSheet(); });
+  document.addEventListener('keydown', function (e) {
+    if (e.key !== 'Escape' || $('dbgPanel').classList.contains('open')) return;
+    if ($('onboard').classList.contains('open')) { if (profile) closeOnboarding(); return; }   // first-run setup has to be answered
+    if (sheet.snap !== 'hidden') closeSheet();
+  });
   window.addEventListener('resize', function () { if (sheet.snap !== 'hidden' && !sheet.drag) setSheetY(snapY(sheet.snap)); });
 }
 
@@ -2679,7 +2843,7 @@ function init() {
     if (open) $('manualCode').focus();      // inside the tap handler so iOS shows the keyboard
   });
   $('manualCode').addEventListener('focus', function () { manualFocused = true; updatePaused(); refreshScanStatus(); });
-  $('manualCode').addEventListener('blur', function () { manualFocused = false; updatePaused(); refreshScanStatus(); });
+  $('manualCode').addEventListener('blur', function () { manualFocused = false; updatePaused(); refreshScanStatus(); if (activeTab === 'scan') window.scrollTo(0, 0); });
   $('manualForm').addEventListener('submit', function (ev) {
     ev.preventDefault();
     var input = $('manualCode');
@@ -2688,6 +2852,7 @@ function init() {
     if (!(code.length === 8 || (code.length >= 12 && code.length <= 14))) toast('Unusual length (' + code.length + ' digits), trying anyway');
     else if (!readIsValid(code, null)) toast('Check digit does not match, trying anyway');
     input.blur();
+    window.scrollTo(0, 0);   // iOS pans the fixed scan screen to clear the keyboard; put it back
     handleCode(code, null, 'manual');
   });
   Array.prototype.forEach.call($('tabs').querySelectorAll('button'), function (b) { b.addEventListener('click', function () { showTab(b.getAttribute('data-tab')); }); });
