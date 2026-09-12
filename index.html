@@ -192,9 +192,12 @@ body.ob-open { overflow: hidden; }
 .ob-row.all { border-bottom: 2px solid var(--border); }
 .ob-row.all .wl { font-size: 14px; }
 .seg { display: flex; border: 2px solid var(--border); border-radius: 12px; overflow: hidden; background: var(--card); }
-.seg-btn { flex: 1 1 0; background: var(--card); color: var(--text); border: 0; padding: 11px 6px; font-size: 15px; cursor: pointer; }
+.seg-btn { flex: 1 1 0; background: var(--card); color: var(--text); border: 0; padding: 10px 4px; font-size: 14px; line-height: 1.2; cursor: pointer; }
 .seg-btn + .seg-btn { border-left: 2px solid var(--border); }
-.seg-btn.on { background: var(--accent); color: var(--accent-ink); font-weight: 700; }
+.seg-btn b { display: block; font-weight: 600; }
+.seg-btn .lv2 { display: block; font-size: 12px; opacity: 0.8; }
+.seg-btn.on { background: var(--accent); color: var(--accent-ink); }
+.seg-btn.on b { font-weight: 700; }
 .ob-group { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; margin: 16px 0 -4px; }
 .avoid { margin-top: 10px; }
 .avoid .chips { margin-top: 4px; }
@@ -1434,16 +1437,19 @@ function renderScore(sc) {
 }
 
 /* ------------------------------------------------- scoring profile & setup */
-// Five questions, one dimension each: nutrients to limit, nutrients to get more of, how strict each pick is (which also
-// sets its weight), processing and additives, and ingredients or labels to avoid or look for. Nothing has to be typed.
+// Five questions, one dimension each: nutrients to limit, nutrients to get more of, how strong each preference is (which
+// sets its weight and cut-offs), processing and additives, and ingredients or labels to avoid or look for. Nothing has to be typed.
 var NUTRIENT_OPTS = {
   limit: [['sugars', 'Sugar'], ['netCarbs', 'Net carbs'], ['kcal', 'Calories'], ['satFat', 'Saturated fat'], ['fat', 'Total fat'], ['sodiumMg', 'Sodium (salt)']],
   more: [['fiber', 'Fiber'], ['protein', 'Protein'], ['fat', 'Total fat'], ['kcal', 'Calories']]   // fat and calories can be goals too (keto, weight gain)
 };
-// Each picked nutrient is relaxed, typical or strict: the level sets both its weight and how its cut-offs are scaled
-// ('low' metrics scale down when strict, 'high' metrics such as fiber and protein scale up).
-var STRICTNESS = { relaxed: { low: 1.5, high: 1 / 1.5, weight: 2, label: 'Relaxed' }, typical: { low: 1, high: 1, weight: 3, label: 'Typical' }, strict: { low: 0.5, high: 1.5, weight: 5, label: 'Strict' } };
-var STRICT_LEVELS = ['relaxed', 'typical', 'strict'];
+// Every pick already means less (or more) of that nutrient; the level says how strongly it counts. Slight and medium
+// preferences use the standard guideline cut-offs and differ only in weight; a strict preference also halves the limit
+// cut-offs ('low' metrics) and raises the targets ('high' metrics such as fiber and protein) by 1.5×.
+var STRICTNESS = { slight: { low: 1, high: 1, weight: 1, label: 'Slight preference' }, medium: { low: 1, high: 1, weight: 3, label: 'Medium preference' }, strict: { low: 0.5, high: 1.5, weight: 5, label: 'Strict preference' } };
+var STRICT_LEVELS = ['slight', 'medium', 'strict'];
+var LEGACY_LEVELS = { relaxed: 'slight', typical: 'medium' };   // names used by earlier versions of the questionnaire
+function levelOf(v) { if (typeof v !== 'string') return null; if (LEGACY_LEVELS[v]) v = LEGACY_LEVELS[v]; return STRICT_LEVELS.indexOf(v) >= 0 ? v : null; }
 var AVOID_OPTS = [
   { group: 'Allergens and intolerances', items: [['milk', 'Milk / dairy'], ['eggs', 'Eggs'], ['gluten', 'Gluten'], ['peanuts', 'Peanuts'], ['nuts', 'Tree nuts'], ['soybeans', 'Soy'], ['fish', 'Fish'], ['shellfish', 'Shellfish'], ['sesame', 'Sesame'], ['celery', 'Celery'], ['mustard', 'Mustard'], ['lupin', 'Lupin'], ['sulphites', 'Sulphites']] },
   { group: 'Diet', items: [['vegan', 'Non-vegan ingredients'], ['vegetarian', 'Non-vegetarian ingredients']] },
@@ -1455,7 +1461,7 @@ AVOID_OPTS.forEach(function (g) { g.items.forEach(function (it) { AVOID_LABEL[it
 var QUESTIONS = [
   { id: 'limit', title: 'What do you want less of?', hint: 'Pick any, or none. Each pick is scored against a per-100 g cut-off.', type: 'multi', options: NUTRIENT_OPTS.limit },
   { id: 'more', title: 'What do you want more of?', hint: 'Pick any, or none. Total fat and calories appear here for high-fat or weight-gain plans, unless you chose to limit them in the previous question.', type: 'multi', options: NUTRIENT_OPTS.more },
-  { id: 'strict', title: 'How strict is each pick?', hint: 'Strict: half the usual guideline cut-off (targets 1.5×) and the highest weight, 5 — for keto, diabetes, low-sodium or similar plans. Typical: standard front-of-pack guideline cut-offs (e.g. sugar 5–22.5 g per 100 g), weight 3. Relaxed: only clearly high amounts lose points (cut-offs 1.5× the guideline, targets ⅔), weight 2.', type: 'strictness' },
+  { id: 'strict', title: 'How strong is each preference?', hint: 'Each pick already means less (or more) of it; the level is how much it counts. Slight preference: weight 1, scored against the standard front-of-pack guideline cut-offs (e.g. sugar 5–22.5 g per 100 g). Medium preference: weight 3, same cut-offs. Strict preference: weight 5 and the cut-offs are halved (targets 1.5×) — for keto, diabetes, low-sodium or similar plans.', type: 'strictness' },
   { id: 'processing', title: 'Processing and additives?', type: 'single', options: [
     ['ok', 'Do not mind', 'NOVA group and additives are ignored.'],
     ['prefer', 'Prefer less processed food', 'Moderate weight on the NOVA group and on additives.'],
@@ -1473,9 +1479,9 @@ function normAnswers(a) {
   var picked = out.limit.concat(out.more);
   // one level per picked nutrient; a bare string (the previous questionnaire's single answer) applies to all picks
   var perPick = (a.strict && typeof a.strict === 'object' && !Array.isArray(a.strict)) ? a.strict : null;
-  var legacy = (typeof a.strict === 'string' && STRICT_LEVELS.indexOf(a.strict) >= 0) ? a.strict : null;
+  var legacy = levelOf(a.strict);
   out.strict = {};
-  picked.forEach(function (k) { var v = perPick ? (Object.prototype.hasOwnProperty.call(perPick, k) ? perPick[k] : undefined) : legacy; out.strict[k] = (typeof v === 'string' && STRICT_LEVELS.indexOf(v) >= 0) ? v : 'typical'; });   // never coerce stored values: an object with a bogus toString would throw
+  picked.forEach(function (k) { var v = perPick ? (Object.prototype.hasOwnProperty.call(perPick, k) ? perPick[k] : undefined) : legacy; out.strict[k] = levelOf(v) || 'medium'; });   // never coerce stored values: an object with a bogus toString would throw
   out.processing = (typeof a.processing === 'string' && /^(ok|prefer|avoid)$/.test(a.processing)) ? a.processing : null;
   out.avoid = list(a.avoid, AVOID_KEYS);
   return out;
@@ -1488,21 +1494,21 @@ function profileDirs(a) {   // nutrients picked as "more of" whose built-in dire
   a.more.forEach(function (k) { METRICS.forEach(function (met) { if (met.key === k && met.dir === 'low') dirs[k] = 'high'; }); });
   return dirs;
 }
-function scaleThresholds(strict, dirs) {   // strict: { metricKey: 'relaxed' | 'typical' | 'strict' }
+function scaleThresholds(strict, dirs) {   // strict: { metricKey: 'slight' | 'medium' | 'strict' }
   var th = {};
   METRICS.forEach(function (met) {
     var d = DEFAULT_THRESHOLDS[met.key];
     if (!d) return;
-    var lv = strict && STRICT_LEVELS.indexOf(String(strict[met.key])) >= 0 ? String(strict[met.key]) : 'typical', f = STRICTNESS[lv];
+    var lv = (strict && Object.prototype.hasOwnProperty.call(strict, met.key) && levelOf(strict[met.key])) || 'medium', f = STRICTNESS[lv];
     var k = metricDir({ dirs: dirs }, met) === 'high' ? f.high : f.low;
     th[met.key] = [Math.round(d[0] * k * 1000) / 1000, Math.round(d[1] * k * 1000) / 1000];
   });
   return th;
 }
-// Strict picks weigh 5, typical 3, relaxed 2.
+// Strict preferences weigh 5, medium 3, slight 1.
 function pickWeights(a) {
   var w = {};
-  pickedNutrients(a).forEach(function (k) { w[k] = STRICTNESS[a.strict[k] || 'typical'].weight; });
+  pickedNutrients(a).forEach(function (k) { w[k] = STRICTNESS[a.strict[k] || 'medium'].weight; });
   return w;
 }
 function metricIndex(k) { for (var i = 0; i < METRICS.length; i++) { if (METRICS[i].key === k) return i; } return METRICS.length; }
@@ -1524,7 +1530,7 @@ function answersToProfile(a) {
   else if (a.processing === 'prefer') { w.additives = 2; w.processing = 2; }
   w.organic = a.avoid.indexOf('organic') >= 0 ? 2 : 0;
   var dirs = profileDirs(a);
-  return { mode: 'custom', version: 2, name: profileNameFor(a), weights: w, dirs: dirs, thresholds: scaleThresholds(a.strict, dirs),
+  return { mode: 'custom', version: 3, name: profileNameFor(a), weights: w, dirs: dirs, thresholds: scaleThresholds(a.strict, dirs),
     avoid: a.avoid.filter(function (k) { return k !== 'organic'; }), answers: a };
 }
 function profileName(p) { if (!p) return 'not chosen'; return p.mode === 'standard' ? 'Standard' : 'Custom · ' + (p.name || 'custom'); }
@@ -1533,7 +1539,7 @@ function sanitizeProfile(p) {
   if (!p || typeof p !== 'object' || Array.isArray(p)) return null;
   if (p.mode === 'standard') return { mode: 'standard', version: 1 };
   if (p.mode !== 'custom' || !p.weights || typeof p.weights !== 'object' || Array.isArray(p.weights)) return null;
-  var out = { mode: 'custom', version: 2, name: (typeof p.name === 'string' && p.name.trim()) ? p.name.trim().slice(0, 60) : 'Custom', weights: {}, dirs: {}, thresholds: {}, avoid: [], answers: normAnswers(p.answers) };
+  var out = { mode: 'custom', version: 3, name: (typeof p.name === 'string' && p.name.trim()) ? p.name.trim().slice(0, 60) : 'Custom', weights: {}, dirs: {}, thresholds: {}, avoid: [], answers: normAnswers(p.answers) };
   var wtotal = 0;
   METRICS.forEach(function (met) { var v = Number(p.weights[met.key]); out.weights[met.key] = isFinite(v) ? Math.max(0, Math.min(5, Math.round(v))) : 0; wtotal += out.weights[met.key]; });
   if (!wtotal) Object.keys(FALLBACK_WEIGHTS).forEach(function (k) { out.weights[k] = FALLBACK_WEIGHTS[k]; });   // all-zero weights would score nothing
@@ -1544,6 +1550,13 @@ function sanitizeProfile(p) {
     });
   }
   if (p.dirs && typeof p.dirs === 'object') METRICS.forEach(function (met) { if (met.dir === 'low' && p.dirs[met.key] === 'high') out.dirs[met.key] = 'high'; });   // only the flip the questionnaire can make
+  // Profiles saved before version 3 used the old relaxed / typical / strict levels: their cut-offs and pick weights are
+  // re-derived from the answers (unless the weights editor changed the weights); newer ones are kept as stored.
+  var picks = pickedNutrients(out.answers);
+  if (picks.length && !(Number(p.version) >= 3)) {
+    out.thresholds = scaleThresholds(out.answers.strict, out.dirs);
+    if (out.name.indexOf('(adjusted)') < 0) { var pw = pickWeights(out.answers); picks.forEach(function (k) { out.weights[k] = pw[k]; }); }
+  }
   if (Array.isArray(p.avoid)) out.avoid = p.avoid.filter(function (k, i) { return typeof k === 'string' && k !== 'organic' && AVOID_KEYS.indexOf(k) >= 0 && p.avoid.indexOf(k) === i; });
   return out;
 }
@@ -1582,7 +1595,7 @@ function renderOnboarding() {
     box.appendChild(h('button', { class: 'ob-choice', type: 'button', id: 'obStandard', onclick: function () { saveProfile({ mode: 'standard', version: 1 }); closeOnboarding(); toast('Standard scoring on'); } },
       [h('b', {}, 'Standard'), h('span', { class: 'small muted', text: 'Nutritional quality via Nutri-Score (50%), additives weighed by risk level (25%), NOVA processing (15%) and organic certification (10%).' })]));
     box.appendChild(h('button', { class: 'ob-choice', type: 'button', id: 'obCustom', onclick: function () { ob.step = 1; renderOnboarding(); } },
-      [h('b', {}, 'Customize'), h('span', { class: 'small muted', text: 'Five quick questions — what to limit, what to get more of, how strict each pick is, processing, and what to avoid — build a personal score. Nothing to type.' })]));
+      [h('b', {}, 'Customize'), h('span', { class: 'small muted', text: 'Five quick questions — what to limit, what to get more of, how strong each preference is, processing, and what to avoid — build a personal score. Nothing to type.' })]));
     if (profile) box.appendChild(h('button', { class: 'btn block', type: 'button', id: 'obKeep', onclick: closeOnboarding }, 'Keep current: ' + profileName(profile)));
     return;
   }
@@ -1618,8 +1631,8 @@ function renderQuestion(box, q, qi) {
           var i = a[q.id].indexOf(opt[0]);
           if (i >= 0) a[q.id].splice(i, 1); else a[q.id].push(opt[0]);
           if (q.id === 'limit') a.more = a.more.filter(function (k) { return a.limit.indexOf(k) < 0; });
-          var picked = pickedNutrients(a), strict = {};   // new picks start as typical; un-picked ones lose their level
-          picked.forEach(function (k) { strict[k] = a.strict[k] || 'typical'; });
+          var picked = pickedNutrients(a), strict = {};   // new picks start as a medium preference; un-picked ones lose their level
+          picked.forEach(function (k) { strict[k] = a.strict[k] || 'medium'; });
           a.strict = strict;
           renderOnboarding();
         }));
@@ -1629,18 +1642,19 @@ function renderQuestion(box, q, qi) {
     var picked = pickedNutrients(a);
     if (!picked.length) box.appendChild(h('p', { class: 'small', style: 'color:var(--warn)', text: 'You have not picked any nutrients. Go back to pick some, or continue to score on processing and additives only.' }));
     else {
-      // one relaxed / typical / strict control per pick, plus a row that sets them all at once
+      // one slight / medium / strict control per pick, plus a row that sets them all at once
       function seg(key, label, cur, onPick) {
         return h('div', { class: 'seg', role: 'group', 'aria-label': label }, STRICT_LEVELS.map(function (lv) {
           var on = cur === lv;
-          return h('button', { class: 'seg-btn' + (on ? ' on' : ''), type: 'button', 'data-opt': key + ':' + lv, 'aria-pressed': String(on), onclick: function () { onPick(lv); renderOnboarding(); refocus(key + ':' + lv); } }, STRICTNESS[lv].label);
+          var words = STRICTNESS[lv].label.split(' ');   // "Slight" over "preference", so the three buttons line up
+          return h('button', { class: 'seg-btn' + (on ? ' on' : ''), type: 'button', 'data-opt': key + ':' + lv, 'aria-pressed': String(on), onclick: function () { onPick(lv); renderOnboarding(); refocus(key + ':' + lv); } }, [h('b', { text: words[0] }), ' ', h('span', { class: 'lv2', text: words.slice(1).join(' ') })]);
         }));
       }
-      var allSame = picked.every(function (k) { return (a.strict[k] || 'typical') === (a.strict[picked[0]] || 'typical'); });
-      box.appendChild(h('div', { class: 'ob-row all' }, [h('span', { class: 'wl small muted', text: 'Set all picks to' }), seg('all', 'All picks', allSame ? (a.strict[picked[0]] || 'typical') : null, function (lv) { picked.forEach(function (k) { a.strict[k] = lv; }); })]));
+      var allSame = picked.every(function (k) { return (a.strict[k] || 'medium') === (a.strict[picked[0]] || 'medium'); });
+      box.appendChild(h('div', { class: 'ob-row all' }, [h('span', { class: 'wl small muted', text: 'Set all picks to' }), seg('all', 'All picks', allSame ? (a.strict[picked[0]] || 'medium') : null, function (lv) { picked.forEach(function (k) { a.strict[k] = lv; }); })]));
       picked.forEach(function (k) {
         var phrase = nutrientPhrase(a, k);
-        box.appendChild(h('div', { class: 'ob-row' }, [h('span', { class: 'wl', text: phrase.charAt(0).toUpperCase() + phrase.slice(1) }), seg(k, phrase, a.strict[k] || 'typical', function (lv) { a.strict[k] = lv; })]));
+        box.appendChild(h('div', { class: 'ob-row' }, [h('span', { class: 'wl', text: phrase.charAt(0).toUpperCase() + phrase.slice(1) }), seg(k, phrase, a.strict[k] || 'medium', function (lv) { a.strict[k] = lv; })]));
       });
       var pw = pickWeights(a);
       box.appendChild(h('p', { class: 'tiny muted', text: 'Weights: ' + picked.map(function (k) { return nutrientLabel(k).toLowerCase() + ' ' + pw[k]; }).join(', ') + '.' }));
@@ -1663,7 +1677,7 @@ function renderSummary(box) {
   METRICS.forEach(function (met) { var w = p.weights[met.key] || 0; total += w; if (met.key !== 'organic') informative += w; });   // an organic label alone never gives a score
   box.appendChild(h('h2', { text: 'Your scoring profile: ' + p.name }));
   if (!informative) box.appendChild(h('p', { class: 'small', style: 'color:var(--warn)', text: 'Nothing that can be scored is weighted yet' + (total ? ' (an organic label alone gives no score)' : '') + '. Go back and pick at least one nutrient or a processing preference.' }));
-  else box.appendChild(h('p', { class: 'muted small', text: 'Products are scored 0–100 on these factors. Strict picks weigh 5, typical 3, relaxed 2. Fine-tune the weights later under Settings › Adjust weights.' }));
+  else box.appendChild(h('p', { class: 'muted small', text: 'Products are scored 0–100 on these factors. Strict preferences weigh 5, medium 3, slight 1; a strict preference also halves the limit cut-offs and raises the targets by 1.5×. Fine-tune the weights later under Settings › Adjust weights.' }));
   var list = h('div');
   METRICS.slice().sort(function (x, y) { return (p.weights[y.key] || 0) - (p.weights[x.key] || 0); }).forEach(function (met) {   // heaviest first
     var w = p.weights[met.key] || 0;
