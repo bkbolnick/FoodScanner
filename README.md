@@ -1,16 +1,20 @@
 # FoodScanner
 
-A mobile-first web app that scans food barcodes, shows what the public food databases know about the product, and
-scores it 0–100 either with a standard method or with a scoring profile built from your own dietary goals. It also
-works as a **data coverage tester**: it tells you whether a product is in Open Food Facts and USDA FoodData Central,
-what nutrition fields each source has, and keeps a running tally so you can judge how useful those sources are for
-the things you actually buy.
+A mobile-first web app with four tools that share one scoring method: a **food scanner** (barcodes, or a photo of
+a product, dish or meal), a **menu scanner** that ranks the five healthiest dishes on a restaurant menu, a **meal
+planner** that writes a plan with a grocery list and prep plan around your goals, and a **Learn** section of short
+nutrition articles. Every product, dish and planned meal is scored 0–100 either with a standard method or with a
+scoring profile built from your own dietary goals. The scanner also works as a **data coverage tester**: it tells
+you whether a product is in Open Food Facts and USDA FoodData Central, what nutrition fields each source has, and
+keeps a running tally so you can judge how useful those sources are for the things you actually buy.
 
 Live: https://bkbolnick.github.io/FoodScanner/
 
 Everything is a single `index.html` (vanilla HTML/CSS/JS, no build step). The only external dependency is the
 pinned `@zxing/browser` barcode decoder loaded from a CDN, used when the browser has no native `BarcodeDetector`
-(which is the case in iOS Safari). `.nojekyll` makes GitHub Pages serve the file as-is. `manifest.json` and the
+(which is the case in iOS Safari). The photo scan, the menu scanner and the meal planner call the Claude API with
+a key you paste into Settings (or through a proxy URL you choose); the repo contains no key and the other tools
+work without one. `.nojekyll` makes GitHub Pages serve the file as-is. `manifest.json` and the
 icons let **Add to Home Screen** install it like an app; the UI follows the iOS Human Interface Guidelines (system
 type, semantic colours in light and dark, a bottom tab bar, grouped settings and a result sheet).
 
@@ -33,18 +37,70 @@ type, semantic colours in light and dark, a bottom tab bar, grouped settings and
    of serving size, carbs, sugars, fiber, protein and ingredients no source provided. Below that: ingredients, NOVA
    group, Nutri-Score, additives, categories, a **Sources** section saying what each database returned, a
    per-source coverage table, and **Refresh** (bypasses the cache), **Open in Open Food Facts / USDA** and **Copy JSON**.
-5. **Log** tab: the coverage tally (scans, found in Open Food Facts, found in USDA, found in neither,
-   found-but-incomplete, lookup errors) and the scan history with each entry's sources, score, warnings and missing
-   fields. **Copy log as CSV** copies the log to the clipboard; **Share CSV** opens the iOS share sheet. Tap an
-   entry to reopen its result.
-6. **Settings** tab: paste a USDA FoodData Central API key (free, from
+5. **Scan a photo** (on the Scan screen, next to Start camera, or the camera button while scanning) reads a photo
+   of a product, a dish or a meal with no barcode: the model names it, estimates the nutrition of the portion
+   shown, reads the ingredients and allergens off the label when one is legible, and the result opens in the same
+   sheet, marked **Estimated from the photo** with a confidence level and an **AI estimate** source row instead of
+   database rows. A legible barcode in the photo is looked up in the databases instead. Needs an API key (see
+   **AI features**).
+6. **History** (on the Scan screen, or the clock button while scanning) opens the coverage tally (scans, found in
+   Open Food Facts, found in USDA, found in neither, found-but-incomplete, lookup errors) and the scan history with
+   each entry's sources, score, warnings and missing fields; photo scans are listed as **AI estimate** and do not
+   count in the tally. **Copy log as CSV** copies the log to the clipboard; **Share CSV** opens the iOS share sheet.
+   Tap an entry to reopen its result.
+7. **Settings** tab: paste a USDA FoodData Central API key (free, from
    https://fdc.nal.usda.gov/api-key-signup) to add USDA as a second source. The key is stored only in this
    browser's localStorage and is never sent anywhere except api.nal.usda.gov. To make it automatic, tap
    **Copy link with my key**, open that link once in Safari and add the page to the Home Screen: the link ends in
    `#usda=YOURKEY`, and every launch from that icon re-saves the key (see Notes). Also: decoder preference,
    **Clear cache** and **Clear log and tally**.
-7. **Settings › Developer › Debug log**: an on-screen log of everything (console output, uncaught errors, every
+8. **Settings › Developer › Debug log**: an on-screen log of everything (console output, uncaught errors, every
    fetch with its status code). **Copy** copies it so you can paste it into an issue or a chat.
+
+## Menu scanner
+
+**Menu** tab: photograph a restaurant menu (or choose a photo). The model reads every legible dish and estimates,
+for a typical serving as that kind of restaurant would make it, the nutrition, the NOVA processing group, the
+allergens and whether it is vegan or vegetarian. The app then scores every dish itself with the scoring profile in
+force (standard or custom, exactly like a scanned product) and shows **Top 5 for you**, the rest best first,
+dishes that contain something on your avoid list set aside with the reason, and dishes with too little data to
+score. Tap a dish for the full estimate in the result sheet. The last six menus are kept on the phone and re-scored
+with the current profile when reopened; the photo is not kept.
+
+## Meal planner
+
+**Plan** tab: eight short questions (goals with a top priority, calories and nutritional emphasis, meal structure,
+eating style with allergies pre-filled from your avoid list, time and equipment, budget and stores, tips such as
+food-order guidance, then a review with the plan length: 1, 2, 4 or 10 weeks). Answers are kept on the phone and
+reused next time. The model writes one week at a time, streamed so a week can take a minute or two without timing
+out; finished weeks appear as they arrive and a plan interrupted halfway offers to continue. Every meal and snack
+carries its own nutrition estimate and is scored with your profile, with avoid-list warnings, a day average and a
+one-line reason. A meal card opens to show portions, an eating-order tip when requested, ingredients and steps,
+plus **Full score and nutrition** (the result sheet), **Lock** and **Replace** (the model writes a different dish
+for that slot, told what the old one scored and why). Each week has a grocery list by category with tick-boxes that
+are kept with the plan (with an all-weeks view for longer plans) and a prep plan with **Batch cooking** and
+**No-prep mode**. **Export** copies or shares the plan and the grocery list as CSV or as plain text through the
+system share sheet, so it can go to Notes, Mail or a spreadsheet. **See an example plan** shows a built-in two-day
+sample without a key.
+
+## Learn
+
+**Learn** tab: seventeen short articles in five groups (MyPlate basics, Nutrients 101, Food order strategy, Diet
+patterns, Meal prep mastery), a search box, popular topics, and a **Build your balanced plate** tool. Articles open
+full screen with their update date, reading time and related articles; `…/#learn=slug` opens one directly. The text
+is embedded in the page, so it works offline. Educational content only, not medical advice.
+
+## AI features
+
+The photo scan, the menu scanner and the meal planner call the Claude API (`claude-opus-5`, Messages API with a
+JSON schema for every answer). Under **Settings › AI features** paste an Anthropic API key, or a proxy URL: with a
+key the browser calls `api.anthropic.com` directly and the key is stored only in this browser's localStorage and
+sent only to that host; with a proxy URL the request goes there unchanged, without the key, and the proxy adds its
+own (an optional proxy token travels as a bearer header so the proxy can refuse strangers). Nothing is sent until
+you take a photo or generate a plan, and only what those need is sent: the resized photo, or the plan answers and
+the scoring profile in words (the menu scanner sends only the photo; the ranking happens on the phone). Estimates are the model's best guess and are marked
+as such everywhere they appear; the app never mixes them into the coverage tally. Each call costs money on your
+key: a photo or a menu is a few cents, a week of meals more. **Test key** sends a one-word request.
 
 ## Scoring
 
@@ -112,8 +168,9 @@ On first open the app asks how products should be scored. Both choices can be ch
 - Every lookup that Open Food Facts answered (found or not found) is cached in localStorage keyed by barcode, so
   repeat scans are instant and offline. Open Food Facts network errors are not cached; a failed or skipped USDA
   query is retried on a later lookup of the same code. **Re-fetch** on a card bypasses the cache.
-- Everything (cache, log, tally, settings) lives in the browser's localStorage. Nothing is sent to any server other
-  than the two data sources.
+- Everything (cache, log, tally, settings, recent menus, the plan and the planner answers) lives in the browser's
+  localStorage. Nothing is sent to any server other than the two data sources and, when you use them, the AI
+  service or your proxy.
 - Safari can delete a site's localStorage after 7 days of Safari use without visiting the site, so export the log
   now and then if the numbers matter to you.
 - Added to the Home Screen, the app runs in standalone mode (`display: standalone` in `manifest.json`). iOS has
@@ -126,4 +183,6 @@ On first open the app asks how products should be scored. Both choices can be ch
 
 Serve the folder over HTTPS or localhost (camera access needs a secure context), e.g.
 `python3 -m http.server 8000` and open http://localhost:8000/. Append `?code=049000028911` to the URL to run a
-lookup on load. `window.FS` exposes the lookup and decoding functions for debugging from a desktop console.
+lookup on load. `window.FS` exposes the lookup, scoring, estimate, plan and article functions for debugging from a
+desktop console. The Playwright test harness lives outside the repo; it mocks the two databases and the Claude
+endpoint (including streamed answers), so no key is needed to run it.
