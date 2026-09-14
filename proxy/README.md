@@ -44,9 +44,9 @@ into `index.html`, all from repository secrets. You collect the keys and paste t
    reports the USDA route (it does only when `USDA_API_KEY` was set) and whether `index.html` was updated. If the
    secrets were added after the merge, run the workflow by hand once.
 6. **Check.** The workflow commits `DEFAULT_PROXY` into `index.html`; GitHub Pages publishes it a minute or two
-   later. Open the site, **Settings** › **AI features** should say "Using the site's built-in AI proxy", and
-   **Test key** should answer "Proxy works". The USDA section says lookups go through the proxy; if the Worker has no
-   USDA key, the first barcode lookup finds that out and the section then says so.
+   later. Open the site: **Settings** › **Data and AI** should say "AI features and USDA lookups are on" through the
+   site's built-in service, and **Test the built-in service** should answer "Proxy works". If the Worker has no USDA
+   key, the first barcode lookup finds that out and the row then says USDA lookups are off.
 
 Changing or rotating a key later: update the repository secret and run the workflow again. A secret you remove from
 GitHub stays on the Worker; delete it in the Cloudflare dashboard (the Worker › **Settings** › **Variables and

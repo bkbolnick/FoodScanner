@@ -48,10 +48,11 @@ type, semantic colours in light and dark, a bottom tab bar, grouped settings and
    each entry's sources, score, warnings and missing fields; photo scans are listed as **AI estimate** and do not
    count in the tally. **Copy log as CSV** copies the log to the clipboard; **Share CSV** opens the iOS share sheet.
    Tap an entry to reopen its result.
-7. **Settings** tab: paste a USDA FoodData Central API key (free, from
-   https://fdc.nal.usda.gov/api-key-signup) to add USDA as a second source. The key is stored only in this
-   browser's localStorage and is never sent anywhere except api.nal.usda.gov. Without a key, the site's built-in
-   proxy answers USDA lookups when it was deployed with one (see AI features). To make it automatic, tap
+7. **Settings** tab: **Data and AI** says what is on and through what (with the site's built-in proxy, "AI
+   features and USDA lookups are on" and nothing to set up; the site's keys never appear on the page). **Use your
+   own keys** opens the fields for a key of your own: a USDA FoodData Central API key (free, from
+   https://fdc.nal.usda.gov/api-key-signup) is stored only in this browser's localStorage, is never sent anywhere
+   except api.nal.usda.gov, and is used instead of the site's. To make it automatic, tap
    **Copy link with my key**, open that link once in Safari and add the page to the Home Screen: the link ends in
    `#usda=YOURKEY`, and every launch from that icon re-saves the key (see Notes). Also: decoder preference,
    **Clear cache** and **Clear log and tally**.
@@ -99,12 +100,13 @@ the keys into the repository's Actions secrets and the workflow in `.github/work
 Worker and writes its URL into `DEFAULT_PROXY` near the top of the script in `index.html` (steps in
 `proxy/README.md`; a computer with `wrangler` works too). Every visitor then gets the photo scan, the menu scanner,
 the meal planner and USDA lookups with nothing to type. For one phone only, open `…/#proxy=<worker url>` instead and
-agree when the app asks (that covers the AI features, not USDA). A key or proxy a user saves under Settings always
-takes precedence over the built-in one.
+agree when the app asks (that covers the AI features, not USDA). A key or proxy a user saves under Settings ›
+Use your own keys always takes precedence over the built-in one; with a built-in proxy those fields stay out of the
+way until asked for.
 
 
 The photo scan, the menu scanner and the meal planner call the Claude API (`claude-opus-5`, Messages API with a
-JSON schema for every answer). Under **Settings › AI features** paste an Anthropic API key, or a proxy URL: with a
+JSON schema for every answer). Under **Settings › Use your own keys › AI features** paste an Anthropic API key, or a proxy URL: with a
 key the browser calls `api.anthropic.com` directly and the key is stored only in this browser's localStorage and
 sent only to that host; with a proxy URL the request goes there unchanged, without the key, and the proxy adds its
 own (an optional proxy token travels as a bearer header so the proxy can refuse strangers). Nothing is sent until
