@@ -25,15 +25,14 @@ concurrency: deploy-proxy
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash   # GitHub's explicit bash runs with -eo pipefail, so a failed `wrangler deploy | tee` fails the step
     env:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
     steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
+      - uses: actions/checkout@v5   # the runner's own Node (22 or newer) is enough for wrangler
 
       - name: Check the Cloudflare token
         run: |
