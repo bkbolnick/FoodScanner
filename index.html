@@ -687,7 +687,7 @@ body.ob-open, body.dbg-open { overflow: hidden; }
       <button class="row act hidden" id="btnShare" type="button">Share CSV</button>
     </div>
     <textarea id="exportBox" class="hidden" readonly aria-label="CSV export"></textarea>
-    <div class="group-h">Scans</div>
+    <div class="group-h">Log</div>
     <ul class="group loglist" id="logList"></ul>
   </div>
 </div>
@@ -1262,11 +1262,12 @@ function usdaSummary(u) {
 
 /* ---------------------------------------------------------- tally & log */
 var tally = null, scanLog = null;
-function emptyTally() { return { total: 0, off: 0, usda: 0, neither: 0, incomplete: 0, errors: 0 }; }
+function emptyTally() { return { total: 0, off: 0, usda: 0, neither: 0, incomplete: 0, errors: 0, photos: 0 }; }
 function loadPersisted() {
   tally = store.getJSON(LS.tally, null) || emptyTally();
   scanLog = store.getJSON(LS.log, null) || [];
   if (!Array.isArray(scanLog)) scanLog = [];
+  if (typeof tally.photos !== 'number') { tally.photos = 0; scanLog.forEach(function (e) { if (e && e.estimate) tally.photos++; }); }   // a tally saved before photos were counted: seed from the log
 }
 function recordScan(result, origin) {
   var e = result.entry, m = result.merged;
@@ -1307,22 +1308,22 @@ function toCSV(entries) {
   return lines.join('\r\n');
 }
 // The coverage tally counts barcode lookups against the databases; photo estimates are the model's guesses, so they
-// are counted on their own row (from the log) and never inside the database numbers.
+// are counted on their own row (a lifetime counter like the barcode one) and never inside the database numbers.
 function renderTally() {
-  var t = tally, el = clear($('tally'));
-  var photos = 0, uniq = {};
-  scanLog.forEach(function (e) { if (e.estimate) photos++; else if (e.barcode) uniq[e.barcode] = 1; });
+  var t = tally, el = clear($('tally')), photos = t.photos || 0;
   [['Barcode scans', t.total], ['Photo estimates', photos], ['Found in Open Food Facts', t.off], ['Found in USDA', t.usda], ['Found in neither', t.neither], ['Found but incomplete', t.incomplete], ['Lookup errors', t.errors || 0]]
     .forEach(function (x) { el.appendChild(h('div', { class: 'row' }, [h('span', { class: 'rl' }, h('span', { class: 't', text: x[0] })), h('span', { class: 'rv', text: String(x[1]) })])); });
+  var uniq = {};
+  scanLog.forEach(function (e) { if (!e.estimate && e.barcode) uniq[e.barcode] = 1; });
   var n = Object.keys(uniq).length;
-  $('tallyNote').textContent = 'Every barcode lookup counts, cached repeats included; ' + n + ' unique barcode' + (n === 1 ? '' : 's') + ' and ' + photos + ' photo estimate' + (photos === 1 ? '' : 's') + ' in the log. The database rows count barcode scans only. Incomplete means a found product is missing serving size, carbs, sugars, fiber, protein or ingredients. Scores use the scoring profile in force at scan time. Safari can clear this data after 7 days without a visit, so export it now and then.';
+  $('tallyNote').textContent = 'Every barcode lookup and photo estimate counts, cached repeats included; ' + n + ' unique barcode' + (n === 1 ? '' : 's') + ' in the log. The database rows count barcode scans only. Incomplete means a found product is missing serving size, carbs, sugars, fiber, protein or ingredients. Scores use the scoring profile in force at scan time. Safari can clear this data after 7 days without a visit, so export it now and then.';
 }
 function originWord(o) { return o === 'scan' ? 'scanned' : o === 'manual' ? 'typed' : o === 'refetch' ? 'refreshed' : o === 'log' ? 'reopened' : o === 'photo' ? 'from a photo' : (o || ''); }
 function statusColor(s) { return s === 'found' ? 'green' : s === 'error' ? 'orange' : s === 'skipped' ? '' : 'red'; }
 function bandColor(key) { return key === 'excellent' || key === 'good' ? 'green' : key === 'poor' ? 'orange' : key === 'bad' ? 'red' : ''; }
 function renderLog() {
   var ul = clear($('logList'));
-  if (!scanLog.length) { ul.appendChild(h('li', { class: 'empty', text: 'No scans yet. Every lookup is listed here.' })); return; }
+  if (!scanLog.length) { ul.appendChild(h('li', { class: 'empty', text: 'Nothing logged yet. Every barcode lookup and photo estimate is listed here.' })); return; }
   scanLog.slice(0, 200).forEach(function (e) {
     var found = e.off === 'found' || e.usda === 'found';
     function statusWord(s) { return s === 'found' ? 'found' : s === 'not_found' ? 'not found' : s === 'error' ? 'error' : 'skipped'; }
@@ -2670,7 +2671,7 @@ function scanLoop() {
         console.warn('Native BarcodeDetector keeps failing; switching to ZXing');
         return ensureZXing().then(function (ok) {
           if (ok) { if (!cam.zx) cam.zx = makeZXingReader(); cam.decoder = { kind: 'zxing', formats: ['ean_13', 'ean_8', 'upc_a', 'upc_e'] }; cam.nativeErrors = 0; refreshScanStatus(); }
-          else stopCamera('The native decoder keeps failing and ZXing could not be loaded. Check the connection and start the camera again.');
+          else stopCamera('The native decoder keeps failing and ZXing could not be loaded. Check the connection and tap Scan a barcode again.');
         });
       }
     } else {
@@ -3297,6 +3298,8 @@ function recordEstimate(res) {
   });
   if (scanLog.length > LOG_MAX) scanLog.length = LOG_MAX;
   store.setJSON(LS.log, scanLog);
+  tally.photos = (tally.photos || 0) + 1;
+  store.setJSON(LS.tally, tally);
   renderTally(); renderLog();
 }
 
@@ -4285,7 +4288,7 @@ function openArticle(slug) {
     art.appendChild(h('div', { class: 'group-h', text: 'Put it into practice' }));
     art.appendChild(h('div', { class: 'group' }, [
       h('button', { class: 'row act', type: 'button', onclick: function () { closeArticle(); showTab('plan'); if (aiReady() && !plan.data) openPlanWizard(0); } }, 'Build a meal plan around this'),
-      h('button', { class: 'row act', type: 'button', onclick: function () { closeArticle(); showTab('scan'); } }, 'Scan something')]));
+      h('button', { class: 'row act', type: 'button', onclick: function () { closeArticle(); showTab('scan'); } }, 'Analyze a product')]));
   }
   body.appendChild(art);
   if (!$('articlePanel').classList.contains('open')) articlePrevFocus = document.activeElement;   // a related article keeps the original return point
@@ -4592,7 +4595,7 @@ function init() {
   $('btnCopyLink').addEventListener('click', function () {
     copyText(buildSeedLink()).then(function (ok) { toast(ok ? 'Link copied (key' + (profile ? ' + scoring profile' : '') + '). Open it, then add it to the Home Screen.' : 'Copy failed'); });
   });
-  $('decoderPref').addEventListener('change', function () { store.set(LS.decoder, this.value); dbg('log', 'Decoder preference: ' + this.value); if (cam.scanning) { stopCamera('Decoder changed. Start the camera again.'); } });
+  $('decoderPref').addEventListener('change', function () { store.set(LS.decoder, this.value); dbg('log', 'Decoder preference: ' + this.value); if (cam.scanning) { stopCamera('Decoder changed. Tap Scan a barcode to start again.'); } });
   $('btnClearCache').addEventListener('click', function () {
     var keys = store.keys(LS.cachePrefix);
     keys.forEach(store.remove.bind(store));
