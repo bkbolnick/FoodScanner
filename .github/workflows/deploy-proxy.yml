@@ -7,7 +7,8 @@
 #   CLOUDFLARE_ACCOUNT_ID  optional; the workflow finds the account itself when the token can see only one
 #   ANTHROPIC_API_KEY      the key the Worker uses for the AI features
 #   USDA_API_KEY           optional; lets the Worker answer USDA lookups for every visitor
-#   PROXY_TOKEN            optional; also written into the public page, so it only deters scripts (see the README)
+#   PROXY_TOKEN            optional; letters, digits, dashes and underscores only. It is also written into the public
+#                          page, so it only deters scripts (see the README)
 # A secret that is missing here is left as it is on the Worker, so keys can also be managed in the Cloudflare dashboard.
 name: Deploy the AI proxy
 
@@ -66,13 +67,13 @@ jobs:
         working-directory: proxy
         run: |
           npx --yes wrangler@4 deploy 2>&1 | tee deploy.log
-          url=$(grep -oE 'https://[A-Za-z0-9.-]+\.workers\.dev' deploy.log | head -1)
+          url=$(grep -oE 'https://[A-Za-z0-9.-]+\.workers\.dev' deploy.log | head -1 || true)
           if [ -z "$url" ]; then
             # wrangler did not print a workers.dev URL: look the account's subdomain up and build it from the Worker name.
             name=$(sed -n 's/^name *= *"\(.*\)".*/\1/p' wrangler.toml | head -1)
             sub=$(curl -sS --max-time 20 -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/subdomain" \
-              | node -e 'let d="";process.stdin.on("data",c=>d+=c).on("end",()=>{try{const j=JSON.parse(d);process.stdout.write((j.result&&j.result.subdomain)||"")}catch(e){}})')
-            [ -n "$name" ] && [ -n "$sub" ] && url="https://$name.$sub.workers.dev"
+              | node -e 'let d="";process.stdin.on("data",c=>d+=c).on("end",()=>{try{const j=JSON.parse(d);process.stdout.write((j.result&&j.result.subdomain)||"")}catch(e){}})' || true)
+            if [ -n "$name" ] && [ -n "$sub" ]; then url="https://$name.$sub.workers.dev"; fi
           fi
           if [ -z "$url" ]; then
             echo "::warning::Could not work out the Worker's URL. Open the Worker in the Cloudflare dashboard (Workers & Pages) to find it, then put it in DEFAULT_PROXY in index.html."
@@ -87,6 +88,11 @@ jobs:
           USDA_API_KEY: ${{ secrets.USDA_API_KEY }}
           PROXY_TOKEN: ${{ secrets.PROXY_TOKEN }}
         run: |
+          case "$PROXY_TOKEN" in
+            *[!A-Za-z0-9_-]*)
+              echo "::error::PROXY_TOKEN may only contain letters, digits, dashes and underscores (it is written into index.html as well as set on the Worker). Change the repository secret and re-run."
+              exit 1;;
+          esac
           for name in ANTHROPIC_API_KEY USDA_API_KEY PROXY_TOKEN; do
             value="${!name}"
             if [ -n "$value" ]; then
@@ -104,11 +110,23 @@ jobs:
         id: health
         env:
           URL: ${{ steps.deploy.outputs.url }}
+          WANT_USDA: ${{ secrets.USDA_API_KEY != '' }}
         run: |
           [ -n "$URL" ] || exit 0
-          answer=$(curl -sS --max-time 20 "$URL/" || echo "no answer")
-          echo "$URL/ says: $answer"
-          echo "answer=$answer" >> "$GITHUB_OUTPUT"
+          # The secrets just set take a few seconds to reach the edge, so the check is retried; the answer is flattened to
+          # one short line because an HTML error page would otherwise break the outputs file.
+          for i in 1 2 3 4 5; do
+            code=$(curl -sS --max-time 20 -o body.txt -w '%{http_code}' "$URL/" || echo "000")
+            answer=$(tr '\r\n' '  ' < body.txt | head -c 300)
+            usda=no; case "$answer" in *usda/foods/search*) usda=yes;; esac
+            case "$answer" in *"is running"*) if [ "$WANT_USDA" != "true" ] || [ "$usda" = "yes" ]; then break; fi;; esac
+            sleep 4
+          done
+          rm -f body.txt
+          echo "$URL/ answered HTTP $code: $answer"
+          echo "answer=HTTP $code: $answer" >> "$GITHUB_OUTPUT"
+          echo "usda=$usda" >> "$GITHUB_OUTPUT"
+          if [ "$WANT_USDA" = "true" ] && [ "$usda" != "yes" ]; then echo "::warning::The Worker does not report the USDA route yet; if the first barcode lookup on the site says the proxy has no USDA key, run this workflow again."; fi
 
       - name: Point the site at the proxy
         id: site
@@ -117,22 +135,26 @@ jobs:
           PROXY_TOKEN: ${{ secrets.PROXY_TOKEN }}
         run: |
           [ -n "$URL" ] || { echo "result=no URL, index.html left alone" >> "$GITHUB_OUTPUT"; exit 0; }
-          node - <<'JS'
+          outcome=$(node - <<'JS'
           const fs = require('fs');
-          const url = process.env.URL, token = (process.env.PROXY_TOKEN || '').replace(/[\\']/g, '');
+          const url = process.env.URL, token = process.env.PROXY_TOKEN || '';   // the token was checked for quotes and backslashes in the secrets step
           let src = fs.readFileSync('index.html', 'utf8');
           const cur = /^var DEFAULT_PROXY = '([^']*)';/m.exec(src);
-          if (!cur) { console.log('index.html has no DEFAULT_PROXY line; nothing to update'); process.exit(0); }
-          if (cur[1] && !/\.workers\.dev$/.test(cur[1])) { console.log('DEFAULT_PROXY is ' + cur[1] + ', set by hand; leaving it'); process.exit(0); }
-          src = src.replace(/^var DEFAULT_PROXY = '[^']*';/m, "var DEFAULT_PROXY = '" + url + "';");
-          if (token) src = src.replace(/^var DEFAULT_PROXY_TOKEN = '[^']*';/m, "var DEFAULT_PROXY_TOKEN = '" + token + "';");
+          if (!cur) { console.log('left: index.html has no DEFAULT_PROXY line'); process.exit(0); }
+          if (cur[1] && !/\.workers\.dev\/?$/.test(cur[1])) { console.log('left: DEFAULT_PROXY is ' + cur[1] + ', set by hand'); process.exit(0); }
+          src = src.replace(/^var DEFAULT_PROXY = '[^']*';/m, function () { return "var DEFAULT_PROXY = '" + url + "';"; });
+          if (token) src = src.replace(/^var DEFAULT_PROXY_TOKEN = '[^']*';/m, function () { return "var DEFAULT_PROXY_TOKEN = '" + token + "';"; });
+          if (src === fs.readFileSync('index.html', 'utf8')) { console.log('same'); process.exit(0); }
           fs.writeFileSync('index.html', src);
+          console.log('changed');
           JS
-          if git diff --quiet -- index.html; then
-            echo "index.html already points at $URL"
-            echo "result=already pointed at the proxy" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
+          )
+          case "$outcome" in
+            left:*) echo "${outcome#left: }; index.html left alone"; echo "result=${outcome#left: }; index.html left alone" >> "$GITHUB_OUTPUT"; exit 0;;
+            same) echo "index.html already points at $URL"; echo "result=already pointed at the proxy" >> "$GITHUB_OUTPUT"; exit 0;;
+            changed) ;;
+            *) echo "::error::Unexpected outcome from the update script: $outcome"; exit 1;;
+          esac
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git commit -q -m "Point the site at the deployed AI proxy" -- index.html
@@ -147,6 +169,7 @@ jobs:
         env:
           URL: ${{ steps.deploy.outputs.url }}
           ANSWER: ${{ steps.health.outputs.answer }}
+          USDA: ${{ steps.health.outputs.usda }}
           SITE: ${{ steps.site.outputs.result }}
         run: |
           {
@@ -154,5 +177,7 @@ jobs:
             echo
             if [ -n "$URL" ]; then echo "- Deployed at **$URL**"; else echo "- Deployed, but the URL could not be read; find it in the Cloudflare dashboard"; fi
             [ -n "$ANSWER" ] && echo "- Health check: $ANSWER"
+            [ "$USDA" = "yes" ] && echo "- USDA lookups: on (the Worker has a USDA key)"
+            [ "$USDA" = "no" ] && echo "- USDA lookups: off (no USDA_API_KEY on the Worker)"
             [ -n "$SITE" ] && echo "- Site: $SITE"
           } >> "$GITHUB_STEP_SUMMARY"

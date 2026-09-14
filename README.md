@@ -12,9 +12,9 @@ Live: https://bkbolnick.github.io/FoodScanner/
 
 Everything is a single `index.html` (vanilla HTML/CSS/JS, no build step). The only external dependency is the
 pinned `@zxing/browser` barcode decoder loaded from a CDN, used when the browser has no native `BarcodeDetector`
-(which is the case in iOS Safari). The photo scan, the menu scanner and the meal planner call the Claude API with
-a key you paste into Settings (or through a proxy URL you choose); the repo contains no key and the other tools
-work without one. `.nojekyll` makes GitHub Pages serve the file as-is. `manifest.json` and the
+(which is the case in iOS Safari). The photo scan, the menu scanner and the meal planner call the Claude API
+through the site's built-in proxy (a Cloudflare Worker that holds the keys, see AI features), or with a key you
+paste into Settings or a proxy URL you choose; the repo contains no key and the other tools work without one. `.nojekyll` makes GitHub Pages serve the file as-is. `manifest.json` and the
 icons let **Add to Home Screen** install it like an app; the UI follows the iOS Human Interface Guidelines (system
 type, semantic colours in light and dark, a bottom tab bar, grouped settings and a result sheet).
 
@@ -182,8 +182,9 @@ On first open the app asks how products should be scored. Both choices can be ch
   repeat scans are instant and offline. Open Food Facts network errors are not cached; a failed or skipped USDA
   query is retried on a later lookup of the same code. **Re-fetch** on a card bypasses the cache.
 - Everything (cache, log, tally, settings, recent menus, the plan and the planner answers) lives in the browser's
-  localStorage. Nothing is sent to any server other than the two data sources and, when you use them, the AI
-  service or your proxy.
+  localStorage. Nothing is sent to any server other than the two data sources, the site's built-in proxy (every
+  barcode you scan goes there as a USDA search when no USDA key is saved, and the AI requests go there when no key
+  or proxy of your own is saved) and, when you use them, the AI service or a proxy you saved.
 - Safari can delete a site's localStorage after 7 days of Safari use without visiting the site, so export the log
   now and then if the numbers matter to you.
 - Added to the Home Screen, the app runs in standalone mode (`display: standalone` in `manifest.json`). iOS has
