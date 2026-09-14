@@ -4,7 +4,7 @@
 #
 # Repository secrets:
 #   CLOUDFLARE_API_TOKEN   required; a token made from the "Edit Cloudflare Workers" template
-#   CLOUDFLARE_ACCOUNT_ID  the 32-character id in the dashboard URL (needed when the token can see more than one account)
+#   CLOUDFLARE_ACCOUNT_ID  optional; the workflow finds the account itself when the token can see only one
 #   ANTHROPIC_API_KEY      the key the Worker uses for the AI features
 #   USDA_API_KEY           optional; lets the Worker answer USDA lookups for every visitor
 #   PROXY_TOKEN            optional; also written into the public page, so it only deters scripts (see the README)
@@ -30,18 +30,35 @@ jobs:
         shell: bash   # GitHub's explicit bash runs with -eo pipefail, so a failed `wrangler deploy | tee` fails the step
     env:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
     steps:
       - uses: actions/checkout@v5   # the runner's own Node (22 or newer) is enough for wrangler
 
-      - name: Check the Cloudflare token
+      - name: Check the Cloudflare token and find the account
+        env:
+          ACCOUNT_ID_SECRET: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
           if [ -z "$CLOUDFLARE_API_TOKEN" ]; then
             echo "::error::The repository secret CLOUDFLARE_API_TOKEN is not set. Add it under Settings > Secrets and variables > Actions (a token from the 'Edit Cloudflare Workers' template), then re-run this workflow."
             exit 1
           fi
-          if [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
-            echo "::notice::CLOUDFLARE_ACCOUNT_ID is not set; wrangler will pick the account itself, which works when the token can see only one."
+          if [ -n "$ACCOUNT_ID_SECRET" ]; then
+            echo "CLOUDFLARE_ACCOUNT_ID=$ACCOUNT_ID_SECRET" >> "$GITHUB_ENV"
+            echo "Using the account from the CLOUDFLARE_ACCOUNT_ID secret"
+            exit 0
+          fi
+          # No account id given: ask Cloudflare which accounts the token can see and use the one, if there is exactly one.
+          accounts=$(curl -sS --max-time 20 -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" "https://api.cloudflare.com/client/v4/accounts?per_page=50" \
+            | node -e 'let d="";process.stdin.on("data",c=>d+=c).on("end",()=>{try{const j=JSON.parse(d);process.stdout.write((j.result||[]).map(a=>a.id+" "+a.name).join("\n"))}catch(e){}})')
+          count=$(printf '%s' "$accounts" | grep -c . || true)
+          if [ "$count" = "1" ]; then
+            echo "CLOUDFLARE_ACCOUNT_ID=${accounts%% *}" >> "$GITHUB_ENV"
+            echo "Using the only account the token can see: ${accounts#* }"
+          elif [ "$count" = "0" ]; then
+            echo "::error::The token cannot list any account (is it from the 'Edit Cloudflare Workers' template?). Add the repository secret CLOUDFLARE_ACCOUNT_ID: it is in the 'Account details' box at the bottom of the Workers & Pages overview page, or in the address bar after dash.cloudflare.com/ on any account page."
+            exit 1
+          else
+            echo "::error::The token can see $count accounts. Add the repository secret CLOUDFLARE_ACCOUNT_ID to say which one (the 'Account details' box on the Workers & Pages overview page)."
+            exit 1
           fi
 
       - name: Deploy the Worker
