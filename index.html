@@ -732,7 +732,7 @@ var ZXING_FALLBACK_URL = 'https://unpkg.com/@zxing/browser@0.2.1/umd/zxing-brows
 // the meal planner on for everyone who opens the site, with no key to type, and answers USDA lookups when the Worker
 // was given a USDA key too. Empty means each user brings their own keys or proxy under Settings. A key or proxy saved
 // there always wins over these. The deploy workflow (.github/workflows/deploy-proxy.yml) fills DEFAULT_PROXY in.
-var DEFAULT_PROXY = '';          // e.g. 'https://foodscanner-proxy.example.workers.dev'
+var DEFAULT_PROXY = 'https://foodscanner-proxy.bkbolnick.workers.dev';          // e.g. 'https://foodscanner-proxy.example.workers.dev'
 var DEFAULT_PROXY_TOKEN = '';    // only if the Worker was deployed with PROXY_TOKEN; in a public page it deters scripts, it is not a secret
 var LS = { usdaKey: 'fs.usdaKey', decoder: 'fs.decoder', tally: 'fs.tally.v1', log: 'fs.log.v1', cachePrefix: 'fs.cache.v4.', oldCachePrefixes: ['fs.cache.v1.', 'fs.cache.v2.', 'fs.cache.v3.'],
   aiKey: 'fs.ai.key', aiProxy: 'fs.ai.proxy', aiProxyToken: 'fs.ai.proxyToken', menus: 'fs.menus.v1', plan: 'fs.plan.v1', planWizard: 'fs.plan.wizard.v1' };
