@@ -13,11 +13,14 @@ The workflow in `.github/workflows/deploy-proxy.yml` deploys the Worker, sets it
 into `index.html`, all from repository secrets. You collect the keys and paste them into GitHub once.
 
 1. **Cloudflare.** Sign up or log in at https://dash.cloudflare.com (free plan). Open **Workers & Pages** once, so
-   the account gets its `workers.dev` subdomain (the dashboard offers to set one up the first time). Then make a token:
-   profile menu (top right) › **My Profile** › **API Tokens** › **Create Token** › the **Edit Cloudflare Workers**
-   template › **Use template** › **Continue to summary** › **Create Token**. Copy it; it is shown once. Also copy
-   the **Account ID**: it is the 32-character string in the dashboard's address after `dash.cloudflare.com/`, and
-   under **Account details** on the Workers & Pages overview.
+   the account gets its `workers.dev` subdomain (the dashboard offers to set one up the first time). Then make a token
+   at https://dash.cloudflare.com/profile/api-tokens (or, in the newer dashboard, **Manage Account** › **Account API
+   Tokens**, which is https://dash.cloudflare.com/?to=/:account/api-tokens): **Create Token** › **Use template** next
+   to **Edit Cloudflare Workers** › **Continue to summary** › **Create Token**. Copy it; it is shown once. The
+   **Account ID** is optional: the workflow asks Cloudflare which account the token can see and uses it when there is
+   exactly one. If you have several accounts, copy the id from the **Account details** box at the bottom of the
+   Workers & Pages overview page (on a computer it is on the right), or from the address bar after
+   `dash.cloudflare.com/`.
 2. **Anthropic.** At https://console.anthropic.com add credit under **Billing**, set a **monthly spend limit** under
    **Limits** (the only hard cap on what a leaked URL can cost you), then **API keys** › **Create Key** and copy it.
 3. **USDA** (optional). Fill in https://fdc.nal.usda.gov/api-key-signup; the key arrives by email within a minute.
@@ -28,7 +31,7 @@ into `index.html`, all from repository secrets. You collect the keys and paste t
    | Name | Value |
    | --- | --- |
    | `CLOUDFLARE_API_TOKEN` | the token from step 1 |
-   | `CLOUDFLARE_ACCOUNT_ID` | the account id from step 1 |
+   | `CLOUDFLARE_ACCOUNT_ID` | only if the token can see several accounts (step 1) |
    | `ANTHROPIC_API_KEY` | the key from step 2 |
    | `USDA_API_KEY` | the key from step 3 (leave out to skip USDA) |
 
