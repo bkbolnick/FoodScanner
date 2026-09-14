@@ -3684,14 +3684,24 @@ function grocerySchema() { var p = {}; GROCERY_CATS.forEach(function (c) { p[c[0
 // snack lists: a meal object nested twice inside a days array made the API's compiled grammar too large ("The compiled
 // grammar is too large", HTTP 400), while one array of meal objects is the shape the menu scanner already uses. The
 // app regroups the list into days in cleanWeek, so the stored plan keeps its days/meals/snacks form.
-var WEEK_SCHEMA = aiSchemaObject({
-  weekNumber: { type: 'integer' },
-  theme: { type: 'string', description: 'One line on what this week emphasises, or empty' },
-  meals: { type: 'array', items: aiSchemaObject(Object.assign({ day: { type: 'string', description: 'Monday, Tuesday, and so on' } }, mealProps())),
-    description: 'Every meal and snack of the week in day order: all of Monday (its meals, then its snacks, with mealType Snack), then Tuesday, and so on' },
-  groceryList: grocerySchema(),
-  prepPlan: aiSchemaObject({ batchCookingTasks: { type: 'array', items: { type: 'string' }, description: 'Tasks for one batch-cooking session that cover the week' }, noPrepAlternatives: { type: 'array', items: { type: 'string' }, description: 'Shortcuts that need no cooking' } })
-});
+// The slim variant is used only after the API has refused the normal one as too large a grammar: the two allergen
+// lists become plain strings (most of the remaining enum alternatives), and cleanMeal keeps only the known keys.
+function weekSchema(lite) {
+  var props = mealProps();
+  if (lite) {
+    props.allergens = { type: 'array', items: { type: 'string' }, description: 'Allergens the meal contains, using only these keys: ' + EST_ALLERGEN_KEYS.join(', ') };
+    props.may_contain = { type: 'array', items: { type: 'string' }, description: 'Allergens that may be present, same keys' };
+  }
+  return aiSchemaObject({
+    weekNumber: { type: 'integer' },
+    theme: { type: 'string', description: 'One line on what this week emphasises, or empty' },
+    meals: { type: 'array', items: aiSchemaObject(Object.assign({ day: { type: 'string', description: 'Monday, Tuesday, and so on' } }, props)),
+      description: 'Every meal and snack of the week in day order: all of Monday (its meals, then its snacks, with mealType Snack), then Tuesday, and so on' },
+    groceryList: grocerySchema(),
+    prepPlan: aiSchemaObject({ batchCookingTasks: { type: 'array', items: { type: 'string' }, description: 'Tasks for one batch-cooking session that cover the week' }, noPrepAlternatives: { type: 'array', items: { type: 'string' }, description: 'Shortcuts that need no cooking' } })
+  });
+}
+var WEEK_SCHEMA = weekSchema(false), WEEK_SCHEMA_LITE = weekSchema(true);
 var PLAN_SYSTEM = 'You write practical, appetising meal plans for a consumer food app and answer only with JSON matching the schema. ' + EST_SHARED +
   ' Every meal carries its own nutrition estimate for one serving (the portion described in portions; serving_grams is its weight) so the app can score it. Respect every restriction exactly: an allergen the user avoids must not appear in any meal, not even as may_contain.';
 function planPrompt(w, weekNo, previousTitles) {
@@ -3761,8 +3771,9 @@ function savePlan() { if (plan.data && !plan.data.sample) store.setJSON(LS.plan,
 function cleanMeal(m) {
   if (!m || typeof m !== 'object') m = {};
   var arr = function (v) { return Array.isArray(v) ? v.map(function (x) { return String(x); }).filter(Boolean) : []; };
+  var keys = function (v) { return arr(v).map(function (x) { return x.trim().toLowerCase(); }).filter(function (x) { return EST_ALLERGEN_KEYS.indexOf(x) >= 0; }); };   // only known allergen keys, whichever schema answered
   return Object.assign({}, m, { title: String(m.title || 'Untitled').trim(), mealType: String(m.mealType || 'Meal'), portions: String(m.portions || ''), ingredients: arr(m.ingredients), steps: arr(m.steps), tags: arr(m.tags), foodOrderTip: String(m.foodOrderTip || ''),
-    prepTime: toNum(m.prepTime), allergens: arr(m.allergens), may_contain: arr(m.may_contain) });
+    prepTime: toNum(m.prepTime), allergens: keys(m.allergens), may_contain: keys(m.may_contain) });
 }
 var WEEKDAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 function dayLabel(v, i) {
@@ -3784,7 +3795,8 @@ function cleanWeek(wk, n) {
       if (!m || typeof m !== 'object') return;
       var name = dayLabel(m.day, out.days.length), day = byDay[name];
       if (!day) { day = byDay[name] = { dayName: name, meals: [], snacks: [] }; out.days.push(day); }
-      (String(m.mealType || '') === 'Snack' ? day.snacks : day.meals).push(cleanMeal(m));
+      var cm = cleanMeal(m); delete cm.day;   // the tag only served the regrouping; stored meals keep one shape whatever their origin
+      (String(m.mealType || '') === 'Snack' ? day.snacks : day.meals).push(cm);
     });
   }
   GROCERY_CATS.forEach(function (c) { var l = wk && wk.groceryList && wk.groceryList[c[0]]; out.groceryList[c[0]] = Array.isArray(l) ? l.map(String).filter(Boolean) : []; });
@@ -3798,7 +3810,7 @@ function startPlan() {
   if (!aiReady()) { toast('Add an API key under Settings, AI features'); return; }
   closePlanWizard();
   plan.data = { id: 'p' + now(), ts: isoNow(), form: w, profileName: profileShort(), weeks: [], locks: {}, checks: {}, done: false };
-  plan.week = 0; plan.view = 'plan'; plan.error = null; plan.busy = true; plan.openMeal = null; plan.regen = null;
+  plan.week = 0; plan.view = 'plan'; plan.error = null; plan.busy = true; plan.openMeal = null; plan.regen = null; plan.lite = false;
   savePlan();
   showTab('plan');
   generateNextWeek();
@@ -3813,7 +3825,7 @@ function generateNextWeek() {
   renderPlanTab();
   var t0 = now();
   dbg('log', 'Plan: generating week ' + n + ' of ' + d.form.weeks);
-  aiRequest({ system: PLAN_SYSTEM, content: [{ type: 'text', text: planPrompt(d.form, n, prev) }], schema: WEEK_SCHEMA, effort: 'high', maxTokens: 32000, stream: true, timeoutMs: 900000, signal: plan.ctrl ? plan.ctrl.signal : null, cutHint: 'Try fewer meals a day or no snacks.',
+  aiRequest({ system: PLAN_SYSTEM, content: [{ type: 'text', text: planPrompt(d.form, n, prev) }], schema: plan.lite ? WEEK_SCHEMA_LITE : WEEK_SCHEMA, effort: 'high', maxTokens: 32000, stream: true, timeoutMs: 900000, signal: plan.ctrl ? plan.ctrl.signal : null, cutHint: 'Try fewer meals a day or no snacks.',
     onProgress: function (txt) {
       var seen = {}, days = 0, m, re = /"day"\s*:\s*"([^"]*)"/g;
       while ((m = re.exec(txt))) { var k = dayLabel(m[1], days); if (!seen[k]) { seen[k] = 1; days++; } }
@@ -3827,8 +3839,15 @@ function generateNextWeek() {
     generateNextWeek();
   }, function (err) {
     if (plan.data !== d) return;
-    dbg('error', 'Plan: week ' + n + ' failed: ' + (err && err.message || err));
-    plan.busy = false; plan.ctrl = null; plan.error = String(err && err.message || err);
+    var msg = String(err && err.message || err);
+    if (!plan.lite && /grammar is too large/i.test(msg)) {   // the API could not compile the week schema: once more with the slim one, for this and the following weeks
+      dbg('warn', 'Plan: the API refused the week schema as too large; retrying week ' + n + ' with the slim schema');
+      plan.lite = true;
+      generateNextWeek();
+      return;
+    }
+    dbg('error', 'Plan: week ' + n + ' failed: ' + msg);
+    plan.busy = false; plan.ctrl = null; plan.error = msg;
     renderPlanTab();
   });
 }
