@@ -44,9 +44,9 @@ into `index.html`, all from repository secrets. You collect the keys and paste t
    reports the USDA route (it does only when `USDA_API_KEY` was set) and whether `index.html` was updated. If the
    secrets were added after the merge, run the workflow by hand once.
 6. **Check.** The workflow commits `DEFAULT_PROXY` into `index.html`; GitHub Pages publishes it a minute or two
-   later. Open the site, **Settings** › **AI features** should say "Using the site's built-in AI proxy", and
-   **Test key** should answer "Proxy works". The USDA section says lookups go through the proxy; if the Worker has no
-   USDA key, the first barcode lookup finds that out and the section then says so.
+   later. Open the site: **Settings** › **Data and AI** should say "AI features and USDA lookups are on" through the
+   site's built-in proxy, and **Test the built-in proxy** should answer "Proxy works". If the Worker has no USDA key,
+   the first barcode lookup finds that out and the row then says USDA lookups are off.
 
 Changing or rotating a key later: update the repository secret and run the workflow again. A secret you remove from
 GitHub stays on the Worker; delete it in the Cloudflare dashboard (the Worker › **Settings** › **Variables and
@@ -76,7 +76,8 @@ Then point the site at it, one of:
 2. **Just your phone.** Open `https://bkbolnick.github.io/FoodScanner/#proxy=https://foodscanner-proxy.<you>.workers.dev`;
    the app asks once whether to send its AI requests through that host and then keeps the URL on that phone (a Home
    Screen icon made from the link asks again only after Safari has cleared the site's storage). Or paste it under
-   Settings, AI features. USDA lookups use the built-in proxy only, not one saved this way.
+   Settings › Use your own keys › AI features (on a site with no built-in proxy that section is shown outright). USDA
+   lookups use the built-in proxy only, not one saved this way.
 
 Either way, a key or proxy a user saves under Settings takes precedence over the built-in one.
 

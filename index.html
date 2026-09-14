@@ -575,6 +575,16 @@ body.ob-open, body.dbg-open { overflow: hidden; }
     </div>
     <div class="group-f">Scores are a guide computed from the data the sources provide, not medical advice. Additive risk levels are this app's own editorial classification.</div>
 
+    <div class="group-h">Data and AI</div>
+    <div class="group">
+      <div class="row"><span class="rl"><span class="t" id="serviceTitle"></span><span class="d" id="serviceDetail"></span></span></div>
+      <button class="row act" id="btnServiceTest" type="button">Test the built-in proxy</button>
+      <button class="row nav" id="btnOwnKeys" type="button" aria-expanded="false" aria-controls="ownKeys"><span class="rl"><span class="t">Use your own keys</span><span class="d" id="ownKeysHint">Advanced</span></span></button>
+    </div>
+    <div class="group-f" id="serviceNote"></div>
+    <div class="group-f hidden" id="serviceResult" role="status"></div>
+
+    <div id="ownKeys">
     <div class="group-h">USDA FoodData Central</div>
     <div class="group">
       <div class="row">
@@ -611,6 +621,7 @@ body.ob-open, body.dbg-open { overflow: hidden; }
       </div>
     </div>
     <div class="group-f">Photo scans, the menu scanner and the meal planner send the photo or your answers to Claude. With a key, the phone talks to api.anthropic.com directly and the key stays in this browser; with a proxy URL, requests go to that server instead and it holds the key; a proxy token is sent to it as a bearer token so it can turn strangers away. <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener noreferrer">Get an API key</a>.</div>
+    </div>
 
     <div class="group-h">Scanner</div>
     <div class="group">
@@ -1088,7 +1099,7 @@ function lookupUSDA(code, format, cfg) {
     var url = viaProxy ? cfg.proxy + '/usda/foods/search' + params : USDA_BASE + params + '&api_key=' + encodeURIComponent(cfg.key);
     return fetchJSON(url, { headers: headers }).then(function (r) {
       if (viaProxy && (r.status === 404 || r.status === 401 || r.status === 403)) {   // no USDA key on the proxy, or this page is not served (see usdaConfig)
-        usdaProxyOff = r.status === 404 ? 'nokey' : 'refused';
+        usdaProxyOff = r.status === 404 ? 'nokey' : r.status === 401 ? 'token' : 'refused';
         dbg('warn', 'The site\'s proxy answered HTTP ' + r.status + ' to a USDA lookup; USDA is skipped until the page is reopened');
         return { status: 'skipped' };
       }
@@ -1182,8 +1193,9 @@ function mergeProduct(entry) {
 function getUsdaKey() { return (store.get(LS.usdaKey, '') || '').trim(); }
 // Where USDA lookups go: a key saved here queries api.nal.usda.gov directly; without one, the site's built-in proxy
 // answers when it holds a USDA key (the AI proxy in proxy/ serves GET /usda/foods/search). A proxy that answers 404
-// has no such key ('nokey'), one that answers 401 or 403 will not serve this page ('refused'); either way USDA is
-// skipped for the rest of this page load rather than asked again on every scan, and never counted as a lookup error.
+// has no such key ('nokey'); 401 means the proxy refused this page ('token': its token is out of step, so the AI
+// requests will be refused too); 403 is USDA refusing the proxy's key ('refused'). Either way USDA is skipped for the
+// rest of this page load rather than asked again on every scan, and never counted as a lookup error.
 var usdaProxyOff = '';
 function usdaConfig() {
   var key = getUsdaKey();
@@ -2209,7 +2221,8 @@ function sourceRows(entry) {
 function usdaSkipLabel() {
   if (getUsdaKey()) return 'No key at the time; queried on the next lookup';
   if (DEFAULT_PROXY && usdaProxyOff === 'nokey') return 'The site\'s proxy has no USDA key';
-  if (DEFAULT_PROXY && usdaProxyOff) return 'The site\'s proxy did not accept USDA lookups from this page';
+  if (DEFAULT_PROXY && usdaProxyOff === 'token') return 'The site\'s proxy refused this page (HTTP 401)';
+  if (DEFAULT_PROXY && usdaProxyOff) return 'The site\'s proxy could not search USDA (HTTP 403)';
   if (DEFAULT_PROXY) return 'Skipped (the site\'s proxy did not answer)';
   return 'No key';
 }
@@ -2857,7 +2870,46 @@ function topWeights(p) {
   return METRICS.map(function (met) { return [met.label, (p.weights && p.weights[met.key]) || 0]; }).filter(function (x) { return x[1] > 0; })
     .sort(function (a, b) { return b[1] - a[1]; }).slice(0, 3).map(function (x) { return x[0].toLowerCase() + ' ' + x[1]; }).join(', ');
 }
+// Settings, "Data and AI": one plain row says what is on and through what. With the site's built-in proxy the
+// own-key fields sit under "Use your own keys": a real toggle, which opens by itself the moment an own key or proxy
+// appears (saved, tested or seeded from a link) and stays where it is when one is removed, so nothing vanishes under
+// the user's finger. Without a built-in proxy the fields are simply shown, since nothing works without them.
+var ownKeysOpen = false, ownKeysSeen = false;
+function renderServiceRow() {
+  var ai = aiConfig(), uc = usdaConfig(), usdaKey = getUsdaKey();
+  var own = !!(usdaKey || ai.key || (ai.proxy && !ai.builtIn));
+  if (own && !ownKeysSeen) ownKeysOpen = true;
+  ownKeysSeen = own;
+  var title, detail = [];
+  if (!DEFAULT_PROXY) {
+    title = own ? (ai.key || ai.proxy ? 'AI features are on' : 'AI features are off') + (usdaKey ? ', USDA lookups are on' : ', USDA lookups are off') : 'No built-in proxy';
+    detail.push(own ? 'Using the keys saved below.' : 'USDA lookups and the AI features need a key of your own, saved below.');
+  } else if (ai.builtIn && usdaProxyOff === 'token') {
+    title = 'The site\'s built-in proxy refused this page';
+    detail.push('It answered HTTP 401 to a USDA lookup, so the AI features are most likely refused too; the site\'s proxy token may be out of date. Tap Test the built-in proxy to check, or use your own keys.');
+  } else {
+    title = uc ? 'AI features and USDA lookups are on' : 'AI features are on, USDA lookups are off';
+    detail.push(ai.builtIn ? 'AI requests go through the site\'s built-in proxy at ' + proxyHost(ai.proxy) + '.' : ai.proxy ? 'AI requests go to your own proxy at ' + proxyHost(ai.proxy) + '.' : 'AI requests use your own key.');
+    detail.push(usdaKey ? 'USDA lookups use your own key.' : usdaProxyOff === 'nokey' ? 'The site has no USDA key, so USDA lookups are skipped.' : usdaProxyOff === 'token' ? 'The site\'s proxy refused this page (HTTP 401), so USDA lookups are skipped.' : usdaProxyOff ? 'The site\'s proxy could not search USDA (HTTP 403), so USDA lookups are skipped; its USDA key may have been rejected.' : 'USDA lookups go through the site\'s built-in proxy.');
+    if (!own && !usdaProxyOff) detail.push('Nothing to set up.');
+  }
+  $('serviceTitle').textContent = title;
+  $('serviceDetail').textContent = detail.join(' ');
+  $('btnServiceTest').classList.toggle('hidden', !(DEFAULT_PROXY && ai.builtIn));
+  $('btnOwnKeys').classList.toggle('hidden', !DEFAULT_PROXY);
+  var show = !DEFAULT_PROXY || ownKeysOpen;
+  $('ownKeys').classList.toggle('hidden', !show);
+  $('btnOwnKeys').setAttribute('aria-expanded', show ? 'true' : 'false');
+  $('ownKeysHint').textContent = own ? 'In use' : show ? 'Shown below' : 'Advanced';
+  $('serviceNote').textContent = DEFAULT_PROXY
+    ? 'The site\'s keys live on its proxy and never appear on this page. A key you save ' + (show ? 'below' : 'under Use your own keys') + ' stays in this browser and is used instead of the site\'s.'
+    : 'A key you save below stays in this browser.';
+  var res = $('serviceResult'); res.textContent = ''; res.classList.add('hidden');
+  $('btnAiRemove').classList.toggle('hidden', !ai.key);
+  $('btnRemoveKey').classList.toggle('hidden', !usdaKey);
+}
 function renderSettings() {
+  renderServiceRow();
   var si = clear($('scoringInfo'));
   function row(t, d, v) { si.appendChild(h('div', { class: 'row' }, [h('span', { class: 'rl' }, [h('span', { class: 't', text: t }), d ? h('span', { class: 'd', text: d }) : null]), v ? h('span', { class: 'rv', text: v }) : null])); }
   if (!profile) row('Method', 'Choose one to score products.', 'Not chosen');
@@ -2874,7 +2926,8 @@ function renderSettings() {
   $('keyStatus').textContent = key ? 'Key saved (' + key.length + ' characters). USDA is queried on every lookup.'
     : DEFAULT_PROXY && !usdaProxyOff ? 'No key saved. USDA lookups go through the site\'s built-in proxy at ' + proxyHost(DEFAULT_PROXY) + '. A key saved here is used instead.'
     : DEFAULT_PROXY && usdaProxyOff === 'nokey' ? 'The site\'s proxy has no USDA key, so USDA lookups are skipped. A key saved here turns them on.'
-    : DEFAULT_PROXY ? 'The site\'s proxy did not accept USDA lookups from this page, so they are skipped. A key saved here turns them on.'
+    : DEFAULT_PROXY && usdaProxyOff === 'token' ? 'The site\'s proxy refused this page (HTTP 401), so USDA lookups are skipped. A key saved here turns them on.'
+    : DEFAULT_PROXY ? 'The site\'s proxy could not search USDA (HTTP 403), so USDA lookups are skipped. A key saved here turns them on.'
     : 'No key saved, so USDA lookups are skipped.';
   $('btnCopyLink').classList.toggle('hidden', !key);
   $('linkHint').textContent = key
@@ -4362,8 +4415,8 @@ function imageBlock(file) {
     reader.readAsDataURL(file);
   });
 }
-function aiTestKey(typed) {
-  var el = $('aiStatus'), saved = aiConfig().key;
+function aiTestKey(typed, out) {
+  var el = out || $('aiStatus'), saved = aiConfig().key;
   el.textContent = 'Testing…';
   var fresh = typed && typed !== saved;   // a newly typed key is tried on its own; otherwise the saved set-up (proxy or key) is what gets tested
   aiRequest({ content: [{ type: 'text', text: 'Reply with the single word OK.' }], maxTokens: 256, effort: 'low', key: fresh ? typed : undefined }).then(function (t) {
@@ -4435,9 +4488,19 @@ function init() {
     showTab('learn'); openArticle(la[1]);
   }
   $('btnAiShow').addEventListener('click', function () { var i = $('aiKey'); var hidden = i.classList.toggle('secret'); this.textContent = hidden ? 'Show' : 'Hide'; this.setAttribute('aria-label', hidden ? 'Show key' : 'Hide key'); });
-  $('btnAiSave').addEventListener('click', function () { var k = $('aiKey').value.trim(); if (k) store.set(LS.aiKey, k); else store.remove(LS.aiKey); dbg('log', k ? 'AI key saved (' + k.length + ' chars)' : 'AI key removed'); renderSettings(); toast(k ? 'Key saved' : 'Key removed'); });
+  $('btnAiSave').addEventListener('click', function () { var k = $('aiKey').value.trim(); if (!k) { toast('Type a key first'); return; } store.set(LS.aiKey, k); dbg('log', 'AI key saved (' + k.length + ' chars)'); renderSettings(); toast('Key saved'); });
+  $('btnServiceTest').addEventListener('click', function () { var el = $('serviceResult'); el.classList.remove('hidden'); aiTestKey('', el); });
+  $('btnOwnKeys').addEventListener('click', function () {
+    ownKeysOpen = !ownKeysOpen;
+    renderServiceRow();
+    if (ownKeysOpen) $('ownKeys').scrollIntoView({ block: 'start', behavior: 'smooth' });
+  });
   $('btnAiRemove').addEventListener('click', function () { store.remove(LS.aiKey); $('aiKey').value = ''; renderSettings(); toast('Key removed'); });
-  $('btnAiTest').addEventListener('click', function () { aiTestKey($('aiKey').value.trim()); });
+  $('btnAiTest').addEventListener('click', function () {
+    var typed = $('aiKey').value.trim(), c = aiConfig();
+    if (!typed && !c.key && (!c.proxy || c.builtIn)) { toast('Type a key first'); return; }   // the site's proxy has its own Test button
+    aiTestKey(typed);
+  });
   $('btnAiProxySave').addEventListener('click', function () {
     var u = $('aiProxy').value.trim(), t = $('aiProxyToken').value.trim();
     if (u) {
@@ -4491,9 +4554,10 @@ function init() {
   $('btnShowKey').addEventListener('click', function () { var i = $('usdaKey'); var hidden = i.classList.toggle('secret'); this.textContent = hidden ? 'Show' : 'Hide'; this.setAttribute('aria-label', hidden ? 'Show key' : 'Hide key'); });
   $('btnSaveKey').addEventListener('click', function () {
     var k = $('usdaKey').value.trim();
-    if (!k) { store.remove(LS.usdaKey); } else { store.set(LS.usdaKey, k); }
-    dbg('log', k ? 'USDA key saved (' + k.length + ' chars)' : 'USDA key removed');
-    renderSettings(); toast(k ? 'Key saved' : 'Key removed');
+    if (!k) { toast('Type a key first'); return; }
+    store.set(LS.usdaKey, k);
+    dbg('log', 'USDA key saved (' + k.length + ' chars)');
+    renderSettings(); toast('Key saved');
   });
   $('btnRemoveKey').addEventListener('click', function () { store.remove(LS.usdaKey); $('usdaKey').value = ''; renderSettings(); toast('Key removed'); });
   $('btnTestKey').addEventListener('click', testUsdaKey);
@@ -4552,7 +4616,7 @@ function init() {
     try { pxu = decodeURIComponent(pxf[1]).trim(); } catch (e) { pxu = String(pxf[1]).trim(); }
     var pxn = pxu ? normalizeProxyUrl(pxu) : null;
     if (!pxn) { dbg('warn', 'Ignoring an unusable #proxy= value'); toast('The proxy link must be https, with no login, query or fragment'); }
-    else if (window.confirm('Send this app\'s AI requests (photos, menus, plan answers) through ' + proxyHost(pxn) + '? You can change it under Settings, AI features.')) {
+    else if (window.confirm('Send this app\'s AI requests (photos, menus, plan answers) through ' + proxyHost(pxn) + '? You can change it under ' + (DEFAULT_PROXY ? 'Settings, Use your own keys' : 'Settings, AI features') + '.')) {
       store.set(LS.aiProxy, pxn); store.set('fs.ai.proxy.seed', pxf[1]);
       dbg('log', 'AI proxy saved from the link: ' + pxn); toast('AI proxy saved from link'); renderSettings();
     } else dbg('log', 'Proxy link declined');
