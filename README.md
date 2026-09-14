@@ -41,8 +41,8 @@ type, semantic colours in light and dark, a bottom tab bar, grouped settings and
    of a product, a dish or a meal with no barcode: the model names it, estimates the nutrition of the portion
    shown, reads the ingredients and allergens off the label when one is legible, and the result opens in the same
    sheet, marked **Estimated from the photo** with a confidence level and an **AI estimate** source row instead of
-   database rows. A legible barcode in the photo is looked up in the databases instead. Needs an API key (see
-   **AI features**).
+   database rows. A legible barcode in the photo is looked up in the databases instead. Needs the site's built-in proxy or
+   a key of your own (see **AI features**).
 6. **History** (on the Scan screen, or the clock button while scanning) opens the coverage tally (scans, found in
    Open Food Facts, found in USDA, found in neither, found-but-incomplete, lookup errors) and the scan history with
    each entry's sources, score, warnings and missing fields; photo scans are listed as **AI estimate** and do not
@@ -50,7 +50,8 @@ type, semantic colours in light and dark, a bottom tab bar, grouped settings and
    Tap an entry to reopen its result.
 7. **Settings** tab: **Data and AI** says what is on and through what (with the site's built-in proxy, "AI
    features and USDA lookups are on" and nothing to set up; the site's keys never appear on the page). **Use your
-   own keys** opens the fields for a key of your own: a USDA FoodData Central API key (free, from
+   own keys** opens the fields for a key of your own (on a site with no built-in proxy they are simply shown): a
+   USDA FoodData Central API key (free, from
    https://fdc.nal.usda.gov/api-key-signup) is stored only in this browser's localStorage, is never sent anywhere
    except api.nal.usda.gov, and is used instead of the site's. To make it automatic, tap
    **Copy link with my key**, open that link once in Safari and add the page to the Home Screen: the link ends in
@@ -106,7 +107,8 @@ way until asked for.
 
 
 The photo scan, the menu scanner and the meal planner call the Claude API (`claude-opus-5`, Messages API with a
-JSON schema for every answer). Under **Settings › Use your own keys › AI features** paste an Anthropic API key, or a proxy URL: with a
+JSON schema for every answer). Under **Settings › AI features** (behind **Use your own keys** when the site has a
+built-in proxy) paste an Anthropic API key, or a proxy URL: with a
 key the browser calls `api.anthropic.com` directly and the key is stored only in this browser's localStorage and
 sent only to that host; with a proxy URL the request goes there unchanged, without the key, and the proxy adds its
 own (an optional proxy token travels as a bearer header so the proxy can refuse strangers). Nothing is sent until
