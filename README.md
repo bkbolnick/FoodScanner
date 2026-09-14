@@ -22,10 +22,11 @@ type, semantic colours in light and dark, a bottom tab bar, grouped settings and
 
 1. Open the page in Safari on your iPhone (it must be served over HTTPS, which GitHub Pages does). Optionally
    add it to the Home Screen; it then opens full screen like an app.
-2. Tap **Start camera** and allow camera access. The camera fills the screen; hold the barcode inside the marked
-   region, roughly 10–15 cm from the lens. It detects EAN-13, EAN-8, UPC-A and UPC-E continuously. A beep and a
-   green flash of the corner marks mean a code was read. The same code is ignored while it stays in view and for
-   3 seconds after. Floating buttons offer **Enter a code**, **Stop camera** and, when the phone has one, the torch.
+2. On the **Analyze** tab tap **Scan a barcode** and allow camera access. The camera fills the screen; hold the
+   barcode inside the marked region, roughly 10–15 cm from the lens. It detects EAN-13, EAN-8, UPC-A and UPC-E
+   continuously. A beep and a green flash of the corner marks mean a code was read. The same code is ignored while
+   it stays in view and for 3 seconds after. Floating buttons offer **Enter a code**, **Stop scanning** and, when
+   the phone has one, the torch.
 3. Or type a barcode into **Or enter a code** and tap **Look up**. While the camera is running, tap
    **Enter a code** to bring the field back; scanning pauses while you type.
 4. The result opens in a sheet from the bottom. Drag the grabber (or tap it) to park it at a peek, half or full
@@ -37,17 +38,17 @@ type, semantic colours in light and dark, a bottom tab bar, grouped settings and
    of serving size, carbs, sugars, fiber, protein and ingredients no source provided. Below that: ingredients, NOVA
    group, Nutri-Score, additives, categories, a **Sources** section saying what each database returned, a
    per-source coverage table, and **Refresh** (bypasses the cache), **Open in Open Food Facts / USDA** and **Copy JSON**.
-5. **Scan a photo** (on the Scan screen, next to Start camera, or the camera button while scanning) reads a photo
-   of a product, a dish or a meal with no barcode: the model names it, estimates the nutrition of the portion
+5. **Photograph food** (on the Analyze screen, below Scan a barcode, or the camera button while scanning) reads a
+   photo of a product, a dish or a meal with no barcode: the model names it, estimates the nutrition of the portion
    shown, reads the ingredients and allergens off the label when one is legible, and the result opens in the same
    sheet, marked **Estimated from the photo** with a confidence level and an **AI estimate** source row instead of
    database rows. A legible barcode in the photo is looked up in the databases instead. Needs the site's built-in proxy or
    a key of your own (see **AI features**).
-6. **History** (on the Scan screen, or the clock button while scanning) opens the coverage tally (scans, found in
-   Open Food Facts, found in USDA, found in neither, found-but-incomplete, lookup errors) and the scan history with
-   each entry's sources, score, warnings and missing fields; photo scans are listed as **AI estimate** and do not
-   count in the tally. **Copy log as CSV** copies the log to the clipboard; **Share CSV** opens the iOS share sheet.
-   Tap an entry to reopen its result.
+6. **History** (on the Analyze screen, or the clock button while scanning) opens the coverage tally (barcode scans,
+   photo estimates, found in Open Food Facts, found in USDA, found in neither, found-but-incomplete, lookup errors)
+   and the log with each entry's sources, score, warnings and missing fields. Photo estimates are listed as
+   **AI estimate**; they count on the Photo estimates row only, never in the database rows. **Copy log as CSV**
+   copies the log to the clipboard; **Share CSV** opens the iOS share sheet. Tap an entry to reopen its result.
 7. **Settings** tab: **Data and AI** says what is on and through what (with the site's built-in proxy, "AI
    features and USDA lookups are on" and nothing to set up; the site's keys never appear on the page). **Use your
    own keys** opens the fields for a key of your own (on a site with no built-in proxy they are simply shown): a
@@ -114,7 +115,8 @@ sent only to that host; with a proxy URL the request goes there unchanged, witho
 own (an optional proxy token travels as a bearer header so the proxy can refuse strangers). Nothing is sent until
 you take a photo or generate a plan, and only what those need is sent: the resized photo, or the plan answers and
 the scoring profile in words (the menu scanner sends only the photo; the ranking happens on the phone). Estimates are the model's best guess and are marked
-as such everywhere they appear; the app never mixes them into the coverage tally. Each call costs money on your
+as such everywhere they appear; History counts them on their own Photo estimates row and never inside the database
+counts. Each call costs money on your
 key: a photo or a menu is a few cents, a week of meals more. **Test key** sends a one-word request.
 
 ## Scoring
@@ -184,7 +186,7 @@ On first open the app asks how products should be scored. Both choices can be ch
   survives Safari's 7-day storage purge.
 - Every lookup that Open Food Facts answered (found or not found) is cached in localStorage keyed by barcode, so
   repeat scans are instant and offline. Open Food Facts network errors are not cached; a failed or skipped USDA
-  query is retried on a later lookup of the same code. **Re-fetch** on a card bypasses the cache.
+  query is retried on a later lookup of the same code. **Refresh** on a card bypasses the cache.
 - Everything (cache, log, tally, settings, recent menus, the plan and the planner answers) lives in the browser's
   localStorage. Nothing is sent to any server other than the two data sources, the site's built-in proxy (every
   barcode you scan goes there as a USDA search when no USDA key is saved, and the AI requests go there when no key
