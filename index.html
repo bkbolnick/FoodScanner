@@ -4455,7 +4455,7 @@ function aiRequestOnce(opts) {
   return fetch(url, { method: 'POST', headers: headers, body: JSON.stringify(body), signal: ctrl ? ctrl.signal : undefined }).then(function (res) {
     if (!res.ok) return res.text().then(function (text) {
       var json = null; try { json = JSON.parse(text); } catch (e) { /* not JSON */ }
-      dbg('error', 'AI HTTP ' + res.status + ' (request-id ' + (res.headers.get('request-id') || '?') + '): ' + redact(String(text).slice(0, 400)));
+      dbg('error', 'AI HTTP ' + res.status + ' (request-id ' + (res.headers.get('request-id') || '?') + '): ' + String(text).slice(0, 400));   // the debug log redacts keys and tokens itself
       throw aiError(res.status, json, text, c);
     });
     if (!opts.stream) {
