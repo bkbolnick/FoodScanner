@@ -23,13 +23,15 @@ type, semantic colours in light and dark, a bottom tab bar, grouped settings and
 1. Open the page in Safari on your iPhone (it must be served over HTTPS, which GitHub Pages does). Optionally
    add it to the Home Screen; it then opens full screen like an app.
 2. The **Analyze** tab offers three things: **Scan a barcode**, **Photograph food** and **Review a menu**, with
-   **History** underneath. Tap **Scan a barcode** and allow camera access. The camera fills the screen; hold the
+   **History** underneath. **Review a menu** opens the menu reader under the Analyze tab, with a back link.
+   Tap **Scan a barcode** and allow camera access. The camera fills the screen; hold the
    barcode inside the marked region, roughly 10–15 cm from the lens. It detects EAN-13, EAN-8, UPC-A and UPC-E
    continuously. A beep and a green flash of the corner marks mean a code was read. The same code is ignored while
    it stays in view and for 3 seconds after. Floating buttons offer **Enter a code**, **Stop scanning** and, when
    the phone has one, the torch.
 3. Or, while the camera is running, tap **Enter a code**, type the barcode and tap **Look up**; scanning pauses
-   while you type.
+   while you type. If the camera cannot start at all (permission denied, no camera, another app using it), the code
+   field appears on the Analyze screen so a barcode can still be typed.
 4. The result opens in a sheet from the bottom. Drag the grabber (or tap it) to park it at a peek, half or full
    height; swipe it down or tap the close button to dismiss it. While the camera runs it opens at half height so
    the viewfinder stays usable; at full height scanning pauses until you lower it. The sheet shows the score (see
@@ -110,7 +112,10 @@ way until asked for.
 
 
 The photo scan, the menu scanner and the meal planner call the Claude API (`claude-opus-5`, Messages API with a
-JSON schema for every answer). Under **Settings › AI features** (behind **Use your own keys** when the site has a
+JSON schema for every answer; when the API cannot compile an answer's schema it answers HTTP 400, and the app then
+sends the same request with no output format, writes the schema into the prompt and reads the JSON out of the text
+answer instead, skipping that schema for the rest of the page load). Under **Settings › AI features** (behind
+**Use your own keys** when the site has a
 built-in proxy) paste an Anthropic API key, or a proxy URL: with a
 key the browser calls `api.anthropic.com` directly and the key is stored only in this browser's localStorage and
 sent only to that host; with a proxy URL the request goes there unchanged, without the key, and the proxy adds its
