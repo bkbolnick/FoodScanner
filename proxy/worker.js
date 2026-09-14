@@ -1,7 +1,8 @@
-// FoodScanner AI proxy: a Cloudflare Worker that holds the Anthropic API key so the public site never carries it.
-// The app sends the same Messages API request it would send to api.anthropic.com; the Worker rate-limits, checks the
-// origin and the optional shared token, keeps only the request fields the app uses, adds the key, forwards the request
-// and streams the answer back. See README.md.
+// FoodScanner AI proxy: a Cloudflare Worker that holds the site's API keys (Anthropic, and optionally USDA) so the public
+// site never carries them. The app sends the same Messages API request it would send to api.anthropic.com; the Worker
+// rate-limits, checks the origin and the optional shared token, keeps only the request fields the app uses, adds the
+// key, forwards the request and streams the answer back. With a USDA_API_KEY secret it also answers the app's barcode
+// lookups against USDA FoodData Central the same way. See README.md.
 
 const UPSTREAM = 'https://api.anthropic.com/v1/messages';
 const BETA = 'server-side-fallback-2026-07-01';   // the one beta the app relies on; a caller's own beta header is ignored (fast mode would double the price)
@@ -11,6 +12,9 @@ const ALLOWED_HEADERS = 'content-type, authorization, anthropic-version, anthrop
 // still bounded) and a few that would add cost or outbound connections on the key owner's account are refused outright.
 const KEEP = ['model', 'max_tokens', 'messages', 'system', 'stream', 'output_config', 'fallbacks', 'metadata', 'temperature', 'top_p', 'top_k', 'stop_sequences', 'thinking'];
 const REFUSE = ['tools', 'tool_choice', 'mcp_servers', 'container', 'context_management'];
+const USDA_UPSTREAM = 'https://api.nal.usda.gov/fdc/v1/foods/search';
+const USDA_PARAMS = ['query', 'dataType', 'pageSize', 'pageNumber', 'brandOwner', 'sortBy', 'sortOrder'];   // the only query fields forwarded; api_key is always the Worker's own
+const USDA_MAX_PAGE = 50;   // a barcode lookup asks for 25; USDA's own limit is 200
 
 export default {
   async fetch(request, env) {
@@ -19,10 +23,15 @@ export default {
     if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors });
     const url = new URL(request.url);
     if (request.method === 'GET' && (url.pathname === '/' || url.pathname === '')) {
-      return new Response('FoodScanner AI proxy is running. It only serves POST /v1/messages for the allowed origins.\n', { status: 200, headers: { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'no-store' } });
+      const usda = env.USDA_API_KEY ? ' and GET /usda/foods/search' : '';
+      return new Response('FoodScanner AI proxy is running. It only serves POST /v1/messages' + usda + ' for the allowed origins.\n', { status: 200, headers: { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'no-store' } });
     }
-    if (request.method !== 'POST' || url.pathname !== '/v1/messages') return reply(404, 'not_found_error', 'Only POST /v1/messages is served here.', cors);
-    if (!env.ANTHROPIC_API_KEY) return reply(500, 'api_error', 'The proxy has no ANTHROPIC_API_KEY secret. Run: wrangler secret put ANTHROPIC_API_KEY', cors);
+    const isAI = request.method === 'POST' && url.pathname === '/v1/messages';
+    const isUSDA = request.method === 'GET' && url.pathname === '/usda/foods/search';
+    if (!isAI && !isUSDA) return reply(404, 'not_found_error', 'Only POST /v1/messages and GET /usda/foods/search are served here.', cors);
+    if (isAI && !env.ANTHROPIC_API_KEY) return reply(500, 'api_error', 'The proxy has no ANTHROPIC_API_KEY secret. Run: wrangler secret put ANTHROPIC_API_KEY', cors);
+    // The app treats this 404 as "this proxy does not do USDA" and stops asking for the rest of the page load.
+    if (isUSDA && !env.USDA_API_KEY) return reply(404, 'not_found_error', 'The proxy has no USDA_API_KEY secret, so it does not serve USDA lookups. Run: wrangler secret put USDA_API_KEY', cors);
     if (env.LIMITER) {   // optional Workers rate-limiting binding, per client address, counted before any other check so guesses cost too (see wrangler.toml)
       const ip = request.headers.get('CF-Connecting-IP') || 'unknown';
       const { success } = await env.LIMITER.limit({ key: ip });
@@ -33,6 +42,7 @@ export default {
       const auth = request.headers.get('Authorization') || '';
       if (!timingSafeEqual(auth, 'Bearer ' + env.PROXY_TOKEN)) return reply(401, 'authentication_error', 'Missing or wrong proxy token.', cors);
     }
+    if (isUSDA) return usdaSearch(url, env, cors);
     const declared = Number(request.headers.get('Content-Length') || 0);
     if (declared > MAX_BODY) return reply(413, 'invalid_request_error', 'The request is too large.', cors);
     let text, body;
@@ -57,15 +67,33 @@ export default {
     let upstream;
     try { upstream = await fetch(UPSTREAM, { method: 'POST', headers, body: rewrite ? JSON.stringify(body) : text }); }
     catch (e) { return reply(502, 'api_error', 'The proxy could not reach api.anthropic.com.', cors); }
-    const out = new Headers(cors);
-    out.set('content-type', upstream.headers.get('content-type') || 'application/json');
-    out.set('cache-control', 'no-store');
-    const reqId = upstream.headers.get('request-id');
-    if (reqId) out.set('request-id', reqId);
-    return new Response(upstream.body, { status: upstream.status, headers: out });   // streamed through, so SSE answers arrive as they are written
+    return passThrough(upstream, cors);   // streamed through, so SSE answers arrive as they are written
   }
 };
 
+// USDA FoodData Central search with the Worker's key. Only the listed query fields are forwarded, so a caller cannot
+// swap the key, and the page size is bounded so one call cannot pull a large slice of the database.
+async function usdaSearch(url, env, cors) {
+  const q = new URLSearchParams();
+  for (const k of USDA_PARAMS) { const v = url.searchParams.get(k); if (v) q.set(k, v); }
+  const query = q.get('query') || '';
+  if (!query || query.length > 200) return reply(400, 'invalid_request_error', 'A query of up to 200 characters is required.', cors);
+  const size = Number(q.get('pageSize'));
+  if (!(size > 0) || size > USDA_MAX_PAGE || size !== Math.floor(size)) q.set('pageSize', '25');
+  q.set('api_key', env.USDA_API_KEY);
+  let upstream;
+  try { upstream = await fetch(USDA_UPSTREAM + '?' + q.toString(), { headers: { accept: 'application/json' } }); }
+  catch (e) { return reply(502, 'api_error', 'The proxy could not reach api.nal.usda.gov.', cors); }
+  return passThrough(upstream, cors);
+}
+function passThrough(upstream, cors) {
+  const out = new Headers(cors);
+  out.set('content-type', upstream.headers.get('content-type') || 'application/json');
+  out.set('cache-control', 'no-store');
+  const reqId = upstream.headers.get('request-id');
+  if (reqId) out.set('request-id', reqId);
+  return new Response(upstream.body, { status: upstream.status, headers: out });
+}
 function list(v) { return String(v || '').split(',').map(s => s.trim()).filter(Boolean); }
 // With ALLOWED_ORIGINS set, only browsers on those pages get an answer; a request with no Origin header (curl, scripts)
 // is refused too. Non-browser clients can forge the header, so the token and the rate limit are the real guards.
@@ -77,7 +105,7 @@ function originAllowed(origin, env) {
 function corsHeaders(origin, env) {
   const allowed = list(env.ALLOWED_ORIGINS);
   const echo = !allowed.length || allowed.indexOf('*') >= 0 ? '*' : (allowed.indexOf(origin) >= 0 ? origin : 'null');
-  return { 'access-control-allow-origin': echo, 'access-control-allow-methods': 'POST, OPTIONS', 'access-control-allow-headers': ALLOWED_HEADERS, 'access-control-expose-headers': 'request-id', 'access-control-max-age': '86400', 'vary': 'Origin' };
+  return { 'access-control-allow-origin': echo, 'access-control-allow-methods': 'GET, POST, OPTIONS', 'access-control-allow-headers': ALLOWED_HEADERS, 'access-control-expose-headers': 'request-id', 'access-control-max-age': '86400', 'vary': 'Origin' };
 }
 function reply(status, type, message, cors) {
   const out = new Headers(cors);

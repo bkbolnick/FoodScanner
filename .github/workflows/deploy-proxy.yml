@@ -1,0 +1,142 @@
+# Deploys proxy/ (the Cloudflare Worker that holds the site's API keys) and points the site at it, so the whole set-up
+# can be done from a phone: add the repository secrets named below under Settings > Secrets and variables > Actions,
+# then merge a change under proxy/ or run this workflow by hand. See proxy/README.md, "From a phone".
+#
+# Repository secrets:
+#   CLOUDFLARE_API_TOKEN   required; a token made from the "Edit Cloudflare Workers" template
+#   CLOUDFLARE_ACCOUNT_ID  the 32-character id in the dashboard URL (needed when the token can see more than one account)
+#   ANTHROPIC_API_KEY      the key the Worker uses for the AI features
+#   USDA_API_KEY           optional; lets the Worker answer USDA lookups for every visitor
+#   PROXY_TOKEN            optional; also written into the public page, so it only deters scripts (see the README)
+# A secret that is missing here is left as it is on the Worker, so keys can also be managed in the Cloudflare dashboard.
+name: Deploy the AI proxy
+
+on:
+  push:
+    branches: [main]
+    paths: ['proxy/**', '.github/workflows/deploy-proxy.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: write   # to write the Worker URL into index.html (DEFAULT_PROXY)
+
+concurrency: deploy-proxy
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Check the Cloudflare token
+        run: |
+          if [ -z "$CLOUDFLARE_API_TOKEN" ]; then
+            echo "::error::The repository secret CLOUDFLARE_API_TOKEN is not set. Add it under Settings > Secrets and variables > Actions (a token from the 'Edit Cloudflare Workers' template), then re-run this workflow."
+            exit 1
+          fi
+          if [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
+            echo "::notice::CLOUDFLARE_ACCOUNT_ID is not set; wrangler will pick the account itself, which works when the token can see only one."
+          fi
+
+      - name: Deploy the Worker
+        id: deploy
+        working-directory: proxy
+        run: |
+          npx --yes wrangler@4 deploy 2>&1 | tee deploy.log
+          url=$(grep -oE 'https://[A-Za-z0-9.-]+\.workers\.dev' deploy.log | head -1)
+          if [ -z "$url" ]; then
+            # wrangler did not print a workers.dev URL: look the account's subdomain up and build it from the Worker name.
+            name=$(sed -n 's/^name *= *"\(.*\)".*/\1/p' wrangler.toml | head -1)
+            sub=$(curl -sS --max-time 20 -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/subdomain" \
+              | node -e 'let d="";process.stdin.on("data",c=>d+=c).on("end",()=>{try{const j=JSON.parse(d);process.stdout.write((j.result&&j.result.subdomain)||"")}catch(e){}})')
+            [ -n "$name" ] && [ -n "$sub" ] && url="https://$name.$sub.workers.dev"
+          fi
+          if [ -z "$url" ]; then
+            echo "::warning::Could not work out the Worker's URL. Open the Worker in the Cloudflare dashboard (Workers & Pages) to find it, then put it in DEFAULT_PROXY in index.html."
+          fi
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+          rm -f deploy.log
+
+      - name: Set the Worker's secrets
+        working-directory: proxy
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          USDA_API_KEY: ${{ secrets.USDA_API_KEY }}
+          PROXY_TOKEN: ${{ secrets.PROXY_TOKEN }}
+        run: |
+          for name in ANTHROPIC_API_KEY USDA_API_KEY PROXY_TOKEN; do
+            value="${!name}"
+            if [ -n "$value" ]; then
+              printf '%s' "$value" | npx --yes wrangler@4 secret put "$name" > /dev/null
+              echo "$name: set on the Worker from the repository secret"
+            else
+              echo "$name: no repository secret, left as it is on the Worker"
+            fi
+          done
+          if [ -z "$ANTHROPIC_API_KEY" ]; then
+            echo "::warning::ANTHROPIC_API_KEY is not a repository secret. The AI features stay off until it is set here or in the Cloudflare dashboard (the Worker > Settings > Variables and Secrets)."
+          fi
+
+      - name: Check the proxy
+        id: health
+        env:
+          URL: ${{ steps.deploy.outputs.url }}
+        run: |
+          [ -n "$URL" ] || exit 0
+          answer=$(curl -sS --max-time 20 "$URL/" || echo "no answer")
+          echo "$URL/ says: $answer"
+          echo "answer=$answer" >> "$GITHUB_OUTPUT"
+
+      - name: Point the site at the proxy
+        id: site
+        env:
+          URL: ${{ steps.deploy.outputs.url }}
+          PROXY_TOKEN: ${{ secrets.PROXY_TOKEN }}
+        run: |
+          [ -n "$URL" ] || { echo "result=no URL, index.html left alone" >> "$GITHUB_OUTPUT"; exit 0; }
+          node - <<'JS'
+          const fs = require('fs');
+          const url = process.env.URL, token = (process.env.PROXY_TOKEN || '').replace(/[\\']/g, '');
+          let src = fs.readFileSync('index.html', 'utf8');
+          const cur = /^var DEFAULT_PROXY = '([^']*)';/m.exec(src);
+          if (!cur) { console.log('index.html has no DEFAULT_PROXY line; nothing to update'); process.exit(0); }
+          if (cur[1] && !/\.workers\.dev$/.test(cur[1])) { console.log('DEFAULT_PROXY is ' + cur[1] + ', set by hand; leaving it'); process.exit(0); }
+          src = src.replace(/^var DEFAULT_PROXY = '[^']*';/m, "var DEFAULT_PROXY = '" + url + "';");
+          if (token) src = src.replace(/^var DEFAULT_PROXY_TOKEN = '[^']*';/m, "var DEFAULT_PROXY_TOKEN = '" + token + "';");
+          fs.writeFileSync('index.html', src);
+          JS
+          if git diff --quiet -- index.html; then
+            echo "index.html already points at $URL"
+            echo "result=already pointed at the proxy" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -q -m "Point the site at the deployed AI proxy" -- index.html
+          if git push; then
+            echo "result=index.html updated; GitHub Pages publishes it within a minute or two" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::Could not push the index.html change (branch protection?). Set DEFAULT_PROXY to $URL by hand."
+            echo "result=could not push; set DEFAULT_PROXY to $URL by hand" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Summary
+        env:
+          URL: ${{ steps.deploy.outputs.url }}
+          ANSWER: ${{ steps.health.outputs.answer }}
+          SITE: ${{ steps.site.outputs.result }}
+        run: |
+          {
+            echo "## AI proxy"
+            echo
+            if [ -n "$URL" ]; then echo "- Deployed at **$URL**"; else echo "- Deployed, but the URL could not be read; find it in the Cloudflare dashboard"; fi
+            [ -n "$ANSWER" ] && echo "- Health check: $ANSWER"
+            [ -n "$SITE" ] && echo "- Site: $SITE"
+          } >> "$GITHUB_STEP_SUMMARY"
