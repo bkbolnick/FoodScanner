@@ -22,13 +22,14 @@ type, semantic colours in light and dark, a bottom tab bar, grouped settings and
 
 1. Open the page in Safari on your iPhone (it must be served over HTTPS, which GitHub Pages does). Optionally
    add it to the Home Screen; it then opens full screen like an app.
-2. On the **Analyze** tab tap **Scan a barcode** and allow camera access. The camera fills the screen; hold the
+2. The **Analyze** tab offers three things: **Scan a barcode**, **Photograph food** and **Review a menu**, with
+   **History** underneath. Tap **Scan a barcode** and allow camera access. The camera fills the screen; hold the
    barcode inside the marked region, roughly 10–15 cm from the lens. It detects EAN-13, EAN-8, UPC-A and UPC-E
    continuously. A beep and a green flash of the corner marks mean a code was read. The same code is ignored while
    it stays in view and for 3 seconds after. Floating buttons offer **Enter a code**, **Stop scanning** and, when
    the phone has one, the torch.
-3. Or type a barcode into **Or enter a code** and tap **Look up**. While the camera is running, tap
-   **Enter a code** to bring the field back; scanning pauses while you type.
+3. Or, while the camera is running, tap **Enter a code**, type the barcode and tap **Look up**; scanning pauses
+   while you type.
 4. The result opens in a sheet from the bottom. Drag the grabber (or tap it) to park it at a peek, half or full
    height; swipe it down or tap the close button to dismiss it. While the camera runs it opens at half height so
    the viewfinder stays usable; at full height scanning pauses until you lower it. The sheet shows the score (see
@@ -63,8 +64,9 @@ type, semantic colours in light and dark, a bottom tab bar, grouped settings and
 
 ## Menu scanner
 
-**Menu** tab: photograph a restaurant menu (or choose a photo). The model reads every legible dish and estimates,
-for a typical serving as that kind of restaurant would make it, the nutrition, the NOVA processing group, the
+**Review a menu** on the Analyze screen: photograph a restaurant menu (or choose a photo). The model reads every
+legible dish and estimates, for a typical serving as that kind of restaurant would make it, the nutrition, the NOVA
+processing group, the
 allergens and whether it is vegan or vegetarian. The app then scores every dish itself with the scoring profile in
 force (standard or custom, exactly like a scanned product) and shows **Top 5 for you**, the rest best first,
 dishes that contain something on your avoid list set aside with the reason, and dishes with too little data to

@@ -153,8 +153,13 @@ input[type=range] { accent-color: var(--accent); width: 100%; margin: 0; }
 .placeholder .glyph svg { width: 100%; height: 100%; display: block; }
 .placeholder h2 { font-size: 1.294rem; font-weight: 700; margin: 0 0 6px; }
 .placeholder .btn { margin-top: 14px; min-width: 180px; }
-.idle-row { display: flex; gap: 10px; margin-top: 10px; }
-.idle-row .btn { margin-top: 0; min-width: 0; }
+.idle-actions { display: flex; flex-direction: column; gap: 10px; width: 100%; max-width: 340px; margin-top: 16px; }
+.tile { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 56px; padding: 12px 16px; border-radius: 14px; background: var(--cell); color: var(--label); font-size: 1.06rem; font-weight: 600; text-align: left; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04); }
+.tile svg { width: 26px; height: 26px; flex: none; color: var(--accent); }
+.tile:active { background: var(--fill); }
+.tile[disabled] { opacity: 0.4; pointer-events: none; }
+.placeholder .idle-history { margin-top: 24px; min-width: 0; }
+.back-link { display: inline-flex; align-items: center; min-height: 44px; margin: 6px 0 -10px -4px; padding: 0 4px; color: var(--accent); font-size: 1.06rem; font-weight: 500; }
 .status { font-size: 0.765rem; color: var(--label2); line-height: 1.35; word-break: break-word; }
 .status.err { color: var(--red); }
 .status.quiet { display: none; }
@@ -517,15 +522,16 @@ body.ob-open, body.dbg-open { overflow: hidden; }
       <div class="placeholder" id="placeholder">
         <div class="glyph" aria-hidden="true"><svg viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 20v-6a8 8 0 0 1 8-8h6M44 6h6a8 8 0 0 1 8 8v6M58 44v6a8 8 0 0 1-8 8h-6M20 58h-6a8 8 0 0 1-8-8v-6"/><path d="M32 25.5c-3.4-3.2-8.4-3.6-12-.9-5.1 3.9-5.7 12.6-2.1 19.8 2.5 5.1 6 8.6 9 8.6 1.9 0 3.3-1.1 5.1-1.1s3.2 1.1 5.1 1.1c3 0 6.5-3.5 9-8.6 3.6-7.2 3-15.9-2.1-19.8-3.6-2.7-8.6-2.3-12 .9z"/><path d="M32 25.5v-6"/><path d="M32 19.5c.6-4.6 4.5-7.4 9.3-7-.4 4.7-4.3 7.6-9.3 7z"/></svg></div>
         <h2>What are you eating?</h2>
-        <button class="btn primary" id="btnStart" type="button">Scan a barcode</button>
-        <div class="idle-row">
-          <button class="btn small" id="btnPhotoIdle" type="button">Photograph food</button>
-          <button class="btn small" id="btnHistory" type="button" aria-haspopup="dialog">History</button>
+        <div class="idle-actions">
+          <button class="tile" id="btnStart" type="button"><svg viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 9V6a3 3 0 0 1 3-3h3M17 3h3a3 3 0 0 1 3 3v3M23 17v3a3 3 0 0 1-3 3h-3M9 23H6a3 3 0 0 1-3-3v-3"/><path d="M8 9v8M11.5 9v8M15 9v8M18 9v8"/></svg><span>Scan a barcode</span></button>
+          <button class="tile" id="btnPhotoIdle" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.2"/></svg><span>Photograph food</span></button>
+          <button class="tile" id="btnMenuIdle" type="button"><svg viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="3" width="18" height="20" rx="3"/><path d="M8 8h10M8 12h10M8 16h6"/><circle cx="17.5" cy="17.5" r="1.2" fill="currentColor" stroke="none"/></svg><span>Review a menu</span></button>
         </div>
+        <button class="btn small idle-history" id="btnHistory" type="button" aria-haspopup="dialog">History</button>
       </div>
     </div>
     <div class="scan-ui">
-      <form class="manual" id="manualForm" autocomplete="off" novalidate>
+      <form class="manual hidden" id="manualForm" autocomplete="off" novalidate>
         <input type="text" id="manualCode" inputmode="numeric" pattern="[0-9]*" placeholder="Or enter a code" aria-label="Barcode" enterkeyhint="search">
         <button class="inline-act" id="btnLookup" type="submit">Look up</button>
       </form>
@@ -545,7 +551,8 @@ body.ob-open, body.dbg-open { overflow: hidden; }
 
   <!-- ============================== MENU ============================== -->
   <section class="tab page" id="tab-menu">
-    <h1>Menu</h1>
+    <button class="back-link" id="btnMenuBack" type="button">‹ Analyze</button>
+    <h1>Review a menu</h1>
     <div id="menuBody"></div>
     <input type="file" id="menuInput" accept="image/*" class="hidden" aria-hidden="true" tabindex="-1">
   </section>
@@ -666,7 +673,6 @@ body.ob-open, body.dbg-open { overflow: hidden; }
 
 <nav class="tabs" id="tabs" aria-label="Sections">
   <button type="button" data-tab="scan" class="active" aria-current="page"><svg viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 9.2c-1.6-1.5-3.9-1.7-5.6-.4-2.4 1.8-2.7 5.9-1 9.3 1.2 2.4 2.8 4 4.2 4 .9 0 1.6-.5 2.4-.5s1.5.5 2.4.5c1.4 0 3-1.6 4.2-4 1.7-3.4 1.4-7.5-1-9.3-1.7-1.3-4-1.1-5.6.4z"/><path d="M13 9.2V6.4"/><path d="M13 6.4c.3-2.2 2.1-3.5 4.4-3.3-.2 2.2-2 3.6-4.4 3.3z"/></svg>Analyze</button>
-  <button type="button" data-tab="menu"><svg viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="3" width="18" height="20" rx="3"/><path d="M8 8h10M8 12h10M8 16h6"/><circle cx="17.5" cy="17.5" r="1.2" fill="currentColor" stroke="none"/></svg>Menu</button>
   <button type="button" data-tab="plan"><svg viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="20" height="17" rx="3"/><path d="M3 10h20M8 3v4M18 3v4M8 15h3M13 15h5"/></svg>Plan</button>
   <button type="button" data-tab="learn"><svg viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H12v17H6.5A2.5 2.5 0 0 0 4 22.5z"/><path d="M22 5.5A2.5 2.5 0 0 0 19.5 3H14v17h5.5a2.5 2.5 0 0 1 2.5 2.5z"/></svg>Learn</button>
   <button type="button" data-tab="settings"><svg viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="13" cy="13" r="3.2"/><path d="M13 2.5l2 2.6 3.2-.9.9 3.2 2.6 2-1.6 2.9 1.6 2.9-2.6 2-.9 3.2-3.2-.9-2 2.6-2-2.6-3.2.9-.9-3.2-2.6-2 1.6-2.9-1.6-2.9 2.6-2 .9-3.2 3.2.9z"/></svg>Settings</button>
@@ -2642,7 +2648,7 @@ function stopCamera(statusMsg) {
   releaseStream();
   releaseWakeLock();
   $('btnStart').classList.remove('hidden'); $('btnStop').classList.add('hidden');
-  $('manualForm').classList.remove('hidden'); $('btnTypeCode').classList.add('hidden');
+  $('manualForm').classList.add('hidden'); $('btnTypeCode').classList.add('hidden');   // the code field is a live-view control; the idle screen shows the three actions only
   $('camCtl').classList.add('hidden');
   var fps = cam.frames && cam.decodeMs ? ' avg decode ' + Math.round(cam.decodeMs / cam.frames) + 'ms over ' + cam.frames + ' frames' : '';
   dbg('log', 'Camera stopped.' + fps);
@@ -3103,7 +3109,7 @@ function showTab(name) {
     document.body.classList.toggle('tab-' + t, t === name);
   });
   Array.prototype.forEach.call($('tabs').querySelectorAll('button'), function (b) {
-    var on = b.getAttribute('data-tab') === name;
+    var on = b.getAttribute('data-tab') === (name === 'menu' ? 'scan' : name);   // the menu view belongs to Analyze
     b.classList.toggle('active', on);
     if (on) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current');
   });
@@ -3684,24 +3690,14 @@ function grocerySchema() { var p = {}; GROCERY_CATS.forEach(function (c) { p[c[0
 // snack lists: a meal object nested twice inside a days array made the API's compiled grammar too large ("The compiled
 // grammar is too large", HTTP 400), while one array of meal objects is the shape the menu scanner already uses. The
 // app regroups the list into days in cleanWeek, so the stored plan keeps its days/meals/snacks form.
-// The slim variant is used only after the API has refused the normal one as too large a grammar: the two allergen
-// lists become plain strings (most of the remaining enum alternatives), and cleanMeal keeps only the known keys.
-function weekSchema(lite) {
-  var props = mealProps();
-  if (lite) {
-    props.allergens = { type: 'array', items: { type: 'string' }, description: 'Allergens the meal contains, using only these keys: ' + EST_ALLERGEN_KEYS.join(', ') };
-    props.may_contain = { type: 'array', items: { type: 'string' }, description: 'Allergens that may be present, same keys' };
-  }
-  return aiSchemaObject({
-    weekNumber: { type: 'integer' },
-    theme: { type: 'string', description: 'One line on what this week emphasises, or empty' },
-    meals: { type: 'array', items: aiSchemaObject(Object.assign({ day: { type: 'string', description: 'Monday, Tuesday, and so on' } }, props)),
-      description: 'Every meal and snack of the week in day order: all of Monday (its meals, then its snacks, with mealType Snack), then Tuesday, and so on' },
-    groceryList: grocerySchema(),
-    prepPlan: aiSchemaObject({ batchCookingTasks: { type: 'array', items: { type: 'string' }, description: 'Tasks for one batch-cooking session that cover the week' }, noPrepAlternatives: { type: 'array', items: { type: 'string' }, description: 'Shortcuts that need no cooking' } })
-  });
-}
-var WEEK_SCHEMA = weekSchema(false), WEEK_SCHEMA_LITE = weekSchema(true);
+var WEEK_SCHEMA = aiSchemaObject({
+  weekNumber: { type: 'integer' },
+  theme: { type: 'string', description: 'One line on what this week emphasises, or empty' },
+  meals: { type: 'array', items: aiSchemaObject(Object.assign({ day: { type: 'string', description: 'Monday, Tuesday, and so on' } }, mealProps())),
+    description: 'Every meal and snack of the week in day order: all of Monday (its meals, then its snacks, with mealType Snack), then Tuesday, and so on' },
+  groceryList: grocerySchema(),
+  prepPlan: aiSchemaObject({ batchCookingTasks: { type: 'array', items: { type: 'string' }, description: 'Tasks for one batch-cooking session that cover the week' }, noPrepAlternatives: { type: 'array', items: { type: 'string' }, description: 'Shortcuts that need no cooking' } })
+});
 var PLAN_SYSTEM = 'You write practical, appetising meal plans for a consumer food app and answer only with JSON matching the schema. ' + EST_SHARED +
   ' Every meal carries its own nutrition estimate for one serving (the portion described in portions; serving_grams is its weight) so the app can score it. Respect every restriction exactly: an allergen the user avoids must not appear in any meal, not even as may_contain.';
 function planPrompt(w, weekNo, previousTitles) {
@@ -3810,7 +3806,7 @@ function startPlan() {
   if (!aiReady()) { toast('Add an API key under Settings, AI features'); return; }
   closePlanWizard();
   plan.data = { id: 'p' + now(), ts: isoNow(), form: w, profileName: profileShort(), weeks: [], locks: {}, checks: {}, done: false };
-  plan.week = 0; plan.view = 'plan'; plan.error = null; plan.busy = true; plan.openMeal = null; plan.regen = null; plan.lite = false;
+  plan.week = 0; plan.view = 'plan'; plan.error = null; plan.busy = true; plan.openMeal = null; plan.regen = null;
   savePlan();
   showTab('plan');
   generateNextWeek();
@@ -3825,7 +3821,7 @@ function generateNextWeek() {
   renderPlanTab();
   var t0 = now();
   dbg('log', 'Plan: generating week ' + n + ' of ' + d.form.weeks);
-  aiRequest({ system: PLAN_SYSTEM, content: [{ type: 'text', text: planPrompt(d.form, n, prev) }], schema: plan.lite ? WEEK_SCHEMA_LITE : WEEK_SCHEMA, effort: 'high', maxTokens: 32000, stream: true, timeoutMs: 900000, signal: plan.ctrl ? plan.ctrl.signal : null, cutHint: 'Try fewer meals a day or no snacks.',
+  aiRequest({ system: PLAN_SYSTEM, content: [{ type: 'text', text: planPrompt(d.form, n, prev) }], schema: WEEK_SCHEMA, effort: 'high', maxTokens: 32000, stream: true, timeoutMs: 900000, signal: plan.ctrl ? plan.ctrl.signal : null, cutHint: 'Try fewer meals a day or no snacks.',
     onProgress: function (txt) {
       var seen = {}, days = 0, m, re = /"day"\s*:\s*"([^"]*)"/g;
       while ((m = re.exec(txt))) { var k = dayLabel(m[1], days); if (!seen[k]) { seen[k] = 1; days++; } }
@@ -3840,12 +3836,6 @@ function generateNextWeek() {
   }, function (err) {
     if (plan.data !== d) return;
     var msg = String(err && err.message || err);
-    if (!plan.lite && /grammar is too large/i.test(msg)) {   // the API could not compile the week schema: once more with the slim one, for this and the following weeks
-      dbg('warn', 'Plan: the API refused the week schema as too large; retrying week ' + n + ' with the slim schema');
-      plan.lite = true;
-      generateNextWeek();
-      return;
-    }
     dbg('error', 'Plan: week ' + n + ' failed: ' + msg);
     plan.busy = false; plan.ctrl = null; plan.error = msg;
     renderPlanTab();
@@ -4362,12 +4352,42 @@ function aiError(status, json, text, c) {
   if (status === 403) return new Error(via ? capitalize(via) + ' refused this page' + (detail ? ': ' + detail : '.') : 'The API key is not allowed to do this' + (detail ? ': ' + detail : '.'));
   if (status === 429) return new Error('Rate limited by the API. Wait a moment and try again.');
   if (status === 529 || status === 503) return new Error('The AI service is busy. Try again in a minute.');
-  return new Error('AI request failed (HTTP ' + status + ')' + (detail ? ': ' + detail : ''));
+  var err = new Error('AI request failed (HTTP ' + status + ')' + (detail ? ': ' + detail : ''));
+  if (status === 400 && /grammar is too large/i.test(detail)) err.grammar = true;   // the answer schema could not be compiled; aiRequest retries without it
+  return err;
 }
 // opts: { system, content: [blocks], schema, effort, maxTokens, stream, onProgress(text), timeoutMs, signal }. Resolves with the
 // parsed JSON (or the text when there is no schema). Long answers (a week of meals) are streamed so the request cannot
 // time out and progress can be shown; the streamed text deltas are joined and parsed like a plain answer.
+// Schemas the API has refused to compile ("The compiled grammar is too large", HTTP 400). Such a request is sent again
+// with no output format: the schema is written into the prompt and the answer parsed as text, which every caller's
+// clean-up code copes with. The schema is remembered for the rest of the page load so later calls skip the refusal.
+var aiNoGrammar = [];
+function aiTextFallback(opts) {
+  var o = {}; Object.keys(opts).forEach(function (k) { o[k] = opts[k]; });
+  o.content = (opts.content || []).concat([{ type: 'text', text: 'Answer with one JSON object and nothing else: no code fences, no words before or after it. It must match this JSON Schema exactly, every property present and no others: ' + JSON.stringify(opts.schema) }]);
+  o.schema = null; o.jsonText = true;
+  return o;
+}
+function parseJsonLoose(t) {
+  var s = String(t || '').trim().replace(/^```[a-z]*\s*/i, '').replace(/\s*```\s*$/, '');
+  try { return JSON.parse(s); } catch (e) { /* try the outermost object */ }
+  var a = s.indexOf('{'), b = s.lastIndexOf('}');
+  if (a < 0 || b <= a) throw new Error('no JSON object');
+  return JSON.parse(s.slice(a, b + 1));
+}
 function aiRequest(opts) {
+  if (opts.schema && aiNoGrammar.indexOf(opts.schema) >= 0) opts = aiTextFallback(opts);
+  return aiRequestOnce(opts).then(null, function (e) {
+    if (opts.schema && e && e.grammar) {
+      aiNoGrammar.push(opts.schema);
+      dbg('warn', 'The API could not compile the answer schema (' + e.message + '); asking for the JSON in the prompt instead');
+      return aiRequestOnce(aiTextFallback(opts));
+    }
+    throw e;
+  });
+}
+function aiRequestOnce(opts) {
   var c = aiConfig();
   if (opts.key) c = { key: opts.key, proxy: '', token: '' };   // Test key tries the typed key without saving it
   if (!c.key && !c.proxy) return Promise.reject(new Error('Add an API key or a proxy URL under Settings, AI features.'));
@@ -4386,8 +4406,8 @@ function aiRequest(opts) {
   function finish(json, textBlock) {
     if (json.stop_reason === 'refusal') throw new Error('The AI declined this request' + (json.stop_details && json.stop_details.explanation ? ': ' + json.stop_details.explanation : '.'));
     if (json.stop_reason === 'max_tokens') throw new Error('The AI answer was cut short.' + (opts.cutHint ? ' ' + opts.cutHint : ''));
-    if (!opts.schema) return textBlock;
-    try { return JSON.parse(textBlock); } catch (e) { throw new Error('The AI answer could not be read. Try again.'); }
+    if (!opts.schema && !opts.jsonText) return textBlock;
+    try { return opts.jsonText ? parseJsonLoose(textBlock) : JSON.parse(textBlock); } catch (e) { throw new Error('The AI answer could not be read. Try again.'); }
   }
   return fetch(url, { method: 'POST', headers: headers, body: JSON.stringify(body), signal: ctrl ? ctrl.signal : undefined }).then(function (res) {
     if (!res.ok) return res.text().then(function (text) { var json = null; try { json = JSON.parse(text); } catch (e) { /* not JSON */ } throw aiError(res.status, json, text, c); });
@@ -4506,6 +4526,8 @@ function init() {
 
   $('btnStart').addEventListener('click', function () { startCamera(); });
   $('btnHistory').addEventListener('click', openHistory);
+  $('btnMenuIdle').addEventListener('click', function () { showTab('menu'); });
+  $('btnMenuBack').addEventListener('click', function () { showTab('scan'); });
   $('btnHistoryLive').addEventListener('click', openHistory);
   $('historyClose').addEventListener('click', closeHistory);
   document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && $('historyPanel').classList.contains('open')) closeHistory(); });
@@ -4696,6 +4718,7 @@ window.FS = {
   estimateResult: estimateResult, rankMenu: rankMenu, scanPhoto: scanPhoto, scanMenu: scanMenu, aiRequest: aiRequest, aiConfig: aiConfig, profileWords: profileWords, showTab: showTab,
   setDefaultProxy: function (u, t) { DEFAULT_PROXY = u || ''; DEFAULT_PROXY_TOKEN = t || ''; usdaProxyOff = ''; renderSettings(); }, usdaConfig: usdaConfig,
   plan: function () { return plan; }, planPrompt: planPrompt, articles: LEARN_ARTICLES, openArticle: openArticle, renderMarkdown: renderMarkdown, searchArticles: searchArticles, planCSV: planCSV, planText: planText, samplePlan: samplePlan, openPlanWizard: openPlanWizard, wizard: function () { return pw; }, pwGo: pwGo, sanitizeWizard: sanitizeWizard,
+  lookup: function (code) { return handleCode(code, null, 'manual'); },
   _setFrameSource: function (el) { cam.frameSource = el; }
 };
 
