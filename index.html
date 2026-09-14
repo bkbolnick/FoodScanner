@@ -732,7 +732,7 @@ var ZXING_FALLBACK_URL = 'https://unpkg.com/@zxing/browser@0.2.1/umd/zxing-brows
 // the meal planner on for everyone who opens the site, with no key to type, and answers USDA lookups when the Worker
 // was given a USDA key too. Empty means each user brings their own keys or proxy under Settings. A key or proxy saved
 // there always wins over these. The deploy workflow (.github/workflows/deploy-proxy.yml) fills DEFAULT_PROXY in.
-var DEFAULT_PROXY = 'https://foodscanner-proxy.bkbolnick.workers.dev';          // e.g. 'https://foodscanner-proxy.example.workers.dev'
+var DEFAULT_PROXY = 'https://foodscanner-proxy.bkbolnick.workers.dev';   // kept in step with the deployed Worker by the deploy workflow; a value that is not a workers.dev URL is left alone
 var DEFAULT_PROXY_TOKEN = '';    // only if the Worker was deployed with PROXY_TOKEN; in a public page it deters scripts, it is not a secret
 var LS = { usdaKey: 'fs.usdaKey', decoder: 'fs.decoder', tally: 'fs.tally.v1', log: 'fs.log.v1', cachePrefix: 'fs.cache.v4.', oldCachePrefixes: ['fs.cache.v1.', 'fs.cache.v2.', 'fs.cache.v3.'],
   aiKey: 'fs.ai.key', aiProxy: 'fs.ai.proxy', aiProxyToken: 'fs.ai.proxyToken', menus: 'fs.menus.v1', plan: 'fs.plan.v1', planWizard: 'fs.plan.wizard.v1' };
@@ -1087,12 +1087,12 @@ function lookupUSDA(code, format, cfg) {
     var params = '?query=' + encodeURIComponent(c) + '&dataType=Branded&pageSize=25';
     var url = viaProxy ? cfg.proxy + '/usda/foods/search' + params : USDA_BASE + params + '&api_key=' + encodeURIComponent(cfg.key);
     return fetchJSON(url, { headers: headers }).then(function (r) {
-      if (viaProxy && r.status === 404) {   // the site's proxy has no USDA key (see usdaConfig)
-        usdaProxyOff = true;
-        dbg('warn', 'The site\'s proxy does not serve USDA lookups; USDA is skipped until the page is reopened');
+      if (viaProxy && (r.status === 404 || r.status === 401 || r.status === 403)) {   // no USDA key on the proxy, or this page is not served (see usdaConfig)
+        usdaProxyOff = r.status === 404 ? 'nokey' : 'refused';
+        dbg('warn', 'The site\'s proxy answered HTTP ' + r.status + ' to a USDA lookup; USDA is skipped until the page is reopened');
         return { status: 'skipped' };
       }
-      if (r.status === 401 || r.status === 403) return { status: 'error', error: 'USDA HTTP ' + r.status + (viaProxy ? ' — the site\'s proxy refused the request' : ' — API key rejected?'), tried: tried };
+      if (r.status === 401 || r.status === 403) return { status: 'error', error: 'USDA HTTP ' + r.status + ' — API key rejected?', tried: tried };
       if (r.status === 429) return { status: 'error', error: 'USDA rate limited (HTTP 429)', tried: tried };
       if (!r.ok || !r.json) return { status: 'error', error: 'USDA HTTP ' + r.status, tried: tried };
       var foods = r.json.foods || [];
@@ -1101,6 +1101,10 @@ function lookupUSDA(code, format, cfg) {
       dbg('log', 'USDA: ' + c + ' no gtinUpc match among ' + foods.length + ' hits' + (i + 1 < cands.length ? ', retrying as ' + cands[i + 1] : ''));
       return tryNext(i + 1);
     }, function (err) {
+      if (viaProxy) {   // a refused origin reaches the page as a network error (the browser hides the 403): not a lookup error, tried again on the next lookup
+        dbg('warn', 'USDA lookup through the site\'s proxy failed (' + (err && err.message || err) + '); skipped for this scan');
+        return { status: 'skipped', tried: tried };
+      }
       return { status: 'error', error: 'USDA ' + (err && err.message || err), tried: tried };
     });
   }
@@ -1178,12 +1182,13 @@ function mergeProduct(entry) {
 function getUsdaKey() { return (store.get(LS.usdaKey, '') || '').trim(); }
 // Where USDA lookups go: a key saved here queries api.nal.usda.gov directly; without one, the site's built-in proxy
 // answers when it holds a USDA key (the AI proxy in proxy/ serves GET /usda/foods/search). A proxy that answers 404
-// has no such key, and USDA is skipped for the rest of this page load rather than asked again on every scan.
-var usdaProxyOff = false;
+// has no such key ('nokey'), one that answers 401 or 403 will not serve this page ('refused'); either way USDA is
+// skipped for the rest of this page load rather than asked again on every scan, and never counted as a lookup error.
+var usdaProxyOff = '';
 function usdaConfig() {
   var key = getUsdaKey();
   if (key) return { key: key, proxy: '', token: '', builtIn: false };
-  if (DEFAULT_PROXY && !usdaProxyOff) return { key: '', proxy: DEFAULT_PROXY, token: DEFAULT_PROXY_TOKEN, builtIn: true };
+  if (DEFAULT_PROXY && !usdaProxyOff) return { key: '', proxy: DEFAULT_PROXY.replace(/\/+$/, ''), token: DEFAULT_PROXY_TOKEN, builtIn: true };
   return null;
 }
 function lookup(code, format, opts) {
@@ -2203,8 +2208,9 @@ function sourceRows(entry) {
 // its next lookup, so the label describes what will happen now, not what happened then).
 function usdaSkipLabel() {
   if (getUsdaKey()) return 'No key at the time; queried on the next lookup';
-  if (DEFAULT_PROXY && usdaProxyOff) return 'The site\'s proxy has no USDA key';
-  if (DEFAULT_PROXY) return 'Skipped';
+  if (DEFAULT_PROXY && usdaProxyOff === 'nokey') return 'The site\'s proxy has no USDA key';
+  if (DEFAULT_PROXY && usdaProxyOff) return 'The site\'s proxy did not accept USDA lookups from this page';
+  if (DEFAULT_PROXY) return 'Skipped (the site\'s proxy did not answer)';
   return 'No key';
 }
 function noImage() { return h('div', { class: 'thumb noimg', html: SVG_PHOTO }); }
@@ -2867,7 +2873,8 @@ function renderSettings() {
   $('usdaKey').value = key;
   $('keyStatus').textContent = key ? 'Key saved (' + key.length + ' characters). USDA is queried on every lookup.'
     : DEFAULT_PROXY && !usdaProxyOff ? 'No key saved. USDA lookups go through the site\'s built-in proxy at ' + proxyHost(DEFAULT_PROXY) + '. A key saved here is used instead.'
-    : DEFAULT_PROXY ? 'The site\'s proxy has no USDA key, so USDA lookups are skipped. A key saved here turns them on.'
+    : DEFAULT_PROXY && usdaProxyOff === 'nokey' ? 'The site\'s proxy has no USDA key, so USDA lookups are skipped. A key saved here turns them on.'
+    : DEFAULT_PROXY ? 'The site\'s proxy did not accept USDA lookups from this page, so they are skipped. A key saved here turns them on.'
     : 'No key saved, so USDA lookups are skipped.';
   $('btnCopyLink').classList.toggle('hidden', !key);
   $('linkHint').textContent = key
@@ -4579,7 +4586,7 @@ window.FS = {
   profile: function () { return profile; }, openOnboarding: openOnboarding,
   state: function () { return { cam: cam, tally: tally, log: scanLog, current: current, sheet: sheet.snap, menu: menu }; }, sheet: snapTo,
   estimateResult: estimateResult, rankMenu: rankMenu, scanPhoto: scanPhoto, scanMenu: scanMenu, aiRequest: aiRequest, aiConfig: aiConfig, profileWords: profileWords, showTab: showTab,
-  setDefaultProxy: function (u, t) { DEFAULT_PROXY = u || ''; DEFAULT_PROXY_TOKEN = t || ''; usdaProxyOff = false; renderSettings(); }, usdaConfig: usdaConfig,
+  setDefaultProxy: function (u, t) { DEFAULT_PROXY = u || ''; DEFAULT_PROXY_TOKEN = t || ''; usdaProxyOff = ''; renderSettings(); }, usdaConfig: usdaConfig,
   plan: function () { return plan; }, planPrompt: planPrompt, articles: LEARN_ARTICLES, openArticle: openArticle, renderMarkdown: renderMarkdown, searchArticles: searchArticles, planCSV: planCSV, planText: planText, samplePlan: samplePlan, openPlanWizard: openPlanWizard, wizard: function () { return pw; }, pwGo: pwGo, sanitizeWizard: sanitizeWizard,
   _setFrameSource: function (el) { cam.frameSource = el; }
 };

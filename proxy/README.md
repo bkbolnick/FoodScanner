@@ -35,13 +35,18 @@ into `index.html`, all from repository secrets. You collect the keys and paste t
    | `ANTHROPIC_API_KEY` | the key from step 2 |
    | `USDA_API_KEY` | the key from step 3 (leave out to skip USDA) |
 
+   A `PROXY_TOKEN` secret is optional (see "Keeping strangers out"); if you set one, use letters, digits, dashes and
+   underscores only, since it is written into `index.html` as well as set on the Worker.
+
 5. **Run it.** The workflow runs on every push to `main` that touches `proxy/`, so merging the pull request that
    added it starts the first deploy; later, **Actions** › **Deploy the AI proxy** › **Run workflow** runs it by hand
-   (also in the phone's browser). The run's summary shows the Worker URL, the health check and whether `index.html`
-   was updated. If the secrets were added after the merge, run the workflow by hand once.
+   (also in the phone's browser). The run's summary shows the Worker URL, the health check, whether the Worker
+   reports the USDA route (it does only when `USDA_API_KEY` was set) and whether `index.html` was updated. If the
+   secrets were added after the merge, run the workflow by hand once.
 6. **Check.** The workflow commits `DEFAULT_PROXY` into `index.html`; GitHub Pages publishes it a minute or two
-   later. Open the site, **Settings** › **AI features** should say "Using the site's built-in AI proxy", and the
-   USDA section should say lookups go through it.
+   later. Open the site, **Settings** › **AI features** should say "Using the site's built-in AI proxy", and
+   **Test key** should answer "Proxy works". The USDA section says lookups go through the proxy; if the Worker has no
+   USDA key, the first barcode lookup finds that out and the section then says so.
 
 Changing or rotating a key later: update the repository secret and run the workflow again. A secret you remove from
 GitHub stays on the Worker; delete it in the Cloudflare dashboard (the Worker › **Settings** › **Variables and
@@ -60,7 +65,8 @@ npx wrangler secret put USDA_API_KEY        # optional, from https://fdc.nal.usd
 npx wrangler secret put PROXY_TOKEN         # optional, see "Keeping strangers out" below
 ```
 
-Open the printed URL in a browser: it should say "FoodScanner AI proxy is running."
+Open the printed URL in a browser: the answer starts with "FoodScanner AI proxy is running." and names the USDA route
+when the USDA key is set.
 
 Then point the site at it, one of:
 
@@ -80,11 +86,12 @@ Either way, a key or proxy a user saves under Settings takes precedence over the
   key and streamed back. Only the request fields the app uses are forwarded; server tools, MCP servers and containers
   are refused; the beta header is the Worker's own (so nobody can switch on fast mode at double the price); the
   fallback setting is forced to `default`; `ALLOWED_MODELS` and `MAX_TOKENS` bound what one request can cost.
-- `GET /usda/foods/search?query=…&dataType=Branded&pageSize=25`: the same search the app makes at
-  api.nal.usda.gov, with the Worker's `USDA_API_KEY` added. Only the search fields are forwarded (never a caller's
-  `api_key`) and the page size is capped. Without the secret the route answers 404 and the app stops asking for the
-  rest of the page load. USDA keys are free and allow about 1,000 requests an hour, shared by everyone using the
-  site; a saved key under Settings bypasses the proxy.
+- `GET /usda/foods/search?query=<barcode>&pageSize=25`: the same search the app makes at api.nal.usda.gov, with
+  the Worker's `USDA_API_KEY` added. The query must be a barcode of 8 to 14 digits, the search is always among
+  branded foods and the page size is capped at 25; nothing else a caller sends reaches USDA, so the route is useless
+  as a general search on your key. Without the secret the route answers 404 and the app stops asking for the rest of
+  the page load (a 401 or 403 has the same effect). USDA keys are free and allow about 1,000 requests an hour,
+  shared by everyone using the site; a saved key under Settings bypasses the proxy.
 - `GET /`: a one-line health check.
 
 ## Keeping strangers out
@@ -92,14 +99,16 @@ Either way, a key or proxy a user saves under Settings takes precedence over the
 The Worker URL is public, so someone who finds it could spend on your key. Four layers, in order of strength:
 
 - **Spend limit** on the key in the Anthropic console. The only hard cap. Set it.
-- **Rate limit**: uncomment the `LIMITER` block in `wrangler.toml` and redeploy; more than 30 requests a minute from
-  one address are refused. It counts USDA lookups too.
+- **Rate limit**: on by default (the `ratelimits` block in `wrangler.toml`); more than 30 requests a minute from
+  one address are refused, USDA lookups included. It is what stops a loop from burning the USDA quota or the spend
+  limit; a determined attacker with many addresses gets past it, which is what the spend limit is for.
 - **Allowed origins**: `ALLOWED_ORIGINS` limits browser use to your GitHub Pages site. Scripts can forge the header,
   so this stops casual reuse, not a determined one.
 - **Proxy token**: with `PROXY_TOKEN` set, requests must carry `Authorization: Bearer <token>`. If the token is
   also written into the public `index.html` as `DEFAULT_PROXY_TOKEN` (the phone route's workflow does that when
-  `PROXY_TOKEN` is a repository secret), it only deters scripts that never read the page; it is a real secret only
-  when it is set on the Worker alone and each user pastes it under Settings themselves.
+  `PROXY_TOKEN` is a repository secret; letters, digits, dashes and underscores only), it only deters scripts that
+  never read the page; it is a real secret only when it is set on the Worker alone and each user pastes it under
+  Settings themselves.
 
 The rate limit is counted before the origin and token checks, so guessing a token costs attempts too.
 

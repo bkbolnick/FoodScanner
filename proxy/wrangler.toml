@@ -17,9 +17,10 @@ MAX_TOKENS = "32000"
 #   npx wrangler secret put USDA_API_KEY        (optional: the Worker then answers the app's USDA lookups too)
 #   npx wrangler secret put PROXY_TOKEN         (optional: the app must then send the same token)
 
-# Optional: refuse more than 30 requests a minute from one address. Uncomment to enable.
-# [[unsafe.bindings]]
-# name = "LIMITER"
-# type = "ratelimit"
-# namespace_id = "1001"
-# simple = { limit = 30, period = 60 }
+# More than 30 requests a minute from one address are refused (a barcode lookup is up to four requests, a photo or a
+# menu one, a week of meals one). This is what stops a stranger who found the URL from burning the USDA quota or the
+# Anthropic spend limit in a loop. Remove the block to switch it off.
+[[ratelimits]]
+name = "LIMITER"
+namespace_id = "1001"
+simple = { limit = 30, period = 60 }

@@ -13,8 +13,10 @@ const ALLOWED_HEADERS = 'content-type, authorization, anthropic-version, anthrop
 const KEEP = ['model', 'max_tokens', 'messages', 'system', 'stream', 'output_config', 'fallbacks', 'metadata', 'temperature', 'top_p', 'top_k', 'stop_sequences', 'thinking'];
 const REFUSE = ['tools', 'tool_choice', 'mcp_servers', 'container', 'context_management'];
 const USDA_UPSTREAM = 'https://api.nal.usda.gov/fdc/v1/foods/search';
-const USDA_PARAMS = ['query', 'dataType', 'pageSize', 'pageNumber', 'brandOwner', 'sortBy', 'sortOrder'];   // the only query fields forwarded; api_key is always the Worker's own
-const USDA_MAX_PAGE = 50;   // a barcode lookup asks for 25; USDA's own limit is 200
+// The only search the Worker makes for a caller is the app's own: a barcode (8 to 14 digits) among branded foods, one
+// page of at most 25. Anything else is refused, so the route is worthless as a general USDA search on the owner's key.
+const USDA_QUERY = /^[0-9]{8,14}$/;
+const USDA_MAX_PAGE = 25;
 
 export default {
   async fetch(request, env) {
@@ -22,12 +24,13 @@ export default {
     const cors = corsHeaders(origin, env);
     if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors });
     const url = new URL(request.url);
-    if (request.method === 'GET' && (url.pathname === '/' || url.pathname === '')) {
+    const path = url.pathname.replace(/\/{2,}/g, '/').replace(/(.)\/$/, '$1');   // a base URL pasted with a trailing slash gives '//usda/...'
+    if (request.method === 'GET' && (path === '/' || path === '')) {
       const usda = env.USDA_API_KEY ? ' and GET /usda/foods/search' : '';
       return new Response('FoodScanner AI proxy is running. It only serves POST /v1/messages' + usda + ' for the allowed origins.\n', { status: 200, headers: { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'no-store' } });
     }
-    const isAI = request.method === 'POST' && url.pathname === '/v1/messages';
-    const isUSDA = request.method === 'GET' && url.pathname === '/usda/foods/search';
+    const isAI = request.method === 'POST' && path === '/v1/messages';
+    const isUSDA = request.method === 'GET' && path === '/usda/foods/search';
     if (!isAI && !isUSDA) return reply(404, 'not_found_error', 'Only POST /v1/messages and GET /usda/foods/search are served here.', cors);
     if (isAI && !env.ANTHROPIC_API_KEY) return reply(500, 'api_error', 'The proxy has no ANTHROPIC_API_KEY secret. Run: wrangler secret put ANTHROPIC_API_KEY', cors);
     // The app treats this 404 as "this proxy does not do USDA" and stops asking for the rest of the page load.
@@ -71,15 +74,13 @@ export default {
   }
 };
 
-// USDA FoodData Central search with the Worker's key. Only the listed query fields are forwarded, so a caller cannot
-// swap the key, and the page size is bounded so one call cannot pull a large slice of the database.
+// USDA FoodData Central search with the Worker's key: the query is rebuilt from scratch (a caller's api_key or any
+// other field never reaches USDA), the query must look like a barcode and the page size is bounded.
 async function usdaSearch(url, env, cors) {
-  const q = new URLSearchParams();
-  for (const k of USDA_PARAMS) { const v = url.searchParams.get(k); if (v) q.set(k, v); }
-  const query = q.get('query') || '';
-  if (!query || query.length > 200) return reply(400, 'invalid_request_error', 'A query of up to 200 characters is required.', cors);
-  const size = Number(q.get('pageSize'));
-  if (!(size > 0) || size > USDA_MAX_PAGE || size !== Math.floor(size)) q.set('pageSize', '25');
+  const query = url.searchParams.get('query') || '';
+  if (!USDA_QUERY.test(query)) return reply(400, 'invalid_request_error', 'The query must be a barcode of 8 to 14 digits.', cors);
+  const size = Number(url.searchParams.get('pageSize'));
+  const q = new URLSearchParams({ query, dataType: 'Branded', pageSize: String(size > 0 && size <= USDA_MAX_PAGE && size === Math.floor(size) ? size : USDA_MAX_PAGE) });
   q.set('api_key', env.USDA_API_KEY);
   let upstream;
   try { upstream = await fetch(USDA_UPSTREAM + '?' + q.toString(), { headers: { accept: 'application/json' } }); }
