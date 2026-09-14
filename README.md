@@ -22,10 +22,10 @@ type, semantic colours in light and dark, a bottom tab bar, grouped settings and
 
 1. Open the page in Safari on your iPhone (it must be served over HTTPS, which GitHub Pages does). Optionally
    add it to the Home Screen; it then opens full screen like an app.
-2. Tap **Start camera** and allow camera access. The camera fills the screen; hold the barcode inside the marked
-   region, roughly 10–15 cm from the lens. It detects EAN-13, EAN-8, UPC-A and UPC-E continuously. A beep and a
+2. On the **Analyze** tab tap **Scan a barcode** and allow camera access. The camera fills the screen; hold the
+   barcode inside the marked region, roughly 10–15 cm from the lens. It detects EAN-13, EAN-8, UPC-A and UPC-E continuously. A beep and a
    green flash of the corner marks mean a code was read. The same code is ignored while it stays in view and for
-   3 seconds after. Floating buttons offer **Enter a code**, **Stop camera** and, when the phone has one, the torch.
+   3 seconds after. Floating buttons offer **Enter a code**, **Stop scanning** and, when the phone has one, the torch.
 3. Or type a barcode into **Or enter a code** and tap **Look up**. While the camera is running, tap
    **Enter a code** to bring the field back; scanning pauses while you type.
 4. The result opens in a sheet from the bottom. Drag the grabber (or tap it) to park it at a peek, half or full
@@ -37,14 +37,15 @@ type, semantic colours in light and dark, a bottom tab bar, grouped settings and
    of serving size, carbs, sugars, fiber, protein and ingredients no source provided. Below that: ingredients, NOVA
    group, Nutri-Score, additives, categories, a **Sources** section saying what each database returned, a
    per-source coverage table, and **Refresh** (bypasses the cache), **Open in Open Food Facts / USDA** and **Copy JSON**.
-5. **Scan a photo** (on the Scan screen, next to Start camera, or the camera button while scanning) reads a photo
+5. **Photograph food** (on the Analyze screen, next to Scan a barcode, or the camera button while scanning) reads a photo
    of a product, a dish or a meal with no barcode: the model names it, estimates the nutrition of the portion
    shown, reads the ingredients and allergens off the label when one is legible, and the result opens in the same
    sheet, marked **Estimated from the photo** with a confidence level and an **AI estimate** source row instead of
    database rows. A legible barcode in the photo is looked up in the databases instead. Needs the site's built-in proxy or
    a key of your own (see **AI features**).
-6. **History** (on the Scan screen, or the clock button while scanning) opens the coverage tally (scans, found in
-   Open Food Facts, found in USDA, found in neither, found-but-incomplete, lookup errors) and the scan history with
+6. **History** (on the Analyze screen, or the clock button while scanning) opens the coverage tally (barcode scans,
+   photo estimates, found in Open Food Facts, found in USDA, found in neither, found-but-incomplete, lookup errors)
+   and the scan history with
    each entry's sources, score, warnings and missing fields; photo scans are listed as **AI estimate** and do not
    count in the tally. **Copy log as CSV** copies the log to the clipboard; **Share CSV** opens the iOS share sheet.
    Tap an entry to reopen its result.
