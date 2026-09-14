@@ -3677,14 +3677,15 @@ function mealProps() {
 var MEAL_SCHEMA = aiSchemaObject(mealProps());
 var GROCERY_CATS = [['produce', 'Produce'], ['protein', 'Protein'], ['dairy', 'Dairy'], ['pantry', 'Pantry'], ['frozen', 'Frozen']];
 function grocerySchema() { var p = {}; GROCERY_CATS.forEach(function (c) { p[c[0]] = { type: 'array', items: { type: 'string' } }; }); return aiSchemaObject(p); }
+// The week is asked for as one flat list of meals, each tagged with its day, rather than days that each hold meal and
+// snack lists: a meal object nested twice inside a days array made the API's compiled grammar too large ("The compiled
+// grammar is too large", HTTP 400), while one array of meal objects is the shape the menu scanner already uses. The
+// app regroups the list into days in cleanWeek, so the stored plan keeps its days/meals/snacks form.
 var WEEK_SCHEMA = aiSchemaObject({
   weekNumber: { type: 'integer' },
   theme: { type: 'string', description: 'One line on what this week emphasises, or empty' },
-  days: { type: 'array', items: aiSchemaObject({
-    dayName: { type: 'string', description: 'Monday, Tuesday, and so on' },
-    meals: { type: 'array', items: MEAL_SCHEMA },
-    snacks: { type: 'array', items: MEAL_SCHEMA, description: 'Empty when snacks were not requested' }
-  }) },
+  meals: { type: 'array', items: aiSchemaObject(Object.assign({ day: { type: 'string', description: 'Monday, Tuesday, and so on' } }, mealProps())),
+    description: 'Every meal and snack of the week in day order: all of Monday (its meals, then its snacks, with mealType Snack), then Tuesday, and so on' },
   groceryList: grocerySchema(),
   prepPlan: aiSchemaObject({ batchCookingTasks: { type: 'array', items: { type: 'string' }, description: 'Tasks for one batch-cooking session that cover the week' }, noPrepAlternatives: { type: 'array', items: { type: 'string' }, description: 'Shortcuts that need no cooking' } })
 });
@@ -3698,7 +3699,7 @@ function planPrompt(w, weekNo, previousTitles) {
   lines.push('', 'USER PROFILE:');
   lines.push('- Diet pattern: ' + w.diet);
   lines.push('- Meals per day: ' + w.mealsPerDay);
-  if (w.snacks) lines.push('- Include 1 to 2 healthy snacks a day (in the snacks list, not the meals list)'); else lines.push('- No snacks');
+  if (w.snacks) lines.push('- Include 1 to 2 healthy snacks a day (as entries with mealType Snack, after that day\'s meals)'); else lines.push('- No snacks');
   if (w.leftovers) lines.push('- Design meals that create reusable leftovers');
   lines.push('- Meal sizing: ' + labelOf(MEAL_SIZING, w.sizing));
   if (w.useCalories) lines.push('- Target calories: ' + calRange(w)[0] + ' to ' + calRange(w)[1] + ' per day');
@@ -3716,7 +3717,7 @@ function planPrompt(w, weekNo, previousTitles) {
   if (w.kits) lines.push('- Meal kits or delivery may be suggested as occasional alternatives (in the no-prep list)');
   lines.push('', 'SCORING: the app scores every meal from 0 to 100 the way it scores packaged food. ' + profileWords() + ' Write meals that score well on that.');
   lines.push('', 'REQUIREMENTS:');
-  lines.push('1. Seven days, ' + w.mealsPerDay + ' meals each (mealType Breakfast, Lunch, Dinner' + (w.mealsPerDay > 3 ? ', then Meal' : w.mealsPerDay < 3 ? '; use the two that fit the user best' : '') + '). Each meal: title, portion sizes, ingredients with quantities, preparation steps, prep time, tags.');
+  lines.push('1. Seven days, Monday to Sunday, ' + w.mealsPerDay + ' meals each (mealType Breakfast, Lunch, Dinner' + (w.mealsPerDay > 3 ? ', then Meal' : w.mealsPerDay < 3 ? '; use the two that fit the user best' : '') + '). List every meal in the meals array in day order, each tagged with its day. Each meal: title, portion sizes, ingredients with quantities, preparation steps, prep time, tags.');
   lines.push('2. Every meal and snack carries a nutrition estimate for one serving: serving_grams, kcal, carbs, sugars, fiber, protein, fat, sat_fat, sodium_mg, nova, allergens, may_contain, vegan, vegetarian.');
   if (foodOrderOn(w)) lines.push('3. CRITICAL: give EVERY meal a specific foodOrderTip: the order to eat it for blood sugar stability (fiber and vegetables first, then protein and fat, then carbohydrates), naming that meal\'s ingredients.'); else lines.push('3. Leave foodOrderTip empty.');
   if (w.tips.portions) lines.push('4. Include portion guidance with visual cues in the portions field (for example "protein about the size of your palm").');
@@ -3760,11 +3761,29 @@ function cleanMeal(m) {
   return Object.assign({}, m, { title: String(m.title || 'Untitled').trim(), mealType: String(m.mealType || 'Meal'), portions: String(m.portions || ''), ingredients: arr(m.ingredients), steps: arr(m.steps), tags: arr(m.tags), foodOrderTip: String(m.foodOrderTip || ''),
     prepTime: toNum(m.prepTime), allergens: arr(m.allergens), may_contain: arr(m.may_contain) });
 }
+var WEEKDAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+function dayLabel(v, i) {
+  var t = String(v || '').trim();
+  for (var k = 0; k < WEEKDAYS.length; k++) if (t.toLowerCase().indexOf(WEEKDAYS[k].toLowerCase().slice(0, 3)) === 0) return WEEKDAYS[k];   // "monday", "Mon", "MONDAY:" all count
+  return t || 'Day ' + (i + 1);
+}
+// Accepts both shapes: the stored plan (days, each with meals and snacks) and the model's answer (one flat list of
+// meals tagged with a day; mealType Snack marks a snack). Days keep the order in which they first appear.
 function cleanWeek(wk, n) {
   var out = { weekNumber: n, theme: String((wk && wk.theme) || ''), days: [], groceryList: {}, prepPlan: { batchCookingTasks: [], noPrepAlternatives: [] } };
-  (Array.isArray(wk && wk.days) ? wk.days : []).forEach(function (d, i) {
-    out.days.push({ dayName: String((d && d.dayName) || 'Day ' + (i + 1)), meals: (Array.isArray(d && d.meals) ? d.meals : []).map(cleanMeal), snacks: (Array.isArray(d && d.snacks) ? d.snacks : []).map(cleanMeal) });
-  });
+  if (Array.isArray(wk && wk.days)) {
+    wk.days.forEach(function (d, i) {
+      out.days.push({ dayName: String((d && d.dayName) || 'Day ' + (i + 1)), meals: (Array.isArray(d && d.meals) ? d.meals : []).map(cleanMeal), snacks: (Array.isArray(d && d.snacks) ? d.snacks : []).map(cleanMeal) });
+    });
+  } else {
+    var byDay = {};
+    (Array.isArray(wk && wk.meals) ? wk.meals : []).forEach(function (m) {
+      if (!m || typeof m !== 'object') return;
+      var name = dayLabel(m.day, out.days.length), day = byDay[name];
+      if (!day) { day = byDay[name] = { dayName: name, meals: [], snacks: [] }; out.days.push(day); }
+      (String(m.mealType || '') === 'Snack' ? day.snacks : day.meals).push(cleanMeal(m));
+    });
+  }
   GROCERY_CATS.forEach(function (c) { var l = wk && wk.groceryList && wk.groceryList[c[0]]; out.groceryList[c[0]] = Array.isArray(l) ? l.map(String).filter(Boolean) : []; });
   var pp = (wk && wk.prepPlan) || {};
   out.prepPlan.batchCookingTasks = Array.isArray(pp.batchCookingTasks) ? pp.batchCookingTasks.map(String) : [];
@@ -3793,8 +3812,9 @@ function generateNextWeek() {
   dbg('log', 'Plan: generating week ' + n + ' of ' + d.form.weeks);
   aiRequest({ system: PLAN_SYSTEM, content: [{ type: 'text', text: planPrompt(d.form, n, prev) }], schema: WEEK_SCHEMA, effort: 'high', maxTokens: 32000, stream: true, timeoutMs: 900000, signal: plan.ctrl ? plan.ctrl.signal : null, cutHint: 'Try fewer meals a day or no snacks.',
     onProgress: function (txt) {
-      var days = (txt.match(/"dayName"/g) || []).length;
-      plan.progress = 'Week ' + n + ' of ' + d.form.weeks + ': ' + (days ? 'day ' + Math.min(7, days) + ' of 7' : 'thinking…') + (days >= 7 ? ', grocery list and prep plan' : '');
+      var seen = {}, days = 0, m, re = /"day"\s*:\s*"([^"]*)"/g;
+      while ((m = re.exec(txt))) { var k = dayLabel(m[1], days); if (!seen[k]) { seen[k] = 1; days++; } }
+      plan.progress = 'Week ' + n + ' of ' + d.form.weeks + ': ' + (days ? 'day ' + Math.min(7, days) + ' of 7' : 'thinking…') + (/"groceryList"/.test(txt) ? ', grocery list and prep plan' : '');
       var el = $('planProgress'); if (el) el.textContent = plan.progress;
     } }).then(function (wk) {
     if (plan.data !== d) return;   // a newer plan replaced this one
