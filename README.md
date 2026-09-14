@@ -92,6 +92,13 @@ is embedded in the page, so it works offline. Educational content only, not medi
 
 ## AI features
 
+**Built-in proxy (AI for everyone).** `proxy/` holds a small Cloudflare Worker that keeps the Anthropic key on
+Cloudflare and forwards the site's requests. Deploy it (five minutes, free tier, steps in `proxy/README.md`), set
+`DEFAULT_PROXY` near the top of the script in `index.html` to the Worker URL, and every visitor gets the photo scan,
+the menu scanner and the meal planner with nothing to type. For one phone only, open `…/#proxy=<worker url>` instead
+and agree when the app asks. A key or proxy a user saves under Settings always takes precedence over the built-in one.
+
+
 The photo scan, the menu scanner and the meal planner call the Claude API (`claude-opus-5`, Messages API with a
 JSON schema for every answer). Under **Settings › AI features** paste an Anthropic API key, or a proxy URL: with a
 key the browser calls `api.anthropic.com` directly and the key is stored only in this browser's localStorage and
