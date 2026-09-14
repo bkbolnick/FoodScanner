@@ -1,4 +1,5 @@
-# Cloudflare Worker that holds the Anthropic API key for FoodScanner. Deploy with: npx wrangler deploy
+# Cloudflare Worker that holds the API keys for FoodScanner. Deploy with: npx wrangler deploy, or from a phone through
+# .github/workflows/deploy-proxy.yml (see README.md).
 name = "foodscanner-proxy"
 main = "worker.js"
 compatibility_date = "2025-06-01"
@@ -11,8 +12,9 @@ ALLOWED_MODELS = "claude-opus-5"
 # Upper bound on max_tokens per request (a week of meals asks for 32000).
 MAX_TOKENS = "32000"
 
-# Secrets are set once and never written to this file:
-#   npx wrangler secret put ANTHROPIC_API_KEY   (required)
+# Secrets are set once and never written to this file (the deploy workflow sets them from repository secrets):
+#   npx wrangler secret put ANTHROPIC_API_KEY   (required for the AI features)
+#   npx wrangler secret put USDA_API_KEY        (optional: the Worker then answers the app's USDA lookups too)
 #   npx wrangler secret put PROXY_TOKEN         (optional: the app must then send the same token)
 
 # Optional: refuse more than 30 requests a minute from one address. Uncomment to enable.

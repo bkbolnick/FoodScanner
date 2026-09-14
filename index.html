@@ -588,7 +588,7 @@ body.ob-open, body.dbg-open { overflow: hidden; }
     </div>
     <div class="group-f" id="keyStatus"></div>
     <div class="group-f" id="linkHint"></div>
-    <div class="group-f">Optional second source. The key is stored only in this browser and sent only to api.nal.usda.gov. <a href="https://fdc.nal.usda.gov/api-key-signup" target="_blank" rel="noopener noreferrer">Get a free API key</a>.</div>
+    <div class="group-f">Optional second source. A key saved here is stored only in this browser and sent only to api.nal.usda.gov. <a href="https://fdc.nal.usda.gov/api-key-signup" target="_blank" rel="noopener noreferrer">Get a free API key</a>.</div>
 
     <div class="group-h">AI features</div>
     <div class="group">
@@ -728,9 +728,10 @@ var OFF_FIELDS = ['code', 'product_name', 'product_name_en', 'generic_name', 'br
   'image_front_thumb_url', 'image_small_url', 'image_url'].join(',');
 var USDA_BASE = 'https://api.nal.usda.gov/fdc/v1/foods/search';
 var ZXING_FALLBACK_URL = 'https://unpkg.com/@zxing/browser@0.2.1/umd/zxing-browser.min.js';
-// A proxy that holds the Anthropic key (see proxy/README.md). Filled in, it turns the photo scan, the menu scanner and
-// the meal planner on for everyone who opens the site, with no key to type. Empty means each user brings their own key
-// or proxy under Settings. A key or proxy saved there always wins over these.
+// A proxy that holds the site's keys (see proxy/README.md). Filled in, it turns the photo scan, the menu scanner and
+// the meal planner on for everyone who opens the site, with no key to type, and answers USDA lookups when the Worker
+// was given a USDA key too. Empty means each user brings their own keys or proxy under Settings. A key or proxy saved
+// there always wins over these. The deploy workflow (.github/workflows/deploy-proxy.yml) fills DEFAULT_PROXY in.
 var DEFAULT_PROXY = '';          // e.g. 'https://foodscanner-proxy.example.workers.dev'
 var DEFAULT_PROXY_TOKEN = '';    // only if the Worker was deployed with PROXY_TOKEN; in a public page it deters scripts, it is not a secret
 var LS = { usdaKey: 'fs.usdaKey', decoder: 'fs.decoder', tally: 'fs.tally.v1', log: 'fs.log.v1', cachePrefix: 'fs.cache.v4.', oldCachePrefixes: ['fs.cache.v1.', 'fs.cache.v2.', 'fs.cache.v3.'],
@@ -1065,8 +1066,11 @@ function usdaCandidates(code, format) {
   addForms(code);
   return out;
 }
-function lookupUSDA(code, format, apiKey) {
-  if (!apiKey) return Promise.resolve({ status: 'skipped' });
+function lookupUSDA(code, format, cfg) {
+  if (!cfg) return Promise.resolve({ status: 'skipped' });
+  var viaProxy = !cfg.key;
+  var headers = { 'Accept': 'application/json' };
+  if (viaProxy && cfg.token) headers['Authorization'] = 'Bearer ' + cfg.token;
   var cands = usdaCandidates(code, format);
   var tried = [];
   var want = stripLeadingZeros(code);
@@ -1080,9 +1084,15 @@ function lookupUSDA(code, format, apiKey) {
     if (i >= cands.length) return Promise.resolve({ status: 'not_found', tried: tried });
     var c = cands[i];
     tried.push(c);
-    var url = USDA_BASE + '?query=' + encodeURIComponent(c) + '&dataType=Branded&pageSize=25&api_key=' + encodeURIComponent(apiKey);
-    return fetchJSON(url, { headers: { 'Accept': 'application/json' } }).then(function (r) {
-      if (r.status === 401 || r.status === 403) return { status: 'error', error: 'USDA HTTP ' + r.status + ' — API key rejected?', tried: tried };
+    var params = '?query=' + encodeURIComponent(c) + '&dataType=Branded&pageSize=25';
+    var url = viaProxy ? cfg.proxy + '/usda/foods/search' + params : USDA_BASE + params + '&api_key=' + encodeURIComponent(cfg.key);
+    return fetchJSON(url, { headers: headers }).then(function (r) {
+      if (viaProxy && r.status === 404) {   // the site's proxy has no USDA key (see usdaConfig)
+        usdaProxyOff = true;
+        dbg('warn', 'The site\'s proxy does not serve USDA lookups; USDA is skipped until the page is reopened');
+        return { status: 'skipped' };
+      }
+      if (r.status === 401 || r.status === 403) return { status: 'error', error: 'USDA HTTP ' + r.status + (viaProxy ? ' — the site\'s proxy refused the request' : ' — API key rejected?'), tried: tried };
       if (r.status === 429) return { status: 'error', error: 'USDA rate limited (HTTP 429)', tried: tried };
       if (!r.ok || !r.json) return { status: 'error', error: 'USDA HTTP ' + r.status, tried: tried };
       var foods = r.json.foods || [];
@@ -1166,27 +1176,37 @@ function mergeProduct(entry) {
 
 /* --------------------------------------------------------------- lookup */
 function getUsdaKey() { return (store.get(LS.usdaKey, '') || '').trim(); }
+// Where USDA lookups go: a key saved here queries api.nal.usda.gov directly; without one, the site's built-in proxy
+// answers when it holds a USDA key (the AI proxy in proxy/ serves GET /usda/foods/search). A proxy that answers 404
+// has no such key, and USDA is skipped for the rest of this page load rather than asked again on every scan.
+var usdaProxyOff = false;
+function usdaConfig() {
+  var key = getUsdaKey();
+  if (key) return { key: key, proxy: '', token: '', builtIn: false };
+  if (DEFAULT_PROXY && !usdaProxyOff) return { key: '', proxy: DEFAULT_PROXY, token: DEFAULT_PROXY_TOKEN, builtIn: true };
+  return null;
+}
 function lookup(code, format, opts) {
   opts = opts || {};
   var cacheKey = LS.cachePrefix + code;
-  var apiKey = getUsdaKey();
+  var uc = usdaConfig();
   var cached = opts.bypassCache ? null : store.getJSON(cacheKey, null);
   if (cached && cached.barcode === code) {
     dbg('log', 'Cache hit for ' + code + ' (fetched ' + cached.fetchedAt + ')');
     var cu = cached.usda || { status: 'skipped' };
-    if (!apiKey && cu.status === 'error') { cached.usda = { status: 'skipped', codeUsed: null, error: null, tried: [], totalHits: null, fdcId: null, norm: null }; store.setJSON(cacheKey, cached); }
+    if (!uc && cu.status === 'error') { cached.usda = { status: 'skipped', codeUsed: null, error: null, tried: [], totalHits: null, fdcId: null, norm: null }; store.setJSON(cacheKey, cached); }
     // A record cached without a USDA answer (no key at the time, or an error) is upgraded with a USDA query now,
     // errors no more often than USDA_RETRY_MS. The cached data is shown after USDA_UPGRADE_WAIT_MS even if USDA is slow.
-    var retry = apiKey && (cu.status === 'skipped' || (cu.status === 'error' && (!cu.erroredAt || now() - cu.erroredAt > USDA_RETRY_MS)));
-    if (cu.status === 'error' && apiKey && !retry) {
+    var retry = !!uc && (cu.status === 'skipped' || (cu.status === 'error' && (!cu.erroredAt || now() - cu.erroredAt > USDA_RETRY_MS)));
+    if (cu.status === 'error' && uc && !retry) {
       // Recent USDA failure: do not hammer USDA, and do not count a lookup error for a request that was never made.
       dbg('log', 'USDA errored ' + Math.round((now() - cu.erroredAt) / 1000) + ' s ago; not retrying yet');
       var view = Object.assign({}, cached, { usda: { status: 'skipped', codeUsed: null, error: cu.error, erroredAt: cu.erroredAt, tried: [], totalHits: null, fdcId: null, norm: null } });
       return Promise.resolve({ entry: view, merged: mergeProduct(view), fromCache: true });
     }
     if (retry) {
-      dbg('log', 'Cached record has no USDA answer yet (' + cu.status + ') and a key is set — querying USDA');
-      var usdaP = lookupUSDA(code, cached.format || format, apiKey).then(function (u) {
+      dbg('log', 'Cached record has no USDA answer yet (' + cu.status + ') and USDA is ' + (uc.builtIn ? 'served by the site\'s proxy' : 'a key is set') + ' — querying USDA');
+      var usdaP = lookupUSDA(code, cached.format || format, uc).then(function (u) {
         cached.usda = usdaSummary(u);
         store.setJSON(cacheKey, cached);
         return true;
@@ -1203,7 +1223,7 @@ function lookup(code, format, opts) {
     return Promise.resolve({ entry: cached, merged: mergeProduct(cached), fromCache: true });
   }
   var t0 = now();
-  return Promise.all([lookupOFF(code, format), lookupUSDA(code, format, apiKey)]).then(function (res) {
+  return Promise.all([lookupOFF(code, format), lookupUSDA(code, format, uc)]).then(function (res) {
     var off = res[0], usda = res[1];
     var entry = {
       barcode: code, format: format || null, fetchedAt: isoNow(),
@@ -2175,9 +2195,17 @@ function sourceRows(entry) {
     return h('li', {}, [h('span', { class: 'dot ' + statusColor(status) }), h('div', { class: 'grow' }, [h('div', { text: name }), h('div', { class: 'd', text: detail })])]);
   }
   var od = o.status === 'found' ? 'Found as ' + o.codeUsed : o.status === 'not_found' ? 'Not found (tried ' + (o.tried || []).join(', ') + ')' : o.status === 'error' ? 'Error: ' + sourceName(o.error) : 'Skipped';
-  var ud = u.status === 'skipped' ? (u.error ? 'Skipped after a recent error (' + u.error + '); retried in a minute' : 'No key')
+  var ud = u.status === 'skipped' ? (u.error ? 'Skipped after a recent error (' + u.error + '); retried in a minute' : usdaSkipLabel())
     : u.status === 'found' ? 'Found as ' + u.codeUsed + ' (fdcId ' + u.fdcId + ')' : u.status === 'not_found' ? 'Not found (tried ' + (u.tried || []).join(', ') + ')' : 'Error: ' + u.error;
   return h('ul', { class: 'src' }, [row('Open Food Facts', o.status, od), row('USDA FoodData Central', u.status, ud)]);
+}
+// Why a USDA lookup was skipped, in terms of the current set-up (a record cached before a key was saved is upgraded on
+// its next lookup, so the label describes what will happen now, not what happened then).
+function usdaSkipLabel() {
+  if (getUsdaKey()) return 'No key at the time; queried on the next lookup';
+  if (DEFAULT_PROXY && usdaProxyOff) return 'The site\'s proxy has no USDA key';
+  if (DEFAULT_PROXY) return 'Skipped';
+  return 'No key';
 }
 function noImage() { return h('div', { class: 'thumb noimg', html: SVG_PHOTO }); }
 function renderResult(res) {
@@ -2837,7 +2865,10 @@ function renderSettings() {
   $('btnCopyProfile').classList.toggle('hidden', !profile);
   var key = getUsdaKey();
   $('usdaKey').value = key;
-  $('keyStatus').textContent = key ? 'Key saved (' + key.length + ' characters). USDA is queried on every lookup.' : 'No key saved, so USDA lookups are skipped.';
+  $('keyStatus').textContent = key ? 'Key saved (' + key.length + ' characters). USDA is queried on every lookup.'
+    : DEFAULT_PROXY && !usdaProxyOff ? 'No key saved. USDA lookups go through the site\'s built-in proxy at ' + proxyHost(DEFAULT_PROXY) + '. A key saved here is used instead.'
+    : DEFAULT_PROXY ? 'The site\'s proxy has no USDA key, so USDA lookups are skipped. A key saved here turns them on.'
+    : 'No key saved, so USDA lookups are skipped.';
   $('btnCopyLink').classList.toggle('hidden', !key);
   $('linkHint').textContent = key
     ? 'To set this key on this or another phone, open the copied link once and add that page to the Home Screen. The link contains your key, so keep it to yourself.'
@@ -4548,7 +4579,7 @@ window.FS = {
   profile: function () { return profile; }, openOnboarding: openOnboarding,
   state: function () { return { cam: cam, tally: tally, log: scanLog, current: current, sheet: sheet.snap, menu: menu }; }, sheet: snapTo,
   estimateResult: estimateResult, rankMenu: rankMenu, scanPhoto: scanPhoto, scanMenu: scanMenu, aiRequest: aiRequest, aiConfig: aiConfig, profileWords: profileWords, showTab: showTab,
-  setDefaultProxy: function (u, t) { DEFAULT_PROXY = u || ''; DEFAULT_PROXY_TOKEN = t || ''; renderSettings(); },
+  setDefaultProxy: function (u, t) { DEFAULT_PROXY = u || ''; DEFAULT_PROXY_TOKEN = t || ''; usdaProxyOff = false; renderSettings(); }, usdaConfig: usdaConfig,
   plan: function () { return plan; }, planPrompt: planPrompt, articles: LEARN_ARTICLES, openArticle: openArticle, renderMarkdown: renderMarkdown, searchArticles: searchArticles, planCSV: planCSV, planText: planText, samplePlan: samplePlan, openPlanWizard: openPlanWizard, wizard: function () { return pw; }, pwGo: pwGo, sanitizeWizard: sanitizeWizard,
   _setFrameSource: function (el) { cam.frameSource = el; }
 };

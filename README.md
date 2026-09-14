@@ -50,7 +50,8 @@ type, semantic colours in light and dark, a bottom tab bar, grouped settings and
    Tap an entry to reopen its result.
 7. **Settings** tab: paste a USDA FoodData Central API key (free, from
    https://fdc.nal.usda.gov/api-key-signup) to add USDA as a second source. The key is stored only in this
-   browser's localStorage and is never sent anywhere except api.nal.usda.gov. To make it automatic, tap
+   browser's localStorage and is never sent anywhere except api.nal.usda.gov. Without a key, the site's built-in
+   proxy answers USDA lookups when it was deployed with one (see AI features). To make it automatic, tap
    **Copy link with my key**, open that link once in Safari and add the page to the Home Screen: the link ends in
    `#usda=YOURKEY`, and every launch from that icon re-saves the key (see Notes). Also: decoder preference,
    **Clear cache** and **Clear log and tally**.
@@ -92,11 +93,14 @@ is embedded in the page, so it works offline. Educational content only, not medi
 
 ## AI features
 
-**Built-in proxy (AI for everyone).** `proxy/` holds a small Cloudflare Worker that keeps the Anthropic key on
-Cloudflare and forwards the site's requests. Deploy it (five minutes, free tier, steps in `proxy/README.md`), set
-`DEFAULT_PROXY` near the top of the script in `index.html` to the Worker URL, and every visitor gets the photo scan,
-the menu scanner and the meal planner with nothing to type. For one phone only, open `…/#proxy=<worker url>` instead
-and agree when the app asks. A key or proxy a user saves under Settings always takes precedence over the built-in one.
+**Built-in proxy (AI and USDA for everyone).** `proxy/` holds a small Cloudflare Worker that keeps the Anthropic
+key, and optionally a USDA key, on Cloudflare and forwards the site's requests. It can be deployed from a phone: paste
+the keys into the repository's Actions secrets and the workflow in `.github/workflows/deploy-proxy.yml` deploys the
+Worker and writes its URL into `DEFAULT_PROXY` near the top of the script in `index.html` (steps in
+`proxy/README.md`; a computer with `wrangler` works too). Every visitor then gets the photo scan, the menu scanner,
+the meal planner and USDA lookups with nothing to type. For one phone only, open `…/#proxy=<worker url>` instead and
+agree when the app asks (that covers the AI features, not USDA). A key or proxy a user saves under Settings always
+takes precedence over the built-in one.
 
 
 The photo scan, the menu scanner and the meal planner call the Claude API (`claude-opus-5`, Messages API with a
@@ -167,7 +171,9 @@ On first open the app asks how products should be scored. Both choices can be ch
   added (or removed). UPC-E codes are expanded to UPC-A first. The form that worked is recorded on the card and in
   the log.
 - With a USDA key saved, `https://api.nal.usda.gov/fdc/v1/foods/search` is queried with `dataType=Branded` and
-  the result is matched on `gtinUpc`. USDA is never called without a key.
+  the result is matched on `gtinUpc`. Without a key the same search goes to the built-in proxy's
+  `/usda/foods/search` when the site has one (the proxy adds its own key; a proxy that answers 404 has none, and
+  USDA is skipped for the rest of the page load); with neither, USDA is never called.
 - Opening the app as `https://bkbolnick.github.io/FoodScanner/#usda=YOURKEY` saves that key on load. The part after
   `#` is never sent to any server, so the key stays off GitHub and off GitHub Pages, but the link itself contains
   it, so don't share it. Because a Home Screen icon made from that link re-saves the key on every launch, it also
