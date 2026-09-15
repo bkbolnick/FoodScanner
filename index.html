@@ -862,7 +862,6 @@ var SCAN_INTERVAL_MS = 90;     // target time between decode attempts
 var CONFIRM_READS = 2;         // identical consecutive reads required before accepting a code
 var CONFIRM_WINDOW_MS = 1500;
 var FETCH_TIMEOUT_MS = 15000;
-var PLAN_MAX_TOKENS = 64000;      // a week of meals with its grocery list; thinking counts against this too (the proxy's MAX_TOKENS must be at least as high)
 var USDA_RETRY_MS = 60000;        // do not re-query USDA for a cached product more often than this while it keeps erroring
 var USDA_UPGRADE_WAIT_MS = 4000;  // how long a cached hit waits for a USDA upgrade before showing cached data
 var LOG_MAX = 2000;
@@ -4147,20 +4146,23 @@ function grocerySchema() { var p = {}; GROCERY_CATS.forEach(function (c) { p[c[0
 // snack lists: a meal object nested twice inside a days array made the API's compiled grammar too large ("The compiled
 // grammar is too large", HTTP 400), while one array of meal objects is the shape the menu scanner already uses. The
 // app regroups the list into days in cleanWeek, so the stored plan keeps its days/meals/snacks form.
-var WEEK_SCHEMA = aiSchemaObject({
-  weekNumber: { type: 'integer' },
+// One day at a time. The flat week schema is kept: a plan saved by an earlier version is still read by cleanWeek.
+var DAY_SCHEMA = aiSchemaObject({
+  day: { type: 'string', description: 'Monday, Tuesday, and so on' },
+  meals: { type: 'array', items: aiSchemaObject(mealProps()), description: "This day's meals in order, then its snacks with mealType Snack" }
+});
+var GROCERY_SCHEMA = aiSchemaObject({
   theme: { type: 'string', description: 'One line on what this week emphasises, or empty' },
-  meals: { type: 'array', items: aiSchemaObject(Object.assign({ day: { type: 'string', description: 'Monday, Tuesday, and so on' } }, mealProps())),
-    description: 'Every meal and snack of the week in day order: all of Monday (its meals, then its snacks, with mealType Snack), then Tuesday, and so on' },
   groceryList: grocerySchema(),
   prepPlan: aiSchemaObject({ batchCookingTasks: { type: 'array', items: { type: 'string' }, description: 'Tasks for one batch-cooking session that cover the week' }, noPrepAlternatives: { type: 'array', items: { type: 'string' }, description: 'Shortcuts that need no cooking' } })
 });
 var PLAN_SYSTEM = 'You write practical, appetising meal plans for a consumer food app and answer only with JSON matching the schema. ' + EST_SHARED +
   ' Every meal carries its own nutrition estimate for one serving (the portion described in portions; serving_grams is its weight) so the app can score it. Respect every restriction exactly: an allergen the user avoids must not appear in any meal, not even as may_contain.';
-function planPrompt(w, weekNo, previousTitles) {
+// Everything the model needs to know about the person, shared by the day requests and the shopping request.
+function planProfileLines(w, weekNo, head) {
   var goals = w.goals.slice();
   if (w.primaryGoal && goals.indexOf(w.primaryGoal) > 0) { goals.splice(goals.indexOf(w.primaryGoal), 1); goals.unshift(w.primaryGoal); }
-  var lines = ['Create week ' + weekNo + ' of a ' + w.weeks + '-week personalized meal plan optimized for: ' + goals.map(goalPhrase).join('; ') + (w.primaryGoal ? ' (top priority: ' + goalPhrase(w.primaryGoal) + ')' : '') + '.'];
+  var lines = [head + ' of a ' + w.weeks + '-week personalized meal plan optimized for: ' + goals.map(goalPhrase).join('; ') + (w.primaryGoal ? ' (top priority: ' + goalPhrase(w.primaryGoal) + ')' : '') + '.'];
   if (w.notes) lines.push('Other goals or notes from the user: ' + w.notes);
   lines.push('', 'USER PROFILE:');
   lines.push('- Diet pattern: ' + w.diet);
@@ -4182,16 +4184,37 @@ function planPrompt(w, weekNo, previousTitles) {
   if (w.premade) lines.push('- Can use pre-made grocery items (rotisserie chicken, pre-cut vegetables, and the like)');
   if (w.kits) lines.push('- Meal kits or delivery may be suggested as occasional alternatives (in the no-prep list)');
   lines.push('', 'SCORING: the app scores every meal from 0 to 100 the way it scores packaged food. ' + profileWords() + ' Write meals that score well on that.');
+  return lines;
+}
+// One day of the week. The days already written are named so nothing repeats, and the day carries its own nutrition
+// so the app can score it without waiting for the rest of the week.
+function dayPrompt(d, weekNo, idx, previousTitles) {
+  var w = d.form, dayName = WEEKDAYS[idx] || 'Day ' + (idx + 1);
+  var lines = planProfileLines(w, weekNo, 'Write ' + dayName + ' of week ' + weekNo);
   lines.push('', 'REQUIREMENTS:');
-  lines.push('1. Seven days, Monday to Sunday, ' + w.mealsPerDay + ' meals each (mealType Breakfast, Lunch, Dinner' + (w.mealsPerDay > 3 ? ', then Meal' : w.mealsPerDay < 3 ? '; use the two that fit the user best' : '') + '). List every meal in the meals array in day order, each tagged with its day. Each meal: title, portion sizes, ingredients with quantities, preparation steps, prep time, tags.');
+  lines.push('1. This one day only: ' + dayName + ', ' + w.mealsPerDay + ' meals (mealType Breakfast, Lunch, Dinner' + (w.mealsPerDay > 3 ? ', then Meal' : w.mealsPerDay < 3 ? '; use the two that fit the user best' : '') + ')' + (w.snacks ? ', then 1 to 2 snacks with mealType Snack' : ', no snacks') + '. Set day to ' + dayName + '. Each meal: title, portion sizes, ingredients with quantities, preparation steps, prep time, tags.');
   lines.push('2. Every meal and snack carries a nutrition estimate for one serving: serving_grams, kcal, carbs, sugars, fiber, protein, fat, sat_fat, sodium_mg, nova, allergens, may_contain, vegan, vegetarian.');
   if (foodOrderOn(w)) lines.push('3. CRITICAL: give EVERY meal a specific foodOrderTip: the order to eat it for blood sugar stability (fiber and vegetables first, then protein and fat, then carbohydrates), naming that meal\'s ingredients.'); else lines.push('3. Leave foodOrderTip empty.');
   if (w.tips.portions) lines.push('4. Include portion guidance with visual cues in the portions field (for example "protein about the size of your palm").');
   if (w.tips.fiber) lines.push('5. Emphasise high-fiber foods in every meal.');
-  lines.push('6. A grocery list for the week organised by category (produce, protein, dairy, pantry, frozen), with amounts.');
-  lines.push('7. A prep plan with both batch-cooking tasks and no-prep alternatives.');
-  lines.push('8. No dish repeats within the week unless leftovers were requested' + (previousTitles.length ? ', and no meal may repeat one from the earlier weeks. Already used: ' + previousTitles.join('; ') + '.' : '.'));
-  lines.push('9. Meals should be practical, delicious and within every constraint above.');
+  lines.push('6. Meals should be practical, delicious and within every constraint above.');
+  lines.push('7. No dish may repeat one already in this plan' + (previousTitles.length ? '. Already used: ' + previousTitles.join('; ') + '.' : '.'));
+  if (w.leftovers) lines.push('8. Where it helps, use what an earlier day cooked, and cook enough for a later one.');
+  return lines.join('\n');
+}
+// The shopping and prep for a week, written over the seven days once they exist, so the amounts match what was planned.
+function groceryPrompt(d, weekNo, days) {
+  var w = d.form, lines = planProfileLines(w, weekNo, 'Write the grocery list and prep plan for week ' + weekNo);
+  lines.push('', 'THE WEEK AS PLANNED:');
+  days.forEach(function (day) {
+    lines.push('- ' + day.dayName + ': ' + day.meals.concat(day.snacks || []).map(function (m) {
+      return m.title + ' [' + (Array.isArray(m.ingredients) ? m.ingredients.join(', ') : '') + ']';
+    }).join(' | '));
+  });
+  lines.push('', 'REQUIREMENTS:');
+  lines.push('1. A grocery list for the whole week organised by category (produce, protein, dairy, pantry, frozen), with amounts, adding up what the meals above actually need.');
+  lines.push('2. A prep plan with both batch-cooking tasks and no-prep alternatives.');
+  lines.push('3. A one-line theme for the week, or an empty string.');
   return lines.join('\n');
 }
 function mealPrompt(d, wi, di, mi, isSnack) {
@@ -4202,7 +4225,7 @@ function mealPrompt(d, wi, di, mi, isSnack) {
   if (r.sc && r.sc.score !== null) lines.push('The current one scored ' + r.sc.score + ' of 100 with ' + profileShort() + (r.headline ? ' (' + r.headline + ')' : '') + '. Aim higher.');
   if (r.av && r.av.warn.length) lines.push('It also failed the user\'s avoid list: ' + r.av.warn.join(', ') + '. The replacement must not.');
   lines.push('Do not repeat any of these titles: ' + used.join('; ') + '.');
-  lines.push('', planPrompt(w, wk.weekNumber || wi + 1, []).split('\nREQUIREMENTS:')[0].replace(/^Create week \d+ of a \d+-week personalized meal plan optimized for: /, 'Plan context: a meal plan optimized for: ').trim());
+  lines.push('', planProfileLines(w, wk.weekNumber || wi + 1, 'Plan context: this meal belongs to a meal plan').join('\n').trim());
   lines.push('', 'Include the full nutrition estimate for one serving' + (foodOrderOn(w) ? ' and a specific foodOrderTip' : '; leave foodOrderTip empty') + '.');
   return lines.join('\n');
 }
@@ -4268,38 +4291,102 @@ function startPlan() {
   showTab('plan');
   generateNextWeek();
 }
+// A week used to be one request that streamed for two minutes. Two minutes is a long time to hold a connection open on
+// a phone: a locked screen, a lift, or a handover between Wi-Fi and mobile data kills it, and the whole week was lost
+// with nothing to show for the wait. A week is now eight short requests — a day at a time, then the grocery list and
+// prep plan written over the finished days — and every day is saved the moment it arrives, so a dropped connection
+// costs one day and picks up where it stopped.
+var PLAN_DAYS = 7;
+var PLAN_DAY_TOKENS = 12000;      // one day of meals
+var PLAN_LIST_TOKENS = 8000;      // the grocery list and prep plan over a finished week
+function planTitlesSoFar(d) {
+  var used = [];
+  function take(day) { (day.meals || []).concat(day.snacks || []).forEach(function (m) { if (m && m.title) used.push(m.title); }); }
+  d.weeks.forEach(function (x) { (x.days || []).forEach(take); });
+  if (d.partial) (d.partial.days || []).forEach(take);
+  return used;
+}
+// One day's answer into the shape cleanWeek stores: a named day, its meals, and its snacks in their own list.
+function cleanPlanDay(day, idx) {
+  var out = { dayName: dayLabel(day && day.day, idx), meals: [], snacks: [] };
+  (Array.isArray(day && day.meals) ? day.meals : []).forEach(function (m) {
+    if (!m || typeof m !== 'object') return;
+    (String(m.mealType || '') === 'Snack' ? out.snacks : out.meals).push(m);
+  });
+  return out;
+}
+function renderPlanProgress() { var el = $('planProgress'); if (el) el.textContent = plan.progress; else renderPlanTab(); }
 function generateNextWeek() {
   var d = plan.data;
-  if (!d || d.weeks.length >= d.form.weeks) { plan.busy = false; plan.ctrl = null; if (d) d.done = true; savePlan(); renderPlanTab(); return; }
-  var n = d.weeks.length + 1, prev = [];
-  d.weeks.forEach(function (x) { x.days.forEach(function (dd) { dd.meals.concat(dd.snacks || []).forEach(function (m) { if (m.title) prev.push(m.title); }); }); });
-  plan.busy = true; plan.error = null; plan.progress = 'Week ' + n + ' of ' + d.form.weeks + ': thinking…';
-  plan.ctrl = (typeof AbortController === 'function') ? new AbortController() : null;
-  renderPlanTab();
-  var t0 = now();
-  dbg('log', 'Plan: generating week ' + n + ' of ' + d.form.weeks);
-  requestWakeLock('plan');   // a week streams for minutes; a locked screen would drop it
-  aiRequest({ system: PLAN_SYSTEM, content: [{ type: 'text', text: planPrompt(d.form, n, prev) }], schema: WEEK_SCHEMA, effort: 'high', maxTokens: PLAN_MAX_TOKENS, stream: true, timeoutMs: 900000, signal: plan.ctrl ? plan.ctrl.signal : null, cutHint: 'Try fewer meals a day, no snacks, or fewer weeks at a time.',
-    onProgress: function (txt) {
-      var seen = {}, days = 0, m, re = /"day"\s*:\s*"([^"]*)"/g;
-      while ((m = re.exec(txt))) { var k = dayLabel(m[1], days); if (!seen[k]) { seen[k] = 1; days++; } }
-      plan.progress = 'Week ' + n + ' of ' + d.form.weeks + ': ' + (days ? 'day ' + Math.min(7, days) + ' of 7' : 'thinking…') + (/"groceryList"/.test(txt) ? ', grocery list and prep plan' : '');
-      var el = $('planProgress'); if (el) el.textContent = plan.progress;
-    } }).then(function (wk) {
+  if (!d || d.weeks.length >= d.form.weeks) {
     releaseWakeLock('plan');
-    if (plan.data !== d) return;   // a newer plan replaced this one
+    plan.busy = false; plan.ctrl = null;
+    if (d) { d.done = true; d.partial = null; }
+    savePlan(); renderPlanTab(); return;
+  }
+  var n = d.weeks.length + 1;
+  if (!d.partial || d.partial.weekNumber !== n) d.partial = { weekNumber: n, days: [] };
+  plan.busy = true; plan.error = null;
+  plan.ctrl = (typeof AbortController === 'function') ? new AbortController() : null;
+  plan.progress = 'Week ' + n + ' of ' + d.form.weeks + ': starting…';
+  renderPlanTab();
+  requestWakeLock('plan');
+  planStep();
+}
+function planStep() {
+  var d = plan.data, part = d && d.partial;
+  if (!d || !part) return;
+  if (part.days.length < PLAN_DAYS) planDay(d, part, part.days.length);
+  else planGrocery(d, part);
+}
+function planFail(d, what, err) {
+  releaseWakeLock('plan');
+  if (plan.data !== d) return;
+  var msg = String((err && err.message) || err);
+  dbg('error', 'Plan: ' + what + ' failed: ' + msg);
+  plan.busy = false; plan.ctrl = null; plan.error = msg;
+  savePlan();   // the days already written are kept, so Continue resumes rather than restarts
+  renderPlanTab();
+}
+function planAsk(d, opts) {
+  opts.system = PLAN_SYSTEM;
+  opts.stream = true;
+  opts.signal = plan.ctrl ? plan.ctrl.signal : null;
+  return aiRequest(opts);
+}
+function planDay(d, part, idx) {
+  var n = part.weekNumber, dayName = WEEKDAYS[idx] || 'Day ' + (idx + 1), t0 = now();
+  function say(extra) { plan.progress = 'Week ' + n + ' of ' + d.form.weeks + ': ' + dayName + ', day ' + (idx + 1) + ' of ' + PLAN_DAYS + (extra || ''); renderPlanProgress(); }
+  say('');
+  dbg('log', 'Plan: generating week ' + n + ' of ' + d.form.weeks + ', ' + dayName);
+  planAsk(d, { content: [{ type: 'text', text: dayPrompt(d, n, idx, planTitlesSoFar(d)) }], schema: DAY_SCHEMA,
+    effort: 'high', maxTokens: PLAN_DAY_TOKENS, timeoutMs: 300000, cutHint: 'Try fewer meals a day, or no snacks.',
+    onRetry: function (k, of) { say(' — the connection dropped, trying again (' + k + ' of ' + of + ')'); },
+    onProgress: function (txt) { var m = String(txt).match(/"title"\s*:/g); say(m ? ', ' + m.length + ' meal' + (m.length === 1 ? '' : 's') : ''); }
+  }).then(function (day) {
+    if (plan.data !== d || part !== d.partial) return;
+    part.days.push(cleanPlanDay(day, idx));
+    savePlan();
+    dbg('log', 'Plan: ' + dayName + ' done in ' + Math.round((now() - t0) / 1000) + ' s');
+    planStep();
+  }, function (err) { planFail(d, 'week ' + n + ', ' + dayName, err); });
+}
+function planGrocery(d, part) {
+  var n = part.weekNumber, t0 = now();
+  function say(extra) { plan.progress = 'Week ' + n + ' of ' + d.form.weeks + ': grocery list and prep plan' + (extra || ''); renderPlanProgress(); }
+  say('');
+  dbg('log', 'Plan: generating week ' + n + ' grocery list and prep plan');
+  planAsk(d, { content: [{ type: 'text', text: groceryPrompt(d, n, part.days) }], schema: GROCERY_SCHEMA,
+    effort: 'medium', maxTokens: PLAN_LIST_TOKENS, timeoutMs: 300000, cutHint: 'Try fewer meals a day.',
+    onRetry: function (k, of) { say(' — the connection dropped, trying again (' + k + ' of ' + of + ')'); }
+  }).then(function (g) {
+    if (plan.data !== d || part !== d.partial) return;
     dbg('log', 'Plan: week ' + n + ' done in ' + Math.round((now() - t0) / 1000) + ' s');
-    d.weeks.push(cleanWeek(wk, n));
+    d.weeks.push(cleanWeek({ theme: g && g.theme, days: part.days, groceryList: g && g.groceryList, prepPlan: g && g.prepPlan }, n));
+    d.partial = null;
     savePlan();
     generateNextWeek();
-  }, function (err) {
-    releaseWakeLock('plan');
-    if (plan.data !== d) return;
-    var msg = String(err && err.message || err);
-    dbg('error', 'Plan: week ' + n + ' failed: ' + msg);
-    plan.busy = false; plan.ctrl = null; plan.error = msg;
-    renderPlanTab();
-  });
+  }, function (err) { planFail(d, 'week ' + n + ' grocery list', err); });
 }
 function stopPlan() { if (plan.ctrl) plan.ctrl.abort(); }
 function regenerateMeal(wi, di, mi, isSnack) {
@@ -4382,10 +4469,14 @@ function renderPlanBody() {
     body.appendChild(h('div', { class: 'group' }, [
       h('div', { class: 'row busy-row' }, [h('span', { class: 'spinner', 'aria-hidden': 'true' }), h('span', { class: 'rl' }, [h('span', { class: 't', text: 'Writing your plan…' }), h('span', { class: 'd', id: 'planProgress', text: plan.progress })])]),
       h('button', { class: 'row act', type: 'button', onclick: stopPlan }, 'Stop')]));
-    body.appendChild(h('div', { class: 'group-f', text: 'A week takes a minute or two. Finished weeks appear below as they arrive.' }));
+    body.appendChild(h('div', { class: 'group-f', text: 'A week is written a day at a time, so it is safe to wait: if the connection drops, the days already written are kept and you can carry on from there.' }));
   } else if (plan.error) {
-    body.appendChild(h('div', { class: 'group' }, [h('div', { class: 'row' }, h('span', { class: 'rl' }, [h('span', { class: 't', text: d.weeks.length < d.form.weeks ? 'Week ' + (d.weeks.length + 1) + ' did not finish' : 'Something went wrong' }), h('span', { class: 'd', text: plan.error })])),
-      d.weeks.length < d.form.weeks ? h('button', { class: 'row act', type: 'button', onclick: function () { generateNextWeek(); } }, d.weeks.length ? 'Continue with week ' + (d.weeks.length + 1) : 'Try again') : null,
+    var doneDays = (d.partial && d.partial.days.length) || 0, wkNo = d.weeks.length + 1;
+    var title = d.weeks.length >= d.form.weeks ? 'Something went wrong'
+      : doneDays ? 'Week ' + wkNo + ' stopped after ' + doneDays + ' of ' + PLAN_DAYS + ' days'
+      : 'Week ' + wkNo + ' did not finish';
+    body.appendChild(h('div', { class: 'group' }, [h('div', { class: 'row' }, h('span', { class: 'rl' }, [h('span', { class: 't', text: title }), h('span', { class: 'd', text: plan.error + (doneDays ? ' The ' + doneDays + ' day' + (doneDays === 1 ? '' : 's') + ' already written are kept.' : '') })])),
+      d.weeks.length < d.form.weeks ? h('button', { class: 'row act', type: 'button', onclick: function () { generateNextWeek(); } }, doneDays ? 'Continue week ' + wkNo + ' from day ' + (doneDays + 1) : d.weeks.length ? 'Continue with week ' + (d.weeks.length + 1) : 'Try again') : null,
       h('button', { class: 'row act', type: 'button', onclick: function () {
         var ls = (window.__dbg ? window.__dbg.lines : []).filter(function (l) { return /^(AI |Plan:)/.test(l.msg); }).slice(-14)
           .map(function (l) { return l.t + ' ' + l.level.toUpperCase() + ' ' + l.msg; });
@@ -4860,16 +4951,32 @@ function parseJsonLoose(t) {
   dbg('error', 'Could not read the AI answer as JSON: ' + s.slice(0, 300));
   throw new Error('no JSON object');
 }
+var AI_RETRIES = 2, AI_RETRY_MS = 1500;
 function aiRequest(opts) {
   if (opts.schema && aiNoGrammar.indexOf(opts.schema) >= 0) opts = aiTextFallback(opts);
+  return aiAttempt(opts, 0);
+}
+// A dropped connection on a phone is usually a moment of bad signal, not a bad request, so it is worth asking again
+// before telling anyone. A refusal, a bad request or a stop is not retried: asking again would fail the same way.
+function aiAttempt(opts, tries) {
   return aiRequestOnce(opts).then(null, function (e) {
     if (opts.schema && e && e.grammar) {
       aiNoGrammar.push(opts.schema);
       dbg('warn', 'The API could not compile the answer schema (' + e.message + '); asking for the JSON in the prompt instead');
       return aiRequestOnce(aiTextFallback(opts));
     }
+    if (e && e.network && tries < AI_RETRIES && !(opts.signal && opts.signal.aborted)) {
+      dbg('warn', 'AI request failed on the network (' + e.message + ') — trying again, ' + (tries + 1) + ' of ' + AI_RETRIES);
+      if (opts.onRetry) { try { opts.onRetry(tries + 1, AI_RETRIES); } catch (x) { /* progress only */ } }
+      return new Promise(function (r) { setTimeout(r, AI_RETRY_MS * (tries + 1)); }).then(function () { return aiAttempt(opts, tries + 1); });
+    }
     throw e;
   });
+}
+// How long a request ran, for a message a person can act on.
+function fmtDur(ms) {
+  var s = Math.round(ms / 1000);
+  return s < 60 ? s + ' s' : Math.floor(s / 60) + ' min ' + (s % 60) + ' s';
 }
 function aiRequestOnce(opts) {
   var c = aiConfig();
@@ -4888,6 +4995,21 @@ function aiRequestOnce(opts) {
   var ctrl = (typeof AbortController === 'function') ? new AbortController() : null;
   if (ctrl && opts.signal) opts.signal.addEventListener('abort', function () { ctrl.abort(); }, { once: true });
   var timer = ctrl ? setTimeout(function () { ctrl.abort(); }, opts.timeoutMs || AI.timeoutMs) : null;
+  // A request on a phone dies for reasons the browser will not name: it says only "Load failed". Track how long it
+  // ran, how much of the answer had arrived, and whether the app was put away mid-request, so the card can say which.
+  var t0 = now(), bytes = 0, firstByte = 0, wentAway = false;
+  function onVis() { if (document.visibilityState === 'hidden') wentAway = true; }
+  try { document.addEventListener('visibilitychange', onVis); } catch (e) { /* no document, no listener */ }
+  function netError(err) {
+    var ran = now() - t0;
+    var e2 = new Error(!firstByte && ran < 5000
+      ? 'Could not reach the AI service. Check the connection and try again.'
+      : 'The connection dropped after ' + fmtDur(ran) + (firstByte ? ', ' + Math.max(1, Math.round(bytes / 1024)) + ' KB into the answer' : ', before any of the answer arrived') + '. '
+        + (wentAway ? 'The screen locked or you left the app, which cancels a request that is still running.' : 'A weak signal, or moving between Wi-Fi and mobile data, will do this.'));
+    e2.network = true;
+    e2.cause = String((err && err.message) || err || '');
+    return e2;
+  }
   function finish(json, textBlock) {
     dbg('log', 'AI answer: stop_reason ' + json.stop_reason + (json.usage && json.usage.output_tokens ? ', ' + json.usage.output_tokens + ' output tokens' : '') + ', ' + String(textBlock || '').length + ' characters');
     if (json.stop_reason === 'refusal') throw new Error('The AI declined this request' + (json.stop_details && json.stop_details.explanation ? ': ' + json.stop_details.explanation : '.'));
@@ -4930,10 +5052,12 @@ function aiRequestOnce(opts) {
           reader.read().then(function (r) {
             try {
               if (r.done) { handle('\n\n'); resolve(finish(meta, acc)); return; }
+              if (!firstByte) firstByte = now();
+              bytes += (r.value && r.value.length) || 0;
               handle(dec.decode(r.value, { stream: true }));
               pump();
             } catch (e) { reject(e); }
-          }, reject);
+          }, function (err) { reject((err && err.name === 'AbortError') ? err : netError(err)); });   // the stream died mid-answer, which the browser reports as a bare "Load failed" 
         }
         pump();
       });
@@ -4941,12 +5065,16 @@ function aiRequestOnce(opts) {
     return res.text().then(function (text) { handle(text + '\n\n'); return finish(meta, acc); });
   }, function (err) {
     if (err && err.name === 'AbortError') throw err;   // worded below, where a mid-stream abort lands too
-    throw new Error('Could not reach the AI service: ' + (err && err.message || err));
-  }).then(function (v) { clearTimeout(timer); return v; }, function (e) {
-    clearTimeout(timer);
+    throw netError(err);
+  }).then(function (v) { done(); return v; }, function (e) {
+    done();
     if (e && e.name === 'AbortError') throw new Error(opts.signal && opts.signal.aborted ? 'Stopped.' : 'The AI request timed out. Check the connection and try again.');
     throw e;
   });
+  function done() {
+    clearTimeout(timer);
+    try { document.removeEventListener('visibilitychange', onVis); } catch (e) { /* never listened */ }
+  }
 }
 // A photo from the camera or library, resized so the longest side is at most 1568 px, as a base64 JPEG content block.
 function imageBlock(file) {
@@ -5028,7 +5156,7 @@ function init() {
   $('labelInput').addEventListener('change', function () { var f = this.files && this.files[0]; if (f) scanLabel(f); });
   $('menuInput').addEventListener('change', function () { var f = this.files && this.files[0]; if (f) scanMenu(f); });
   loadPlan();
-  if (plan.data && !plan.data.done && plan.data.weeks.length < plan.data.form.weeks) plan.error = 'Generation was interrupted.';   // resume from the Plan tab
+  if (plan.data && !plan.data.done && plan.data.weeks.length < plan.data.form.weeks) plan.error = 'Generation was interrupted.';   // resume from the Plan tab, carrying on from the last finished day
   $('pwCancel').addEventListener('click', closePlanWizard);
   $('pwBack').addEventListener('click', function () { pwGo(pw.step - 1); });
   $('pwNext').addEventListener('click', function () { if (pw.step < PW_STEPS.length - 1) pwGo(pw.step + 1); else startPlan(); });
@@ -5209,7 +5337,7 @@ window.FS = {
   state: function () { return { cam: cam, tally: tally, log: scanLog, current: current, sheet: sheet.snap, menu: menu }; }, sheet: snapTo,
   estimateResult: estimateResult, rankMenu: rankMenu, scanPhoto: scanPhoto, scanMenu: scanMenu, aiRequest: aiRequest, aiConfig: aiConfig, profileWords: profileWords, showTab: showTab,
   setDefaultProxy: function (u, t) { DEFAULT_PROXY = u || ''; DEFAULT_PROXY_TOKEN = t || ''; usdaProxyOff = ''; renderSettings(); }, usdaConfig: usdaConfig,
-  plan: function () { return plan; }, planPrompt: planPrompt, articles: LEARN_ARTICLES, openArticle: openArticle, renderMarkdown: renderMarkdown, searchArticles: searchArticles, planCSV: planCSV, planText: planText, samplePlan: samplePlan, openPlanWizard: openPlanWizard, wizard: function () { return pw; }, pwGo: pwGo, sanitizeWizard: sanitizeWizard,
+  plan: function () { return plan; }, dayPrompt: dayPrompt, articles: LEARN_ARTICLES, openArticle: openArticle, renderMarkdown: renderMarkdown, searchArticles: searchArticles, planCSV: planCSV, planText: planText, samplePlan: samplePlan, openPlanWizard: openPlanWizard, wizard: function () { return pw; }, pwGo: pwGo, sanitizeWizard: sanitizeWizard,
   enterCode: function (code) { return handleCode(code, null, 'manual'); },
   labelNorm: labelNorm, labelRecord: labelRecord, saveLabelPart: saveLabelPart, removeLabel: removeLabel, scanLabel: scanLabel, pickLabel: pickLabel,
   _setFrameSource: function (el) { cam.frameSource = el; }

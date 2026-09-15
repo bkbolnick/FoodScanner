@@ -80,8 +80,17 @@ with the current profile when reopened; the photo is not kept.
 **Plan** tab: eight short questions (goals with a top priority, calories and nutritional emphasis, meal structure,
 eating style with allergies pre-filled from your avoid list, time and equipment, budget and stores, tips such as
 food-order guidance, then a review with the plan length: 1, 2, 4 or 10 weeks). Answers are kept on the phone and
-reused next time. The model writes one week at a time, streamed so a week can take a minute or two without timing
-out; finished weeks appear as they arrive and a plan interrupted halfway offers to continue. Every meal and snack
+reused next time.
+
+A week is written **a day at a time**: seven short requests, then one more for the grocery list and prep plan over
+the days that were actually planned. It used to be a single request that streamed for two minutes, and two minutes
+is a long time to hold a connection open on a phone — a locked screen, a lift, or a handover between Wi-Fi and
+mobile data would kill it and the whole week was lost with nothing to show for the wait. Now every day is saved the
+moment it arrives, a dropped connection is retried twice on its own, and if it still fails the card says how far it
+got ("Week 1 stopped after 3 of 7 days") and offers to carry on from the next day rather than starting again. A
+plan interrupted by closing the app offers the same. When a request does die, the app says how long it ran, whether
+any of the answer had arrived, and whether the app was put away mid-request — Safari itself reports only "Load
+failed". Finished weeks appear as they arrive. Every meal and snack
 carries its own nutrition estimate and is scored with your profile, with avoid-list warnings, a day average and a
 one-line reason. A meal card opens to show portions, an eating-order tip when requested, ingredients and steps,
 plus **Full score and nutrition** (the result sheet), **Lock** and **Replace** (the model writes a different dish
