@@ -252,6 +252,7 @@ input[type=range] { accent-color: var(--accent); width: 100%; margin: 0; }
 .band.b-red { background: var(--bad-tint); color: var(--red); }
 .score-row .foot { margin-top: 5px; }
 .t-best { color: var(--best); } .t-green { color: var(--green); } .t-orange { color: var(--orange); } .t-red { color: var(--red); }
+.t-accent { color: var(--accent); font-weight: 600; }
 /* the scoring model, drawn: where the food's own quality sits, and where your preferences moved it to */
 .tilt { margin: 16px 0 0; }
 .tilt-track { position: relative; height: 30px; }
@@ -319,9 +320,9 @@ table.cov .has { color: var(--green); } table.cov .no { color: var(--label3); }
 .sec.score > details.disc[open] > summary::after { transform: translateY(-30%) rotate(-135deg); }
 .sec.score > details.disc > summary .rv { letter-spacing: 0; font-weight: 400; font-variant-caps: normal; }
 .sec.nut .sec-f, .sec.score > details.disc .sec-f { margin-top: 0; padding: 10px 0 9px; }
-.sec.nut > .sec-h { display: flex; align-items: baseline; gap: 8px; }
-.sec.nut > .sec-h span:first-child { flex: 1 1 auto; color: var(--label); }
-.sec.nut > .sec-h .basis { font-weight: 500; letter-spacing: 0.04em; color: var(--label2); }
+.sec.nut > .sec-h, .sec-h.split { display: flex; align-items: baseline; gap: 8px; }
+.sec.nut > .sec-h span:first-child, .sec-h.split span:first-child { flex: 1 1 auto; color: var(--label); }
+.sec.nut > .sec-h .basis, .sec-h.split .basis { font-weight: 500; letter-spacing: 0.04em; color: var(--label2); }
 .nut-hero { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 11px 0 9px; border-bottom: 2px solid var(--fill2); }
 .nut-hero .hl { font-size: 1rem; font-weight: 600; }
 .nut-hero .hv { font-size: 1.294rem; font-weight: 700; line-height: 1; }
@@ -407,6 +408,7 @@ table.cov .has { color: var(--green); } table.cov .no { color: var(--label3); }
 [aria-checked=true] > .sw::after { transform: translateX(20px); }
 .row input[type=number] { width: 6em; min-height: 40px; text-align: right; flex: none; background: var(--fill); border-radius: 8px; padding: 6px 10px; -moz-appearance: textfield; }
 .ob-inner textarea { margin: 0 0 24px; }
+.ob-inner input[type=number] { width: 100%; min-height: 48px; margin: 4px 0 24px; background: var(--fill); border-radius: 12px; padding: 10px 14px; font-size: 1.176rem; font-variant-numeric: tabular-nums; -moz-appearance: textfield; }
 .row.chk .box { flex: none; width: 22px; height: 22px; border-radius: 50%; border: 1.5px solid var(--label3); }
 .row.chk[aria-checked=true] .box { background: var(--accent); border-color: var(--accent); -webkit-mask: none; position: relative; }
 .row.chk[aria-checked=true] .box::after { content: ""; position: absolute; left: 7px; top: 3px; width: 5px; height: 10px; border: solid #FFFFFF; border-width: 0 2px 2px 0; transform: rotate(45deg); }
@@ -847,7 +849,7 @@ var ZXING_FALLBACK_URL = 'https://unpkg.com/@zxing/browser@0.2.1/umd/zxing-brows
 var DEFAULT_PROXY = 'https://foodscanner-proxy.bkbolnick.workers.dev';   // kept in step with the deployed Worker by the deploy workflow; a value that is not a workers.dev URL is left alone
 var DEFAULT_PROXY_TOKEN = '';    // only if the Worker was deployed with PROXY_TOKEN; in a public page it deters scripts, it is not a secret
 var LS = { usdaKey: 'fs.usdaKey', decoder: 'fs.decoder', tally: 'fs.tally.v1', log: 'fs.log.v1', labels: 'fs.labels.v1', cachePrefix: 'fs.cache.v4.', oldCachePrefixes: ['fs.cache.v1.', 'fs.cache.v2.', 'fs.cache.v3.'],
-  aiKey: 'fs.ai.key', aiProxy: 'fs.ai.proxy', aiProxyToken: 'fs.ai.proxyToken', menus: 'fs.menus.v1', plan: 'fs.plan.v1', planWizard: 'fs.plan.wizard.v1' };
+  aiKey: 'fs.ai.key', aiProxy: 'fs.ai.proxy', aiProxyToken: 'fs.ai.proxyToken', menus: 'fs.menus.v1', plan: 'fs.plan.v1', planWizard: 'fs.plan.wizard.v1', corrections: 'fs.corrections.v1' };
 var NUT_KEYS = ['kcal', 'carbs', 'sugars', 'fiber', 'protein', 'fat', 'satFat', 'sodiumMg'];
 var NUT_ROWS = [['kcal', 'Calories', 'kcal'], ['carbs', 'Total carbs', 'g'], ['sugars', 'Sugars', 'g'], ['fiber', 'Fiber', 'g'],
   ['netCarbs', 'Net carbs', 'g'], ['protein', 'Protein', 'g'], ['fat', 'Fat', 'g'], ['satFat', 'Saturated fat', 'g'], ['sodiumMg', 'Sodium', 'mg']];
@@ -1252,6 +1254,107 @@ function saveLabelPart(code, kind, part) {
       .slice(LABELS_MAX).forEach(function (k) { delete all[k]; });
   }
   store.setJSON(LS.labels, all);
+}
+// --------------------------------------------------------------- corrections
+// A photo estimate is a guess, and the person holding the plate knows better. When the model breaks a dish into
+// components, any amount can be corrected; the dish is then re-added from its parts, so the number moves for a reason
+// you can follow and nothing you did not touch changes underneath you.
+//
+// Corrections are keyed by the dish's name, not by the photo, so tomorrow's bowl of the same thing starts from what
+// you said today — carried visibly, with one tap to drop it, because the same name is not always the same plate.
+var CORRECTIONS_MAX = 40;
+var COMP_NUT = [['kcal', 'kcal'], ['carbs', 'carbs'], ['sugars', 'sugars'], ['fiber', 'fiber'], ['protein', 'protein'],
+  ['fat', 'fat'], ['sat_fat', 'sat_fat'], ['sodium_mg', 'sodium_mg']];
+// Strips punctuation and spacing, not "everything that is not a-z0-9": the old rule deleted every non-ASCII letter,
+// so a dish named in Greek, Japanese or Arabic keyed to the empty string and its corrections went nowhere.
+var CORR_PUNCT = /[\s\u00a0\u2000-\u206f!"#$%&'()*+,\-./:;<=>?@\[\\\]^_`{|}~]+/g;
+function corrKey(name) { return String(name || '').toLowerCase().replace(CORR_PUNCT, ' ').replace(/\s+/g, ' ').trim(); }
+// Two parts of one plate can be named the same thing, or collapse to the same key. The key carries the position in
+// that case, so correcting one never rewrites the other.
+function componentKeys(cs) {
+  var seen = {}, keys = [];
+  (cs || []).forEach(function (c, i) { var k = corrKey(c && c.name); seen[k] = (seen[k] || 0) + 1; keys.push(k); });
+  return keys.map(function (k, i) { return (k && seen[k] === 1) ? k : (k || 'part') + '#' + i; });
+}
+function loadCorrections() { var o = store.getJSON(LS.corrections, null); return (o && typeof o === 'object' && !Array.isArray(o)) ? o : {}; }
+function correctionRecord(name) { var k = corrKey(name); if (!k) return null; var r = loadCorrections()[k]; return (r && typeof r === 'object' && r.parts) ? r : null; }
+// The cap evicts by a counter rather than by the clock: two corrections saved in the same millisecond must still have
+// an order, and isoNow() does not give one.
+// `key` is the key componentKeys resolved for that part, or just its name. A resolved key for a duplicated name ends
+// in #index, and corrKey strips '#' as punctuation, so the two forms can never be confused for one another.
+function saveCorrection(name, key, grams) {
+  var k = corrKey(name), raw = String(key || '');
+  var ck = raw.indexOf('#') >= 0 ? raw : corrKey(raw);
+  if (!k || !ck) return false;
+  var all = loadCorrections(), rec = all[k] && all[k].parts ? all[k] : { n: 0, at: '', name: String(name || ''), parts: {} };
+  var seq = 0;
+  Object.keys(all).forEach(function (x) { if (all[x] && all[x].n > seq) seq = all[x].n; });
+  rec.n = seq + 1; rec.at = isoNow(); rec.name = String(name || '');
+  if (grams === null) delete rec.parts[ck]; else rec.parts[ck] = grams;
+  if (!Object.keys(rec.parts).length) delete all[k]; else all[k] = rec;
+  var keys = Object.keys(all);
+  if (keys.length > CORRECTIONS_MAX) {
+    keys.sort(function (a, b) { return (all[b].n || 0) - (all[a].n || 0); }).slice(CORRECTIONS_MAX).forEach(function (x) { delete all[x]; });
+  }
+  return store.setJSON(LS.corrections, all);
+}
+function clearCorrections(name) { var all = loadCorrections(), k = corrKey(name); if (!all[k]) return false; delete all[k]; store.setJSON(LS.corrections, all); return true; }
+// Are the components a faithful account of the dish, or did the model contradict itself? If the parts do not add up
+// to the totals it stated, the parts are shown but never scored from: a correction cannot be honest about a sum that
+// was not honest to begin with.
+function componentsUsable(item) {
+  var cs = item && Array.isArray(item.components) ? item.components : [];
+  if (cs.length < 2) return false;
+  var ok = cs.filter(function (c) { return c && toNum(c.grams) > 0; });
+  if (ok.length !== cs.length) return false;
+  var kcal = 0;
+  cs.forEach(function (c) { kcal += toNum(c.kcal) || 0; });
+  var stated = toNum(item.kcal);
+  if (!(stated > 0)) return kcal > 0;
+  return Math.abs(kcal - stated) <= Math.max(25, stated * 0.15);
+}
+// The dish, re-added from its parts with any corrections applied. Returns the item unchanged when there is nothing to
+// apply, so every caller downstream sees one shape.
+function applyCorrections(item) {
+  if (!componentsUsable(item)) return { item: item, applied: [], usable: false };
+  var rec = correctionRecord(item.name), parts = rec ? rec.parts : {};
+  var keys = componentKeys(item.components);
+  var out = {}, applied = [], delta = {}, gramsDelta = 0;
+  COMP_NUT.forEach(function (p) { delta[p[0]] = 0; });
+  Object.keys(item).forEach(function (k) { out[k] = item[k]; });
+  out.components = item.components.map(function (c, i) {
+    var ck = keys[i], was = toNum(c.grams) || 0;
+    var now = Object.prototype.hasOwnProperty.call(parts, ck) ? toNum(parts[ck]) : null;
+    var copy = {};
+    Object.keys(c).forEach(function (k) { copy[k] = c[k]; });
+    copy.key = ck; copy.was = was; copy.corrected = false;   // never inherit a flag from a copy that was stored corrected
+    if (now === null || now < 0 || !isFinite(now) || !was || now === was) return copy;
+    var f = now / was;
+    COMP_NUT.forEach(function (p) {
+      var v = toNum(c[p[0]]);
+      if (v === null) return;
+      var nv = Math.round(v * f * 100) / 100;
+      copy[p[0]] = nv; delta[p[0]] += nv - v;
+    });
+    copy.grams = now; copy.corrected = true;
+    gramsDelta += now - was;
+    applied.push({ name: c.name, key: ck, was: was, now: now });
+    return copy;
+  });
+  if (!applied.length) return { item: out, applied: [], usable: true, carried: false };
+  // The model's own totals are the base, moved by what the correction actually changed. Replacing them with the sum of
+  // the parts instead dumped the whole model-versus-parts gap onto the first edit: a garnish nudged by one gram moved
+  // sodium by 1400 mg and the score from Good to Excellent, which is the opposite of "nothing you did not touch
+  // changes". Anything the parts do not account for stays exactly where the model put it.
+  COMP_NUT.forEach(function (p) {
+    var base = toNum(item[p[0]]);
+    if (base === null) return;
+    out[p[0]] = Math.max(0, Math.round((base + delta[p[0]]) * 100) / 100);
+  });
+  var g = toNum(item.serving_grams);
+  if (g !== null && g > 0) out.serving_grams = Math.max(0, Math.round(g + gramsDelta));
+  out.serving_text = (out.serving_grams || 0) + ' g, as you corrected it';
+  return { item: out, applied: applied, usable: true, carried: true };
 }
 function removeLabel(code) { var all = loadLabels(); if (!all[code]) return false; delete all[code]; store.setJSON(LS.labels, all); return true; }
 // One stored label record → the normalised source shape (the same fields as normOFF), or null when it holds nothing.
@@ -2590,6 +2693,7 @@ function openOnboarding(step) {
 }
 function closeOnboarding() {
   $('onboard').classList.remove('open'); document.body.classList.remove('ob-open');
+  $('onboard').setAttribute('aria-label', 'Scoring setup');
   if (!$('dbgPanel').classList.contains('open')) setBackgroundInert(false);
   restoreFocus(ob.prevFocus); ob.prevFocus = null;
 }
@@ -2827,6 +2931,8 @@ function renderResult(res) {
     var scoreSec = renderScore(sc, !!res.estimate);
     if (!profile) scoreSec.appendChild(h('div', { class: 'sec-f', text: 'Showing the standard score. Choose or customize scoring in Settings.' }));
     box.appendChild(scoreSec);
+    var comps = componentsPanel(res);
+    if (comps) box.appendChild(comps);
   }
   var av = avoidFlags(m, e, profile);
   if (av) box.appendChild(renderAvoid(av));
@@ -2930,6 +3036,81 @@ function labelFill(res) {
     if (removeLabel(code)) { toast('Removed what you added'); redrawCurrent(); }
   } }, 'Remove what I added')]));
   return sec;
+}
+// What the photo was read as, with every amount open to correction. The model's own guess stays visible next to a
+// corrected one, so the card never quietly becomes something the model did not say.
+function componentsPanel(res) {
+  var est = res.estimate;
+  if (!est || est.kind !== 'photo') return null;
+  if (est.item.kind === 'packaged' || est.item.kind === 'ingredient' || est.item.kind === 'not_food') return null;   // a package has a label, not parts
+  var raw = est.raw && Array.isArray(est.raw.components) ? est.raw.components : [];
+  // The parts are shown even when they do not add up to the totals the model stated, because saying what was read is
+  // the point of the panel; they simply cannot be corrected, and the panel says why.
+  if (!est.components || !est.components.length) {
+    if (raw.length < 2) return null;
+    var ro = h('section', { class: 'sec sep' });
+    ro.appendChild(h('div', { class: 'sec-h split' }, [h('span', { text: 'What the photo was read as' }), h('span', { class: 'basis', text: 'confidence' })]));
+    raw.forEach(function (c) {
+      ro.appendChild(h('div', { class: 'row' }, [
+        h('span', { class: 'rl' }, [h('span', { class: 't', text: String(c.name || 'part') + (toNum(c.grams) ? ', about ' + fmtVal(toNum(c.grams), 'g') : '') })]),
+        h('span', { class: 't-' + (c.confidence === 'high' ? 'best' : c.confidence === 'low' ? 'orange' : 'green'), text: c.confidence || 'medium' })
+      ]));
+    });
+    ro.appendChild(h('div', { class: 'sec-f', text: 'These parts do not add up to the totals the model gave for the whole dish, so they are shown but not used to score it, and they cannot be corrected. Photograph it again for a reading that agrees with itself.' }));
+    return ro;
+  }
+  var name = est.item.name, rec = correctionRecord(name);
+  var sec = h('section', { class: 'sec sep' });
+  sec.appendChild(h('div', { class: 'sec-h split' }, [h('span', { text: 'What the photo was read as' }), h('span', { class: 'basis', text: 'confidence' })]));
+  est.components.forEach(function (c) {
+    var was = toNum(c.was), now = toNum(c.grams), tone = c.confidence === 'high' ? 'best' : c.confidence === 'low' ? 'orange' : 'green';
+    sec.appendChild(h('button', { class: 'row act', type: 'button', onclick: function () { correctComponent(name, c); } }, [
+      h('span', { class: 'rl' }, [
+        h('span', { class: 't', text: c.name + ', about ' + fmtVal(now, 'g') }),
+        c.corrected ? h('span', { class: 'd', text: 'You corrected this from ' + fmtVal(was, 'g') + '. Tap to change it again.' })
+                    : h('span', { class: 'd', text: 'Tap to correct the amount' })
+      ]),
+      h('span', { class: 't-' + (c.corrected ? 'accent' : tone), text: c.corrected ? 'yours' : c.confidence || 'medium' })
+    ]));
+  });
+  sec.appendChild(h('div', { class: 'sec-f', text: 'Correcting an amount re-adds the dish from its parts straight away. Nothing you did not touch changes.' }));
+  if (rec) {
+    sec.appendChild(h('div', { class: 'foot note', text: (est.applied && est.applied.length)
+      ? 'Carried from what you corrected on "' + rec.name + '" ' + shortTime(rec.at) + '. The same name is not always the same plate, so check it.'
+      : 'You have corrections saved for "' + rec.name + '", but they name parts this photo was not read as having.' }));
+    sec.appendChild(h('div', { class: 'actions' }, [h('button', { class: 'btn small', type: 'button', onclick: function () {
+      if (clearCorrections(name)) { toast('Back to what the photo said'); redrawCurrent(); relogCurrent(); }
+    } }, 'Use what the photo said')]));
+  }
+  return sec;
+}
+// One amount, corrected. A number field rather than a slider: the person knows the weight, or knows the portion, and
+// a slider would only make them aim.
+function correctComponent(dish, c) {
+  var was = toNum(c.was) || toNum(c.grams) || 0;
+  var body = clear($('obInner'));
+  var input = h('input', { type: 'number', id: 'corrInput', min: '0', max: '5000', step: '1',
+    value: String(toNum(c.grams) || was), inputmode: 'decimal', 'aria-label': 'Amount in grams for ' + c.name });
+  body.appendChild(h('h2', { text: c.name }));
+  body.appendChild(h('p', { text: 'The photo was read as about ' + fmtVal(was, 'g') + '. Put in what it actually was, in grams.' }));
+  body.appendChild(input);
+  body.appendChild(h('div', { class: 'ob-nav' }, [
+    h('button', { class: 'btn', type: 'button', id: 'corrCancel', onclick: closeOnboarding }, 'Cancel'),
+    h('button', { class: 'btn primary', type: 'button', id: 'corrSave', onclick: function () {
+      var v = toNum(input.value);
+      if (v === null || v < 0 || v > 5000) { toast('Put in a weight between 0 and 5000 g'); return; }
+      if (!saveCorrection(dish, c.key, v)) { toast('This part cannot be saved: the dish has no name to keep it against'); return; }
+      closeOnboarding(); toast('Rescored from your correction'); redrawCurrent(); relogCurrent();
+    } }, 'Save')
+  ]));
+  if (c.corrected) body.appendChild(h('div', { class: 'actions' }, [h('button', { class: 'btn small', type: 'button', onclick: function () {
+    saveCorrection(dish, c.key, null); closeOnboarding(); toast('Back to what the photo said'); redrawCurrent(); relogCurrent();
+  } }, 'Reset this one')]));
+  ob.prevFocus = document.activeElement;   // closeOnboarding restores this; without it the focus fell to <body>
+  $('onboard').setAttribute('aria-label', 'Correct ' + c.name);
+  $('onboard').classList.add('open'); document.body.classList.add('ob-open');
+  setBackgroundInert(true);
+  try { input.focus(); input.select(); } catch (err) { /* ignore */ }
 }
 // The single source row of a photo or menu estimate: what the model looked at and how sure it was.
 function estimateRows(res) {
@@ -3763,7 +3944,22 @@ function estItemProps() {
 }
 var PHOTO_SCHEMA = aiSchemaObject(Object.assign({
   kind: { type: 'string', enum: ['packaged', 'dish', 'drink', 'ingredient', 'not_food'], description: 'What the photo shows' },
-  barcode: { type: 'string', description: 'The barcode digits only when they are printed under a barcode and fully legible; otherwise empty' }
+  barcode: { type: 'string', description: 'The barcode digits only when they are printed under a barcode and fully legible; otherwise empty' },
+  // Broken out so the amounts can be corrected by the person holding the plate, and the dish re-added from its parts.
+  components: { type: 'array', description: 'For a dish or a bowl, the things on the plate, each with its own weight and its own nutrition. Empty for a packaged product or a single ingredient. The parts must add up to the totals above.',
+    items: aiSchemaObject({
+      name: { type: 'string', description: 'What this part is, e.g. "sushi rice" or "soy dressing"' },
+      grams: { type: 'number', description: 'Weight of this part in grams (millilitres for a liquid)' },
+      confidence: { type: 'string', enum: ['high', 'medium', 'low'], description: 'How sure you are of this part and its amount' },
+      kcal: { type: 'number', description: 'Calories in this part' },
+      carbs: { type: 'number', description: 'Total carbohydrate in this part, grams' },
+      sugars: { type: 'number', description: 'Sugars in this part, grams' },
+      fiber: { type: 'number', description: 'Dietary fiber in this part, grams' },
+      protein: { type: 'number', description: 'Protein in this part, grams' },
+      fat: { type: 'number', description: 'Total fat in this part, grams' },
+      sat_fat: { type: 'number', description: 'Saturated fat in this part, grams' },
+      sodium_mg: { type: 'number', description: 'Sodium in this part, milligrams' }
+    }) }
 }, estItemProps()));
 var MENU_SCHEMA = aiSchemaObject({
   readable: { type: 'boolean', description: 'true when the photo shows a menu with legible dishes' },
@@ -3819,13 +4015,18 @@ function estimateNorm(item, opts) {
 // A lookup-shaped result for an estimate: entry + merged product + an `estimate` marker the sheet and the log read.
 function estimateResult(item, opts) {
   opts = opts || {};
+  // Corrections are applied before anything is derived from the item, so the score, the avoid flags, the nutrition
+  // panel and the CSV all read the same corrected numbers with no further plumbing.
+  var raw = item, corr = applyCorrections(item);
+  item = corr.item;
   var conf = /^(high|medium|low)$/.test(String(item.confidence)) ? item.confidence : 'medium';
   var e = { barcode: '', format: null, fetchedAt: isoNow(),
     off: { status: 'skipped', codeUsed: null, storedCode: null, error: null, tried: [], norm: null },
     usda: { status: 'skipped', codeUsed: null, error: null, erroredAt: null, tried: [], totalHits: null, fdcId: null, norm: null },
     ai: { status: 'found', kind: opts.kind || 'photo', confidence: conf, norm: estimateNorm(item, opts) } };
   var note = (opts.kind === 'menu' ? 'Estimated from the menu' : opts.kind === 'plan' ? 'Planned meal, nutrition estimated' : 'Estimated from the photo') + (opts.kind === 'plan' ? '' : ', ' + conf + ' confidence');
-  return { entry: e, merged: mergeProduct(e), fromCache: false, owner: opts.owner || 'scan', estimate: { kind: opts.kind || 'photo', note: note, item: item } };
+  return { entry: e, merged: mergeProduct(e), fromCache: false, owner: opts.owner || 'scan',
+    estimate: { kind: opts.kind || 'photo', note: note, item: item, raw: raw, components: corr.usable ? item.components : null, applied: corr.applied } };
 }
 // The factor that moved a score most, in the words the sheet uses (one line for a list row).
 function scoreHeadline(sc) {
@@ -3922,7 +4123,12 @@ function scanLabel(file) {
 }
 // Re-merge and redraw the product on screen, after its stored label changed underneath it.
 function redrawCurrent() {
-  if (!current || !current.entry || !current.entry.barcode) return;
+  if (!current) return;
+  if (current.estimate && current.estimate.raw) {   // a photo or menu estimate: rebuild from what the model said, not from the corrected copy
+    renderResult(estimateResult(current.estimate.raw, { kind: current.estimate.kind, owner: current.owner }));
+    return;
+  }
+  if (!current.entry || !current.entry.barcode) return;
   var entry = current.entry;
   renderResult({ entry: entry, merged: mergeProduct(entry), fromCache: true });
 }
@@ -3977,6 +4183,22 @@ function renderEstimateError(title, err, retry) {
   focusSheet();
 }
 // A photo scan goes into the log like a scan, but not into the coverage tally: no database was asked anything.
+// A correction made after the scan has to reach the row it was logged under, or History, the tally average and the
+// CSV keep quoting a score the card no longer shows.
+function relogCurrent() {
+  if (!current || !current.estimate || !scanLog.length) return;
+  var top = scanLog[0];
+  if (!top || top.origin !== 'photo' || !top.estimate || (top.name || '') !== (current.merged.name.v || '')) return;
+  var sc = scoreProduct(current.merged, current.entry, profile || { mode: 'standard' });
+  var av = avoidFlags(current.merged, current.entry, profile);
+  top.score = (sc && sc.score !== null) ? sc.score : null;
+  top.scoreMode = sc ? sc.mode : '';
+  top.lowConfidence = !!(sc && sc.score !== null && sc.lowConfidence);
+  top.warnings = av ? av.warn.slice() : [];
+  top.estimate.item = current.estimate.raw || current.estimate.item;
+  store.setJSON(LS.log, scanLog);
+  renderLog(); renderTally();
+}
 function recordEstimate(res) {
   var e = res.entry, m = res.merged;
   var sc = scoreProduct(m, e, profile || { mode: 'standard' }), av = avoidFlags(m, e, profile);
@@ -3984,7 +4206,7 @@ function recordEstimate(res) {
     ts: isoNow(), barcode: '', format: '', name: m.name.v || '',
     score: (sc && sc.score !== null) ? sc.score : null, scoreMode: sc ? sc.mode : '', lowConfidence: !!(sc && sc.score !== null && sc.lowConfidence),
     warnings: av ? av.warn.slice() : [], off: 'skipped', offCode: '', usda: 'skipped', usdaCode: '', missing: [], cached: false, origin: 'photo',
-    estimate: { kind: res.estimate.kind, item: res.estimate.item }
+    estimate: { kind: res.estimate.kind, item: res.estimate.raw || res.estimate.item }   // the model's own reading: corrections are applied again on the way out, never baked in
   });
   if (scanLog.length > LOG_MAX) scanLog.length = LOG_MAX;
   store.setJSON(LS.log, scanLog);
@@ -5568,7 +5790,7 @@ window.FS = {
   setDefaultProxy: function (u, t) { DEFAULT_PROXY = u || ''; DEFAULT_PROXY_TOKEN = t || ''; usdaProxyOff = ''; renderSettings(); }, usdaConfig: usdaConfig,
   plan: function () { return plan; }, dayPrompt: dayPrompt, articles: LEARN_ARTICLES, openArticle: openArticle, renderMarkdown: renderMarkdown, searchArticles: searchArticles, planCSV: planCSV, planText: planText, samplePlan: samplePlan, openPlanWizard: openPlanWizard, wizard: function () { return pw; }, pwGo: pwGo, sanitizeWizard: sanitizeWizard,
   enterCode: function (code) { return handleCode(code, null, 'manual'); },
-  labelNorm: labelNorm, labelRecord: labelRecord, saveLabelPart: saveLabelPart, removeLabel: removeLabel, scanLabel: scanLabel, pickLabel: pickLabel,
+  labelNorm: labelNorm, labelRecord: labelRecord, applyCorrections: applyCorrections, saveCorrection: saveCorrection, componentKeys: componentKeys, clearCorrections: clearCorrections, correctionRecord: correctionRecord, componentsUsable: componentsUsable, saveLabelPart: saveLabelPart, removeLabel: removeLabel, scanLabel: scanLabel, pickLabel: pickLabel,
   _setFrameSource: function (el) { cam.frameSource = el; }
 };
 
