@@ -159,6 +159,10 @@ input[type=range] { accent-color: var(--accent); width: 100%; margin: 0; }
 .tile:active { background: var(--fill); }
 .tile[disabled] { opacity: 0.4; pointer-events: none; }
 .placeholder .idle-history { margin: 20px 0 auto; min-width: 0; flex: none; }
+.flag { display: flex; gap: 10px; align-items: flex-start; margin: 12px 16px 0; padding: 10px 12px; border-radius: 12px; background: var(--warn-tint, rgba(255, 149, 0, 0.12)); }
+.flag-i { flex: none; width: 20px; height: 20px; border-radius: 50%; background: var(--orange); color: #FFFFFF; font-size: 0.8rem; font-weight: 700; display: flex; align-items: center; justify-content: center; margin-top: 1px; }
+.flag-t { font-size: 0.882rem; font-weight: 600; color: var(--label); }
+.flag-d { font-size: 0.824rem; color: var(--label2); line-height: 1.35; margin-top: 2px; }
 .back-link { display: inline-flex; align-items: center; min-height: 44px; margin: 6px 0 -10px -4px; padding: 0 4px; color: var(--accent); font-size: 1.06rem; font-weight: 500; }
 .status { font-size: 0.765rem; color: var(--label2); line-height: 1.35; word-break: break-word; }
 .status.err { color: var(--red); }
@@ -1828,9 +1832,22 @@ function componentWords(c) {
   if (c.key === 'processing') return { title: NOVA_WORDS[c.nova] || 'Processing', value: 'NOVA group ' + c.nova, detail: 'NOVA group ' + c.nova + '. Groups 1 to 4 score 15, 12, 8 and 2.', tone: tone, noun: noun };
   return { title: c.score ? 'Organic label' : 'No organic label', value: '', detail: (c.score ? 'Organic label' : 'No organic label') + ' in Open Food Facts.', tone: tone, noun: noun };
 }
-function renderScore(sc) {
+// Photographed food is scored from what the model can see. How it was cooked is invisible: restaurant and home
+// cooking routinely add salt, sugar, butter and oil that no photo shows, and those are exactly the things the score
+// counts. The flag says so next to the number rather than in the small print.
+function prepFlag() {
+  return h('div', { class: 'flag' }, [
+    h('span', { class: 'flag-i', 'aria-hidden': 'true' }, '!'),
+    h('div', {}, [
+      h('div', { class: 'flag-t', text: 'The score does not know how this was made' }),
+      h('div', { class: 'flag-d', text: 'Salt, sugar, butter and oil added in the kitchen do not show in a photo, so a restaurant or takeaway version is usually saltier and sweeter than this score suggests.' })
+    ])
+  ]);
+}
+function renderScore(sc, estimated) {
   var sec = h('section', { class: 'sec score' });
   if (sc.score === null) {
+    if (estimated) { /* nothing to qualify: there is no score */ }
     sec.appendChild(h('div', { class: 'score-row' }, [h('div', { class: 'score-n none', text: '–', 'aria-hidden': 'true' }), h('div', { class: 'grow' }, [h('div', { class: 'band', text: 'No score' }), h('div', { class: 'foot', text: capitalize(sc.reason) + '.' })])]));
     return sec;
   }
@@ -1845,6 +1862,7 @@ function renderScore(sc) {
       h('div', { class: 'foot', text: standard ? 'Standard score' : 'Your profile: ' + ((profile && profile.name) || 'custom') })
     ])
   ]));
+  if (estimated) sec.appendChild(prepFlag());
   // the three factors that moved the score most, in words; a factor sitting exactly at 50 moved nothing and is not listed
   var reasons = (sc.why || []).filter(function (w) { return w.weight > 0 && byKey[w.key]; }).slice(0, 3);
   if (reasons.length) sec.appendChild(h('ul', { class: 'rsn' }, reasons.map(function (w) {
@@ -2271,7 +2289,7 @@ function renderResult(res) {
   box.appendChild(head);
   var sc = scoreProduct(m, e, profile || { mode: 'standard' });
   if (sc) {
-    var scoreSec = renderScore(sc);
+    var scoreSec = renderScore(sc, !!res.estimate);
     if (!profile) scoreSec.appendChild(h('div', { class: 'sec-f', text: 'Showing the standard score. Choose or customize scoring in Settings.' }));
     box.appendChild(scoreSec);
   }
@@ -3947,7 +3965,12 @@ function renderPlanBody() {
     body.appendChild(h('div', { class: 'group-f', text: 'A week takes a minute or two. Finished weeks appear below as they arrive.' }));
   } else if (plan.error) {
     body.appendChild(h('div', { class: 'group' }, [h('div', { class: 'row' }, h('span', { class: 'rl' }, [h('span', { class: 't', text: d.weeks.length < d.form.weeks ? 'Week ' + (d.weeks.length + 1) + ' did not finish' : 'Something went wrong' }), h('span', { class: 'd', text: plan.error })])),
-      d.weeks.length < d.form.weeks ? h('button', { class: 'row act', type: 'button', onclick: function () { generateNextWeek(); } }, d.weeks.length ? 'Continue with week ' + (d.weeks.length + 1) : 'Try again') : null]));
+      d.weeks.length < d.form.weeks ? h('button', { class: 'row act', type: 'button', onclick: function () { generateNextWeek(); } }, d.weeks.length ? 'Continue with week ' + (d.weeks.length + 1) : 'Try again') : null,
+      h('button', { class: 'row act', type: 'button', onclick: function () {
+        var ls = (window.__dbg ? window.__dbg.lines : []).filter(function (l) { return /^(AI |Plan:)/.test(l.msg); }).slice(-14)
+          .map(function (l) { return l.t + ' ' + l.level.toUpperCase() + ' ' + l.msg; });
+        copyText('FoodScanner v' + APP_VERSION + '\nPlan failed: ' + plan.error + '\n' + ls.join('\n'));
+      } }, 'Copy error details')]));
   }
   if (!wk) {
     if (!plan.busy && !plan.error) body.appendChild(h('div', { class: 'group-f', text: 'No weeks yet.' }));
