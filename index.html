@@ -552,6 +552,7 @@ body.ob-open, body.dbg-open { overflow: hidden; }
       </div>
     </div>
     <input type="file" id="photoInput" accept="image/*" class="hidden" aria-hidden="true" tabindex="-1">
+    <input type="file" id="labelInput" accept="image/*" class="hidden" aria-hidden="true" tabindex="-1">
   </section>
 
   <!-- ============================== MENU ============================== -->
@@ -756,7 +757,7 @@ var ZXING_FALLBACK_URL = 'https://unpkg.com/@zxing/browser@0.2.1/umd/zxing-brows
 // there always wins over these. The deploy workflow (.github/workflows/deploy-proxy.yml) fills DEFAULT_PROXY in.
 var DEFAULT_PROXY = 'https://foodscanner-proxy.bkbolnick.workers.dev';   // kept in step with the deployed Worker by the deploy workflow; a value that is not a workers.dev URL is left alone
 var DEFAULT_PROXY_TOKEN = '';    // only if the Worker was deployed with PROXY_TOKEN; in a public page it deters scripts, it is not a secret
-var LS = { usdaKey: 'fs.usdaKey', decoder: 'fs.decoder', tally: 'fs.tally.v1', log: 'fs.log.v1', cachePrefix: 'fs.cache.v4.', oldCachePrefixes: ['fs.cache.v1.', 'fs.cache.v2.', 'fs.cache.v3.'],
+var LS = { usdaKey: 'fs.usdaKey', decoder: 'fs.decoder', tally: 'fs.tally.v1', log: 'fs.log.v1', labels: 'fs.labels.v1', cachePrefix: 'fs.cache.v4.', oldCachePrefixes: ['fs.cache.v1.', 'fs.cache.v2.', 'fs.cache.v3.'],
   aiKey: 'fs.ai.key', aiProxy: 'fs.ai.proxy', aiProxyToken: 'fs.ai.proxyToken', menus: 'fs.menus.v1', plan: 'fs.plan.v1', planWizard: 'fs.plan.wizard.v1' };
 var NUT_KEYS = ['kcal', 'carbs', 'sugars', 'fiber', 'protein', 'fat', 'satFat', 'sodiumMg'];
 var NUT_ROWS = [['kcal', 'Calories', 'kcal'], ['carbs', 'Total carbs', 'g'], ['sugars', 'Sugars', 'g'], ['fiber', 'Fiber', 'g'],
@@ -1142,16 +1143,78 @@ function srcHas(src, field) {
   var v = src[field];
   return v !== null && v !== undefined && v !== '' && !(Array.isArray(v) && !v.length);
 }
+// ---- what you photographed off the box. Open Food Facts and USDA between them often miss the panel that is printed
+// on the package in your hand, and a product with no nutrition and no ingredients cannot be scored at all. Reading the
+// label is the one source the phone can always reach. It is kept against the barcode, on this phone, under its own key
+// so that refreshing the lookup never throws it away, and it fills only the gaps the databases left.
+var LABELS_MAX = 60;
+function loadLabels() { var o = store.getJSON(LS.labels, null); return (o && typeof o === 'object' && !Array.isArray(o)) ? o : {}; }
+function labelRecord(code) { var l = loadLabels()[code]; return (l && typeof l === 'object') ? l : null; }
+function saveLabelPart(code, kind, part) {
+  var all = loadLabels(), rec = all[code] || {};
+  // A counter, not the clock, decides what is oldest: two labels read in the same second would otherwise be
+  // indistinguishable, and a phone whose clock has moved backwards would throw away the wrong one.
+  var top = 0;
+  Object.keys(all).forEach(function (k) { var n = Number(all[k] && all[k].n); if (isFinite(n) && n > top) top = n; });
+  rec[kind] = part; rec.ts = isoNow(); rec.n = top + 1;
+  all[code] = rec;
+  var codes = Object.keys(all);
+  if (codes.length > LABELS_MAX) {
+    codes.sort(function (a, b) { return (Number(all[b].n) || 0) - (Number(all[a].n) || 0); })
+      .slice(LABELS_MAX).forEach(function (k) { delete all[k]; });
+  }
+  store.setJSON(LS.labels, all);
+}
+function removeLabel(code) { var all = loadLabels(); if (!all[code]) return false; delete all[code]; store.setJSON(LS.labels, all); return true; }
+// One stored label record → the normalised source shape (the same fields as normOFF), or null when it holds nothing.
+function labelNorm(rec) {
+  if (!rec || typeof rec !== 'object') return null;
+  var n = (rec.nutrition && typeof rec.nutrition === 'object') ? rec.nutrition : {};
+  var g = (rec.ingredients && typeof rec.ingredients === 'object') ? rec.ingredients : {};
+  function num(v) { var x = toNum(v); return (x === null || !isFinite(x) || x < 0) ? null : x; }
+  function text(v) { return (typeof v === 'string' && v.trim()) ? v.trim() : null; }
+  function keys(arr) { return (Array.isArray(arr) ? arr : []).map(String).filter(function (k, i, a) { return ALLERGENS[k] && a.indexOf(k) === i; }); }
+  var drink = n.is_drink === true || g.is_drink === true;
+  var grams = num(n.serving_grams); if (grams !== null && grams <= 0) grams = null;
+  var vals = { kcal: num(n.kcal), carbs: num(n.carbs), sugars: num(n.sugars), fiber: num(n.fiber), protein: num(n.protein), fat: num(n.fat), satFat: num(n.sat_fat), sodiumMg: num(n.sodium_mg) };
+  var per100 = emptyNut(), perServing = emptyNut();
+  var haveNut = NUT_KEYS.some(function (k) { return vals[k] !== null; });
+  function rescale(from, factor) { var o = emptyNut(); NUT_KEYS.forEach(function (k) { o[k] = from[k] === null ? null : Math.round(from[k] * factor * 100) / 100; }); return o; }
+  if (haveNut) {
+    // A panel prints one column, sometimes two; the model says which one it copied, and the other is derived from the
+    // serving weight when the panel gives one.
+    if (n.basis === 'per_serving') { perServing = vals; if (grams) per100 = rescale(vals, 100 / grams); }
+    else { per100 = vals; if (grams) perServing = rescale(vals, grams / 100); }
+  }
+  var ingredients = text(g.ingredients);
+  var nova = toNum(g.nova); nova = (nova !== null && nova >= 1 && nova <= 4) ? Math.round(nova) : null;
+  var analysis = [];
+  ['vegan', 'vegetarian'].forEach(function (k) { var v = g[k]; if (v === 'yes') analysis.push(k); else if (v === 'no') analysis.push('non-' + k); else if (v === 'maybe') analysis.push('maybe-' + k); });
+  if (g.palm_oil === 'yes') analysis.push('palm-oil'); else if (g.palm_oil === 'no') analysis.push('palm-oil-free'); else if (g.palm_oil === 'maybe') analysis.push('may-contain-palm-oil');
+  if (!haveNut && !ingredients) return null;
+  return {
+    source: 'Label', name: null, brand: null, image: null, quantity: null,
+    servingSize: text(n.serving_text) || (grams ? grams + (drink ? ' ml' : ' g') : null), servingGrams: grams,
+    per100: per100, perServing: perServing,
+    ingredients: ingredients, nova: nova, nutriscorePoints: null, labelsKnown: false, organic: false, nutriscore: null, nutriscoreNote: null,
+    additives: ingredients ? (Array.isArray(g.additives) ? g.additives.map(function (a) { return String(a).toLowerCase().trim(); }).filter(Boolean) : []) : [],
+    additivesAnalysed: !!ingredients,
+    allergens: keys(g.allergens), traces: keys(g.may_contain), analysis: analysis,
+    categories: null, basis: drink ? 'ml' : 'g', nutritionDataPer: null, url: null
+  };
+}
 function mergeProduct(entry) {
   var srcs = [];
   if (entry.off && entry.off.norm) srcs.push(entry.off.norm);
   if (entry.usda && entry.usda.norm) srcs.push(entry.usda.norm);
+  var lab = entry.barcode ? labelNorm(labelRecord(entry.barcode)) : null;   // the label you photographed: after the databases, so it fills gaps rather than overruling them
+  if (lab) srcs.push(lab);
   if (entry.ai && entry.ai.norm) srcs.push(entry.ai.norm);   // a photo or menu estimate (see estimateNorm)
   function pick(field) {
     for (var i = 0; i < srcs.length; i++) { if (srcHas(srcs[i], field) && NUT_KEYS.indexOf(field) < 0) return { v: srcs[i][field], from: srcs[i].source }; }
     return { v: null, from: null };
   }
-  var m = { barcode: entry.barcode, found: srcs.length > 0, sources: srcs.map(function (s) { return s.source; }) };
+  var m = { barcode: entry.barcode, found: srcs.length > 0, sources: srcs.map(function (s) { return s.source; }), label: lab };
   ['name', 'brand', 'image', 'quantity', 'servingSize', 'ingredients', 'nova', 'nutriscore', 'additives', 'categories'].forEach(function (f) { m[f] = pick(f); });
   var per100 = emptyNut(), per100From = {};
   NUT_KEYS.forEach(function (k) {
@@ -1430,7 +1493,9 @@ function dedupeAdditives(list) {
 // 0–100 additive sub-score: the riskiest additive sets the ceiling, every extra additive costs a little more.
 function additivesScore(m, e) {
   var off = (e.off && e.off.norm) || (e.ai && e.ai.norm) || null;
-  if (!off || (!off.additivesAnalysed && !(off.additives && off.additives.length))) return null;   // no ingredient analysis available
+  function analysed(src) { return !!(src && (src.additivesAnalysed || (src.additives && src.additives.length))); }
+  if (!analysed(off) && analysed(m && m.label)) off = m.label;   // an ingredient list you photographed is an analysis too
+  if (!analysed(off)) return null;   // no ingredient analysis available
   var adds = dedupeAdditives(off.additives || []);
   if (!adds.length) return { score: 100, worst: -2, count: 0, worstCount: 0, text: 'no additives' };
   var worst = -1, names = [], levels = [];
@@ -1577,7 +1642,7 @@ function standardScore(m, e) {
   return { mode: 'standard', score: score, band: bandOf(score), components: comps, why: why,
     coverageNote: have.length < comps.length ? 'based on ' + have.length + ' of ' + comps.length + ' components' : '', lowConfidence: score !== null && comps[0].score === null,
     missingNote: comps.filter(function (c) { return c.score === null; }).map(function (c) { return c.label.toLowerCase() + ' unknown'; }).join(', '),
-    reason: score !== null ? '' : (max ? 'only the organic label is known, and a label alone is not enough for a score' : 'no nutrition, additive, processing or organic data') };
+    reason: score !== null ? '' : (!max ? 'no nutrition, additive, processing or organic data' : org ? 'only the organic label is known, and a label alone is not enough for a score' : 'nothing is known about this product except that it carries no organic label') };
 }
 // A profile can flip a nutrient's direction (prof.dirs), e.g. total fat or calories as something to get more of.
 function metricDir(prof, met) { var d = prof && prof.dirs && prof.dirs[met.key]; return (d === 'low' || d === 'high') && (met.dir === 'low' || met.dir === 'high') ? d : met.dir; }
@@ -1595,8 +1660,12 @@ function metricDir(prof, met) { var d = prof && prof.dirs && prof.dirs[met.key];
 // which is what nutrient density means: broccoli carries more protein per calorie than milk does.
 var TILT_MAX = 25;                                          // the most your preferences can move a food, in points
 var LOW_BONUS = 0.3;                                        // how much of the upside a limit pays; without it, oil and crisps ride up merely for having no sugar
-var DENSITY_TH = { protein: [3, 10], fiber: [1.5, 6] };     // grams per 100 kcal: the cut-offs for "more of X"
-var DENSITY_MIN_KCAL = 20;                                  // below this a food is mostly water, and per 100 kcal would read a trace as plenty
+// Grams per 100 kcal. The reference intakes are about 50 g of protein and 30 g of fibre per 2000 kcal, i.e. 2.5 and
+// 1.5 per 100 kcal, so these pairs run from below the guideline to comfortably above it: chicken breast reaches 18.8 g
+// of protein per 100 kcal, lentils 6.8, milk 5.5; black beans reach 6.6 g of fibre per 100 kcal, wholemeal bread 2.8,
+// white bread 1.0. Using the per-100 g fibre pair here was the bug that gave oats and wholemeal bread nothing.
+var DENSITY_TH = { protein: [3, 10], fiber: [1, 3.5] };
+var DENSITY_MIN_KCAL = 20;                                  // the denominator never goes below this: a food that is mostly water cannot read as concentrated
 var WHOLE_SUGAR_MAX = 20;                                   // fresh whole food tops out near 16 g of its own sugar; dried or concentrated gets no pass
 var ADDED_SUGAR_RE = /\b(sugar|sucrose|glucose|fructose|dextrose|maltose|syrup|honey|molasses|agave|nectar|juice concentrate|concentrated juice|malt extract)\b/i;
 // Phrases that contain a sugar word without meaning added sugar: a claim about not having any, and the pea named
@@ -1619,13 +1688,14 @@ function shareTilt(rows, tiltExact, divisor, applied) {
   if (!applied || !live.length || !tiltExact) return;
   var k = applied / tiltExact;
   var exact = live.map(function (r) { return TILT_MAX * r.w * r.c / divisor * k; });
-  var ints = exact.map(function (x) { return x < 0 ? Math.ceil(x) : Math.floor(x); });
+  // Floor, never truncate toward zero: with rows of both signs, truncating and then handing every leftover out in the
+  // same direction can show a factor that hurt the score as one that helped it.
+  var ints = exact.map(function (x) { return Math.floor(x); });
   var sum = 0;
   ints.forEach(function (x) { sum += x; });
-  var left = applied - sum, step = left > 0 ? 1 : -1;
-  var order = exact.map(function (x, i) { return { i: i, f: Math.abs(x - ints[i]) }; })
-    .sort(function (a, b) { return b.f - a.f; });
-  for (var n = 0; n < Math.abs(left); n++) ints[order[n % order.length].i] += step;
+  var left = applied - sum;                                  // 0 <= left < live.length, so every share moves by at most one
+  var order = exact.map(function (x, i) { return { i: i, f: x - ints[i] }; }).sort(function (a, b) { return b.f - a.f; });
+  for (var n = 0; n < left && n < order.length; n++) ints[order[n].i] += 1;
   live.forEach(function (r, i) { r.delta = ints[i]; });
 }
 function customScore(m, e, prof) {
@@ -1639,6 +1709,10 @@ function customScore(m, e, prof) {
       th[k] = (isFinite(r) && r > 0) ? [dk[0] * r, dk[1] * r] : dk;
     });
   }
+  // Only the standard cut-offs ever apply to something you asked for MORE of. Raising the bar on a bonus can only
+  // shrink it, so a "strict" pick would have paid less than a "medium" one; on this side the level sets the weight.
+  var thBase = Object.assign({}, DEFAULT_THRESHOLDS);
+  if (drink) Object.keys(DRINK_THRESHOLDS).forEach(function (k) { thBase[k] = DRINK_THRESHOLDS[k]; });
   var whole = isWholeFood(m, e), kcal = m.per100.kcal, softened = false;
   var rows = [], wsum = 0, csum = 0, totalW = 0;
   METRICS.forEach(function (met) {
@@ -1651,20 +1725,18 @@ function customScore(m, e, prof) {
       v = m.per100[met.key];
       extra.th = th[met.key];
       extra.lv = (prof.answers && prof.answers.strict && Object.prototype.hasOwnProperty.call(prof.answers.strict, met.key)) ? levelOf(prof.answers.strict[met.key]) : null;
+      if (dir === 'high') { bonusOnly = true; extra.th = thBase[met.key]; }
       if (v !== null && v !== undefined) {
-        // Nutrient density, but only where calories make it mean something: in a near-zero-calorie food the ratio
-        // explodes and a trace of protein would read as plenty, so those keep the per-100 g cut-offs.
-        if (dir === 'high' && DENSITY_TH[met.key] && kcal !== null && kcal !== undefined && kcal >= DENSITY_MIN_KCAL) {
-          perKcal = true; bonusOnly = true;
-          var hi = (extra.lv && STRICTNESS[extra.lv]) ? STRICTNESS[extra.lv].high : 1;   // a strict preference raises the target here too
-          var dth = [DENSITY_TH[met.key][0] * hi, DENSITY_TH[met.key][1] * hi];
-          var d = v * 100 / kcal;
-          extra.density = d; extra.th = dth;
-          s = linScore(d, dth, 'high');
+        // Nutrient density. The denominator never drops below DENSITY_MIN_KCAL, so a food that is mostly water cannot
+        // read as concentrated, and there is no cliff between two scales at the point where it would.
+        if (bonusOnly && DENSITY_TH[met.key] && kcal !== null && kcal !== undefined && kcal > 0) {
+          perKcal = true;
+          var d = v * 100 / Math.max(kcal, DENSITY_MIN_KCAL);
+          extra.density = d; extra.th = DENSITY_TH[met.key]; extra.floored = kcal < DENSITY_MIN_KCAL;
+          s = linScore(d, DENSITY_TH[met.key], 'high');
           text = fmtVal(d, met.unit) + ' per 100 kcal';
         } else {
-          if (dir === 'high') bonusOnly = true;
-          s = linScore(v, th[met.key], dir);
+          s = linScore(v, bonusOnly ? thBase[met.key] : th[met.key], dir);
           text = fmtVal(v, met.unit) + '/100 ' + (m.basis || 'g');
         }
       }
@@ -1684,14 +1756,14 @@ function customScore(m, e, prof) {
     var c = (s - 50) / 50;                               // −1 … +1
     if (bonusOnly && c < 0) c = 0;                       // "more of X" never takes points away
     else if (!bonusOnly && c > 0) c *= LOW_BONUS;        // credit is modest: the quality score already pays for low sugar and clean additives, so the tilt is mostly a limit
-    if (whole && c < 0) {
-      // Fruit sugar is not added sugar — but dried or concentrated fruit carries far more than fresh, so the pass
-      // stops where fresh whole food does. Every other whole-food penalty is halved.
-      var ownSugar = met.key === 'sugars' && (v === null || v === undefined || v <= WHOLE_SUGAR_MAX);
-      c = ownSugar ? 0 : c / 2;
-      softened = true;
-    }
-    wsum += w; csum += w * c;
+    // The sugar in fresh fruit is the fruit's own, so a single-ingredient whole food does not pay for it — up to where
+    // fresh fruit stops, since dried and concentrated fruit carry several times as much. It is the sugar that is
+    // forgiven and nothing else: rolled oats are still a pile of carbohydrate to someone counting them.
+    if (c < 0 && whole && met.key === 'sugars' && !drink && (v === null || v === undefined || v <= WHOLE_SUGAR_MAX)) { c = 0; softened = true; }
+    // A bonus you did not earn must not dilute your limits: without this, asking for more protein halves the sugar
+    // penalty on a sugary bar that has none.
+    if (!bonusOnly || c > 0) wsum += w;
+    csum += w * c;
     rows.push(Object.assign({ key: met.key, label: label, w: w, s: s, v: v, dir: dir, text: text, c: c, perKcal: perKcal, bonusOnly: bonusOnly, whole: whole }, extra));
   });
   // Missing factors count as neutral rather than dropping out, or one surviving factor of weight 1 would swing the
@@ -1805,10 +1877,15 @@ function avoidFlags(m, e, prof) {
   var list = (prof && prof.mode === 'custom' && Array.isArray(prof.avoid)) ? prof.avoid : [];
   if (!list.length || !m || !m.found) return null;
   var off = (e.off && e.off.norm) || (e.ai && e.ai.norm) || null, usda = e.usda && e.usda.norm;   // an estimate carries the same allergen, trace and analysis lists
+  // An ingredients list you photographed yourself carries the declared allergens, the "may contain" advisory and the
+  // vegan / vegetarian / palm-oil reading. It stands in only where the databases have neither an allergen list nor any
+  // ingredient text of their own, so a curated record is never displaced by a photo.
+  var lab = (m && m.label) || null;
+  if (lab && (!off || (!off.ingredients && !(Array.isArray(off.allergens) && off.allergens.length)))) off = lab;
   var warn = [], caution = [], ok = [], notListed = [];
   // OFF's tags come from the allergens field as well as the ingredient analysis, so a non-empty list counts even without
   // ingredient text; an empty list only counts once the ingredients were analysed. Traces are cautions either way.
-  var fromAI = !!(off && e.ai && off === e.ai.norm);   // the model lists allergens it noticed; an empty list only means it named none, so the ingredients are scanned too
+  var fromAI = !!(off && ((e.ai && off === e.ai.norm) || off === lab));   // a model read the list; an empty one only means it named none, so the ingredients are scanned too
   var trusted = !!(off && Array.isArray(off.allergens) && (off.allergens.length || (off.ingredients && !fromAI)));
   var allergens = (trusted || (fromAI && Array.isArray(off.allergens))) ? off.allergens.slice() : null, traces = (off && Array.isArray(off.traces)) ? off.traces.slice() : [];
   var stated = [], named = [], namedUsda = [];
@@ -1905,9 +1982,12 @@ function factorWords(r, sc) {
     // marks and the number beside them disagree.
     var per = r.perKcal ? ' per 100 kcal' : sc.drink ? ' per 100 ml' : '';
     var value = r.perKcal ? fmtVal(r.density, met.unit) + ' per 100 kcal' : nutrientValue(r, met, sc.basis || 'g');
-    var paren = [(sc.drink && !r.perKcal) ? 'drink cut-offs' : '', r.lv ? STRICTNESS[r.lv].label.toLowerCase() : ''].filter(Boolean).join(', ');
-    var bonus = r.bonusOnly ? ' Counts as a bonus only: it never takes points away.' : '';
-    return { title: nutrientTitle(met.key, r.dir, r.s), value: value, detail: value + '. ' + cutoffPhrase(met, r.th, r.dir) + per + (paren ? ' (' + paren + ')' : '') + '.' + bonus, tone: tone, noun: noun };
+    // A limit's cut-offs move with how strongly you set it; a bonus is scored against the same scale for everyone, and
+    // the level decides only how much it counts, which the weight beside the row already says.
+    var paren = [(sc.drink && !r.perKcal) ? 'drink cut-offs' : '', (r.lv && !r.bonusOnly) ? STRICTNESS[r.lv].label.toLowerCase() : ''].filter(Boolean).join(', ');
+    var bonus = r.bonusOnly ? ' Counts as a bonus only: it never takes points away, and its weight is what your preference level sets.' : '';
+    var floored = r.floored ? ' Measured against at least ' + DENSITY_MIN_KCAL + ' kcal per 100 ' + (sc.basis || 'g') + ', so a food that is mostly water cannot read as concentrated.' : '';
+    return { title: nutrientTitle(met.key, r.dir, r.s), value: value, detail: value + '. ' + cutoffPhrase(met, r.th, r.dir) + per + (paren ? ' (' + paren + ')' : '') + '.' + bonus + floored, tone: tone, noun: noun };
   }
   if (r.key === 'processing') return { title: NOVA_WORDS[r.nova] || 'NOVA group ' + r.nova, value: 'NOVA group ' + r.nova, detail: 'NOVA group ' + r.nova + '. Groups 1 to 4 score 100, 80, 50 and 10.', tone: tone, noun: noun };
   if (r.key === 'additives') return { title: additiveTitle(r.ad), value: '', detail: additiveNames(r.ad) + (r.ad && r.ad.count ? ' The riskiest additive sets the most marks possible; each extra additive takes 5 off.' : ''), tone: tone, noun: noun };
@@ -1965,7 +2045,7 @@ function renderScore(sc, estimated) {
     return h('li', {}, [toneDot(words.tone), h('span', { class: 'rt', text: words.title }), words.value ? h('span', { class: 'rd', text: words.value }) : null]);
   })));
   var missingNouns = items.filter(function (x) { return !has(x); }).map(function (x) { return wordsOf(x).noun; });
-  if (sc.softened) sec.appendChild(h('div', { class: 'foot note', text: 'A single-ingredient whole food: the sugar and fat it carries are its own, so your limits are applied gently.' }));
+  if (sc.softened) sec.appendChild(h('div', { class: 'foot note', text: 'A single-ingredient whole food: the sugar in it is the food\'s own, not added, so it costs nothing against your sugar limit.' }));
   if (sc.capped) sec.appendChild(h('div', { class: 'foot note', text: 'Your preferences would have moved it further, but the scale stops at ' + (sc.score === 100 ? '100' : '0') + '.' }));
   // In custom mode the doubt is about the quality score underneath, not about the preferences: they can only move it.
   if (sc.lowConfidence) sec.appendChild(h('div', { class: 'lowconf', text: standard ? 'Low confidence: no nutrition data, which is half of the standard score.'
@@ -1990,7 +2070,7 @@ function renderScore(sc, estimated) {
     explain = 'Points add up to 100: nutrition 50, additives 25, processing 15, organic 10. Parts with no data are left out and the rest is scaled up to 100.';
     worked = 'Worked out: ' + (max === 100 ? counted.map(function (c) { return String(c.score); }).join(' + ') + ' = ' + sc.score : pts + ' of ' + max + ' points from the parts with data, scaled to 100: ' + sc.score) + '.';
   } else {
-    explain = 'Every food starts with its quality score, the same one everybody sees: nutrition, additives, processing and the organic label. Your preferences then move it by up to ' + TILT_MAX + ' points, each factor counting as many times as its weight (1 to 5, from your answers; change it in Settings). Asking for more of something can only add points, never take them away; more protein and more fiber are judged per 100 calories, so a food is not marked down for what it was never meant to carry. A factor with no data counts as neutral rather than dropping out, so what is missing cannot make the rest count for more than it should.';
+    explain = 'Every food starts with its quality score, the same one everybody sees: nutrition, additives, processing and the organic label. Your preferences then move it by up to ' + TILT_MAX + ' points, each factor counting as many times as its weight (1 to 5, from your answers; change it in Settings). Asking for more of something can only add points, never take them away, so it is scored against the same scale for everyone and your level sets only its weight; more protein and more fiber are judged per 100 calories, which is what nutrient density means. A factor with no data, and a bonus a food did not earn, count as neutral rather than making the rest count for more than they should.';
     worked = 'Worked out: quality ' + sc.base + (counted.length ? ', then ' + counted.map(function (r) { return factorNoun(r.key) + ' ' + (r.delta > 0 ? '+' : r.delta < 0 ? '−' : '±') + Math.abs(r.delta); }).join(', ') : '') + ' = ' + sc.score + '.';
   }
   sec.appendChild(h('details', { class: 'disc' }, [h('summary', { text: 'How the score adds up' }), list, h('div', { class: 'sec-f', text: explain }), h('div', { class: 'sec-f', text: worked }),
@@ -2423,6 +2503,8 @@ function renderResult(res) {
   if (res.estimate) ml.appendChild(h('div', { class: 'missing' }, [h('span', { class: 'dot orange' }), 'Estimated by the model, not measured. Treat the numbers as a rough guide.']));
   else if (m.missing.length) ml.appendChild(h('div', { class: 'missing' }, [h('span', { class: 'dot orange' }), 'Missing fields: ' + m.missing.join(', ')]));
   else ml.appendChild(h('div', { class: 'missing ok' }, [h('span', { class: 'dot green' }), 'Missing fields: none. All six tracked fields are present.']));
+  var fill = labelFill(res);
+  if (fill) ml.appendChild(fill);
   // ingredients and labels
   var ingr = m.ingredients.v;
   var s1 = h('section', { class: 'sec sep' });
@@ -2462,6 +2544,33 @@ function renderResult(res) {
     var json = JSON.stringify({ entry: e, merged: m }, function (k, v) { return (k === 'image' && typeof v === 'string' && v.indexOf('data:') === 0) ? '(photo omitted)' : (k === 'image' && v && typeof v === 'object' && typeof v.v === 'string' && v.v.indexOf('data:') === 0) ? { v: '(photo omitted)', from: v.from } : v; }, 2);
     copyText(json).then(function (ok) { toast(ok ? 'Copied JSON' : 'Copy failed'); }); } }, 'Copy JSON'));
   more.appendChild(actions);
+}
+// The one screen in the app with a single obvious next step: a packaged product the databases only half know, and the
+// panel is on the box in your hand. Shown whenever something is missing, or whenever you have already added something.
+function labelFill(res) {
+  var m = res.merged, code = m.barcode;
+  if (!code || res.estimate) return null;
+  var rec = labelRecord(code);
+  var has = { nutrition: !!(rec && rec.nutrition), ingredients: !!(rec && rec.ingredients) };
+  var added = has.nutrition || has.ingredients;
+  if (!m.missing.length && !added) return null;
+  var sec = h('section', { class: 'sec sep' });
+  sec.appendChild(h('div', { class: 'sec-h', text: added ? 'From your label photos' : 'Fill in what is missing' }));
+  [['nutrition', 'the nutrition panel', 'Calories, carbs, sugar, fiber, protein, fat and sodium'],
+   ['ingredients', 'the ingredients list', 'Ingredients, additives and allergens, and how processed it is']].forEach(function (p) {
+    sec.appendChild(h('button', { class: 'row act', type: 'button', onclick: function () { pickLabel(p[0]); } }, [
+      h('span', { class: 'rl' }, [
+        h('span', { class: 't', text: (has[p[0]] ? 'Photograph ' + p[1] + ' again' : 'Photograph ' + p[1]) }),
+        h('span', { class: 'd', text: has[p[0]] ? 'Added ' + shortTime(rec.ts) + '. ' + p[2] : p[2] })
+      ]),
+      h('span', { class: 'dot ' + (has[p[0]] ? 'green' : 'orange'), 'aria-hidden': 'true' })
+    ]));
+  });
+  sec.appendChild(h('div', { class: 'sec-f', text: 'Read on this phone and kept against this barcode, so the next scan starts with what you added. It fills only what Open Food Facts and USDA do not have, and nothing is sent to either of them.' }));
+  if (added) sec.appendChild(h('div', { class: 'actions' }, [h('button', { class: 'btn small', type: 'button', onclick: function () {
+    if (removeLabel(code)) { toast('Removed what you added'); redrawCurrent(); }
+  } }, 'Remove what I added')]));
+  return sec;
 }
 // The single source row of a photo or menu estimate: what the model looked at and how sure it was.
 function estimateRows(res) {
@@ -3375,6 +3484,87 @@ function pickPhoto(id) {
   var input = $(id || 'photoInput');
   input.value = '';
   input.click();
+}
+
+/* ----------------------------------------------------------- label scan */
+// Reading the printed panel is a narrower job than judging a photo of a meal: copy what is printed, say which column
+// it came from, and say so when it cannot be read. Nothing is estimated here — a guessed figure would be indis-
+// tinguishable on the card from one that was actually on the box.
+var LABEL_SCHEMA = aiSchemaObject({
+  readable: { type: 'boolean', description: 'true when this photo shows a legible nutrition table or ingredient list for one product' },
+  shows: { type: 'string', enum: ['nutrition', 'ingredients', 'both', 'neither'], description: 'What is legible in the photo' },
+  basis: { type: 'string', enum: ['per_100', 'per_serving', 'none'], description: 'Which column the figures below were copied from: the per-100 g (or per-100 ml) column, or the per-serving column' },
+  serving_text: { type: 'string', description: 'The serving as printed, e.g. "1 bar (40 g)"; empty when the panel gives none' },
+  serving_grams: { type: 'number', description: 'That serving in grams, or millilitres for a drink; 0 when the panel does not give one' },
+  is_drink: { type: 'boolean', description: 'true when the panel is per 100 ml rather than per 100 g' },
+  kcal: { type: 'number', description: 'Energy in kilocalories as printed in that column; 0 if absent. Convert from kJ only if kcal is not printed (kJ / 4.184)' },
+  carbs: { type: 'number', description: 'Total carbohydrate in grams. On a European panel this is already "of which sugars" exclusive of fiber; copy the "Carbohydrate" figure as printed' },
+  sugars: { type: 'number', description: 'Sugars in grams' },
+  fiber: { type: 'number', description: 'Fiber in grams; 0 when the panel does not list it' },
+  protein: { type: 'number', description: 'Protein in grams' },
+  fat: { type: 'number', description: 'Total fat in grams' },
+  sat_fat: { type: 'number', description: 'Saturated fat in grams' },
+  sodium_mg: { type: 'number', description: 'Sodium in milligrams. When the panel prints salt in grams instead, sodium_mg = salt_g * 400' },
+  ingredients: { type: 'string', description: 'The ingredient list exactly as printed, in one line; empty when it is not legible' },
+  additives: { type: 'array', items: { type: 'string' }, description: 'Additives named in that ingredient list, as E-numbers ("e322") where printed, otherwise the printed name' },
+  allergens: { type: 'array', items: { type: 'string', enum: EST_ALLERGEN_KEYS }, description: 'Allergens the ingredient list declares' },
+  may_contain: { type: 'array', items: { type: 'string', enum: EST_ALLERGEN_KEYS }, description: 'Allergens in a "may contain" or cross-contact advisory' },
+  vegan: { type: 'string', enum: ['yes', 'no', 'maybe'] },
+  vegetarian: { type: 'string', enum: ['yes', 'no', 'maybe'] },
+  palm_oil: { type: 'string', enum: ['yes', 'no', 'maybe', 'unknown'] },
+  nova: { type: 'integer', description: 'NOVA processing group 1 to 4 judged from the printed ingredient list; 0 when the list is not legible' },
+  note: { type: 'string', description: 'What could not be read, in one short line; empty when the panel was fully legible' }
+});
+var LABEL_SYSTEM = 'You read printed food labels for a consumer food-scanning app and answer only with JSON matching the schema. ' +
+  'Copy what is printed. Never estimate, infer or fill in a figure that is not on the label: leave it at 0 and say so in note. ' +
+  'Allergen keys are exactly: ' + EST_ALLERGEN_KEYS.join(', ') + ' (gluten covers wheat, barley, rye; nuts means tree nuts; soybeans means soy). ' +
+  'If the photo is too blurred, cropped or angled to read with confidence, set readable false rather than guessing.';
+function labelPrompt(kind) {
+  return kind === 'ingredients'
+    ? 'This is a photo of a food package. Copy the ingredient list exactly as printed, list the additives it names, and mark the allergens it declares and any "may contain" advisory. Ignore the nutrition table: set basis to none and leave the figures at 0.'
+    : 'This is a photo of a food package. Copy the nutrition table. Use the per-100 g (or per-100 ml) column when the panel prints one and set basis to per_100; otherwise copy the per-serving column and set basis to per_serving. Leave ingredients empty.';
+}
+var labelKind = 'nutrition', labelSeq = 0;
+function pickLabel(kind) {
+  if (!aiReady()) { toast('Add an API key under Settings, AI features'); showTab('settings'); return; }
+  labelKind = (kind === 'ingredients') ? 'ingredients' : 'nutrition';
+  var input = $('labelInput');
+  input.value = '';
+  input.click();
+}
+function labelHasNutrition(out) { return ['kcal', 'carbs', 'sugars', 'fiber', 'protein', 'fat', 'sat_fat', 'sodium_mg'].some(function (k) { return toNum(out[k]) > 0; }); }
+function scanLabel(file) {
+  var code = current && current.entry && current.entry.barcode;
+  if (!code) { toast('Scan a barcode first'); return Promise.resolve(); }
+  var kind = labelKind, seq = ++labelSeq;
+  var what = kind === 'ingredients' ? 'ingredients list' : 'nutrition panel';
+  toast('Reading the ' + what + '\u2026');
+  dbg('log', 'Label scan: ' + kind + ' for ' + code + ', ' + Math.round(file.size / 1024) + ' KB');
+  return imageBlock(file).then(function (img) {
+    return aiRequest({ system: LABEL_SYSTEM, content: [img.block, { type: 'text', text: labelPrompt(kind) }], schema: LABEL_SCHEMA, effort: 'low', maxTokens: 4000, cutHint: 'Try again with a closer, straighter shot of the label.' });
+  }).then(function (out) {
+    if (seq !== labelSeq) return;
+    var got = kind === 'ingredients' ? !!String(out.ingredients || '').trim() : labelHasNutrition(out);
+    if (out.readable === false || !got) {
+      dbg('warn', 'Label not readable (' + kind + '): shows=' + out.shows + (out.note ? ', ' + out.note : ''));
+      toast(out.note ? 'Could not read it: ' + out.note : 'Could not read the ' + what + '. Try a closer, straighter shot.');
+      return;
+    }
+    saveLabelPart(code, kind, out);
+    dbg('log', 'Label saved for ' + code + ': ' + kind + (out.basis && out.basis !== 'none' ? ', ' + out.basis : '') + (out.note ? ' (' + out.note + ')' : ''));
+    toast(capitalize(what) + ' added');
+    redrawCurrent();
+  }).catch(function (err) {
+    if (seq !== labelSeq) return;
+    dbg('error', 'Label scan failed: ' + (err && err.message || err));
+    toast('Could not read the ' + what + ': ' + (err && err.message || err));
+  });
+}
+// Re-merge and redraw the product on screen, after its stored label changed underneath it.
+function redrawCurrent() {
+  if (!current || !current.entry || !current.entry.barcode) return;
+  var entry = current.entry;
+  renderResult({ entry: entry, merged: mergeProduct(entry), fromCache: true });
 }
 
 /* ------------------------------------------------------------ photo scan */
@@ -4702,6 +4892,7 @@ function init() {
   $('btnPhoto').addEventListener('click', function () { pickPhoto('photoInput'); });
   $('btnPhotoIdle').addEventListener('click', function () { pickPhoto('photoInput'); });
   $('photoInput').addEventListener('change', function () { var f = this.files && this.files[0]; if (f) scanPhoto(f); });
+  $('labelInput').addEventListener('change', function () { var f = this.files && this.files[0]; if (f) scanLabel(f); });
   $('menuInput').addEventListener('change', function () { var f = this.files && this.files[0]; if (f) scanMenu(f); });
   loadPlan();
   if (plan.data && !plan.data.done && plan.data.weeks.length < plan.data.form.weeks) plan.error = 'Generation was interrupted.';   // resume from the Plan tab
@@ -4887,6 +5078,7 @@ window.FS = {
   setDefaultProxy: function (u, t) { DEFAULT_PROXY = u || ''; DEFAULT_PROXY_TOKEN = t || ''; usdaProxyOff = ''; renderSettings(); }, usdaConfig: usdaConfig,
   plan: function () { return plan; }, planPrompt: planPrompt, articles: LEARN_ARTICLES, openArticle: openArticle, renderMarkdown: renderMarkdown, searchArticles: searchArticles, planCSV: planCSV, planText: planText, samplePlan: samplePlan, openPlanWizard: openPlanWizard, wizard: function () { return pw; }, pwGo: pwGo, sanitizeWizard: sanitizeWizard,
   enterCode: function (code) { return handleCode(code, null, 'manual'); },
+  labelNorm: labelNorm, labelRecord: labelRecord, saveLabelPart: saveLabelPart, removeLabel: removeLabel, scanLabel: scanLabel, pickLabel: pickLabel,
   _setFrameSource: function (el) { cam.frameSource = el; }
 };
 

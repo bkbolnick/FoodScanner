@@ -154,21 +154,28 @@ On first open the app asks how products should be scored. Both choices can be ch
   neutral rather than dropping out, so what is missing cannot make the rest count for more than it should; below half
   coverage the whole tilt is damped in proportion. Three rules keep whole food out of trouble:
 
-  - Anything you asked for **more** of only ever adds points, never takes them away.
+  - Anything you asked for **more** of only ever adds points, never takes them away. Because raising the bar on a
+    bonus could only shrink it, those picks are scored against the same scale for everyone and your preference level
+    sets only how much the factor counts (weight 1, 3 or 5). A limit is the other way round: a strict limit halves the
+    cut-offs, which is what makes the penalty bite.
   - **More protein** and **more fiber** are judged **per 100 calories** rather than per 100 g — nutrient density,
-    which is why broccoli beats milk on protein — and a strict preference raises that target by 1.5× just as it does
-    the per-100 g ones. Below 20 kcal per 100 g a food is mostly water and keeps the per-100 g cut-offs, or a trace of
-    protein in a broth would read as plenty.
-  - A limit pays only 30% of its upside, so a food does not ride up merely for lacking sugar. And a single-ingredient
-    whole food (NOVA 1, no additives, no added sugar in the ingredients) has its penalties halved and, up to 20 g of
-    sugar per 100 g, pays nothing for its own sugar — the sugar in fresh fruit is not added sugar, while dried and
-    concentrated fruit carries far more than fresh and gets no pass.
+    which is why broccoli beats milk on protein. Full marks at 10 g of protein or 3.5 g of fibre per 100 kcal, none at
+    3 g and 1 g: the reference intakes are about 2.5 g and 1.5 g per 100 kcal, so the scale runs from below the
+    guideline to comfortably above it. The denominator never drops below 20 kcal per 100 g, so a food that is mostly
+    water cannot read as concentrated.
+  - A limit pays only 30% of its upside, so a food does not ride up merely for lacking sugar.
+  - A bonus a food did not earn counts as neutral rather than being averaged in — otherwise asking for more protein
+    would halve the sugar penalty on a sugary bar that has none.
+  - A single-ingredient whole food (NOVA 1, no additives, no added sugar in the ingredients) pays nothing against a
+    sugar limit for up to 20 g of its own sugar per 100 g: the sugar in fresh fruit is not added sugar. Only sugar is
+    forgiven, and only in a food — rolled oats are still a pile of carbohydrate to someone counting them, dried and
+    concentrated fruit carry several times what fresh does, and a drink's sugar counts whatever it was pressed from.
 
   The result names the three factors that moved the score most in plain words ("High in sugar", "Much less fiber than
   you want", "Ultra-processed") with the value next to each and a green or red dot for whether it helped or hurt, and
   **How the score adds up** lists every factor with its value, its cut-offs, its 0–100 marks and its weight, then
-  shows the arithmetic ("Worked out: quality 35, then net carbs −7, sugar −7, fiber ±0, processing −2,
-  additives ±0 = 19"). Those per-factor points are shared out from the movement the score actually made, so they add
+  shows the arithmetic ("Worked out: quality 35, then net carbs −9, sugar −9, fiber ±0, processing −3,
+  additives +1 = 15"). Those per-factor points are shared out from the movement the score actually made, so they add
   up even where the scale runs out at 0 or 100, which the card says when it happens. Weights can be fine-tuned under
   **Adjust weights** (custom profiles only). A profile adjusts a quality score, so when nothing is known about a
   food's quality there is no score at all, however well the things you asked about do.
@@ -208,10 +215,23 @@ On first open the app asks how products should be scored. Both choices can be ch
   `#` is never sent to any server, so the key stays off GitHub and off GitHub Pages, but the link itself contains
   it, so don't share it. Because a Home Screen icon made from that link re-saves the key on every launch, it also
   survives Safari's 7-day storage purge.
+- **Reading the label yourself.** Open Food Facts and USDA between them often have only a name and a brand, and a
+  product with no nutrition and no ingredients cannot be scored at all. When a card is missing any of the six tracked
+  fields it offers **Photograph the nutrition panel** and **Photograph the ingredients list**; the AI copies what is
+  printed (it is told never to estimate a figure that is not on the label, and to say so when the shot is unreadable)
+  and the result is kept against that barcode in this browser, under its own key, so refreshing the lookup never
+  throws it away. It is merged **after** both databases, so it fills gaps and never overrules a curated record, and it
+  is the last thing consulted for allergens: the printed list stands in only where neither database has an allergen
+  list or any ingredient text of its own. The panel brings calories, carbs, sugar, fibre, protein, fat and sodium
+  (either column, scaled by the printed serving weight when the panel gives one); the ingredient list brings the
+  ingredients, the additives, the allergens and the "may contain" advisory, the vegan / vegetarian / palm-oil reading
+  and the NOVA group — which is what lets the quality score count its additives and processing components. **Remove
+  what I added** on the card puts the product back as the databases have it. Sixty products are kept, oldest dropped
+  first; nothing is uploaded to Open Food Facts or anywhere else.
 - Every lookup that Open Food Facts answered (found or not found) is cached in localStorage keyed by barcode, so
   repeat scans are instant and offline. Open Food Facts network errors are not cached; a failed or skipped USDA
   query is retried on a later lookup of the same code. **Refresh** on a card bypasses the cache.
-- Everything (cache, log, tally, settings, recent menus, the plan and the planner answers) lives in the browser's
+- Everything (cache, log, tally, settings, recent menus, labels you photographed, the plan and the planner answers) lives in the browser's
   localStorage. Nothing is sent to any server other than the two data sources, the site's built-in proxy (every
   barcode you scan goes there as a USDA search when no USDA key is saved, and the AI requests go there when no key
   or proxy of your own is saved) and, when you use them, the AI service or a proxy you saved.
