@@ -150,18 +150,28 @@ On first open the app asks how products should be scored. Both choices can be ch
   saturated fat, total fat, sodium, calories, NOVA processing, additives, organic) gets a weight from 0 to 5 and a
   0–100 sub-score from its per-100 g value against the chosen cut-offs (drinks, whose data is per 100 ml, use the
   roughly half-size FSA drink cut-offs, scaled the same way for strict preferences), and the weighted average of how
-  far those sub-scores sit from the middle is what the 25 points are shared out by. Three rules keep whole food out
-  of trouble: anything you asked for **more** of only ever adds points, never takes them away, and is judged **per
-  100 calories** rather than per 100 g (nutrient density — broccoli carries more protein per calorie than milk does);
-  a limit pays only 30% of its upside, so a food does not ride up merely for lacking sugar; and a single-ingredient
-  whole food (NOVA 1, no additives, no added sugar in the ingredients) is exempt from its own sugar and has other
-  penalties halved, because the sugar in fruit is not added sugar. The result names the three factors that moved the
-  score most in plain words ("High in sugar", "Much less fiber than you want", "Ultra-processed") with the value next
-  to each and a green or red dot for whether it helped or hurt, and **How the score adds up** lists every factor with
-  its value, its cut-offs, its 0–100 marks and its weight, then shows the arithmetic ("Worked out: quality 35, then
-  net carbs −7, sugar −7, fiber ±0, processing −2, additives +1 = 19"). Weights can be fine-tuned under **Adjust
-  weights** (custom profiles only). When nothing is known about the food's quality but the things you asked about do
-  have data, the score falls back to those alone and says so; when neither has data there is no score.
+  far those sub-scores sit from the middle is what the 25 points are shared out by. A factor with no data counts as
+  neutral rather than dropping out, so what is missing cannot make the rest count for more than it should; below half
+  coverage the whole tilt is damped in proportion. Three rules keep whole food out of trouble:
+
+  - Anything you asked for **more** of only ever adds points, never takes them away.
+  - **More protein** and **more fiber** are judged **per 100 calories** rather than per 100 g — nutrient density,
+    which is why broccoli beats milk on protein — and a strict preference raises that target by 1.5× just as it does
+    the per-100 g ones. Below 20 kcal per 100 g a food is mostly water and keeps the per-100 g cut-offs, or a trace of
+    protein in a broth would read as plenty.
+  - A limit pays only 30% of its upside, so a food does not ride up merely for lacking sugar. And a single-ingredient
+    whole food (NOVA 1, no additives, no added sugar in the ingredients) has its penalties halved and, up to 20 g of
+    sugar per 100 g, pays nothing for its own sugar — the sugar in fresh fruit is not added sugar, while dried and
+    concentrated fruit carries far more than fresh and gets no pass.
+
+  The result names the three factors that moved the score most in plain words ("High in sugar", "Much less fiber than
+  you want", "Ultra-processed") with the value next to each and a green or red dot for whether it helped or hurt, and
+  **How the score adds up** lists every factor with its value, its cut-offs, its 0–100 marks and its weight, then
+  shows the arithmetic ("Worked out: quality 35, then net carbs −7, sugar −7, fiber ±0, processing −2,
+  additives ±0 = 19"). Those per-factor points are shared out from the movement the score actually made, so they add
+  up even where the scale runs out at 0 or 100, which the card says when it happens. Weights can be fine-tuned under
+  **Adjust weights** (custom profiles only). A profile adjusts a quality score, so when nothing is known about a
+  food's quality there is no score at all, however well the things you asked about do.
 - **Avoid list** (question 5): allergens (milk, eggs, gluten, peanuts, tree nuts, soy, fish, shellfish, sesame,
   celery, mustard, lupin, sulphites), non-vegan or non-vegetarian ingredients (the "I am vegan" and "I am vegetarian"
   options) and palm oil never change the score.
