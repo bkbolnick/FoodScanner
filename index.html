@@ -60,7 +60,7 @@
     --best-tint: rgba(95, 190, 140, 0.16); --good-tint: rgba(143, 196, 106, 0.15); --poor-tint: rgba(223, 165, 74, 0.15); --bad-tint: rgba(228, 121, 107, 0.15);
     --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 10px 26px -14px rgba(0, 0, 0, 0.7);
     --bar: rgba(18, 22, 17, 0.90);
-    --seg-track: #111510; --seg-thumb: #2E352C;   /* the track sits below the panel it is on, the thumb above it */
+    --seg-track: #2A3028; --seg-thumb: #4A5247;   /* both read against the page as well as against a panel: at #111510 the track was 1.03:1 on the ground and the control was invisible until you found the thumb */
     --toast: rgba(47, 54, 45, 0.95);
   }
 }
@@ -82,7 +82,7 @@ a { color: var(--accent); text-decoration: none; }
 p { margin: 0 0 12px; }
 :focus:not(:focus-visible) { outline: none; }   /* dropped as a whole where :focus-visible is unknown, so the browser ring survives there */
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-.group :focus-visible, .loglist li:focus-visible, .sheet-grab:focus-visible { outline-offset: -2px; }   /* rows fill a clipped group */
+.group :focus-visible, .loglist li:focus-visible, .sheet-grab:focus-visible, .idle-actions :focus-visible, .idle-history:focus-visible { outline-offset: -2px; }   /* rows fill a clipped group, so the ring goes inside or it is clipped away */
 .sheet:focus, h2:focus { outline: none; }   /* regions and headings take focus for VoiceOver, not for a ring */
 .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 input[type=text]:focus-visible, input[type=search]:focus-visible, input[type=number]:focus-visible, textarea:focus-visible { outline: none; }   /* the caret and keyboard already show focus */
@@ -365,7 +365,7 @@ table.cov .has { color: var(--green); } table.cov .no { color: var(--label3); }
 /* ----------------------------------------------------------------- log */
 .loglist li { display: flex; align-items: flex-start; gap: 12px; min-height: 44px; padding: 11px 16px; cursor: pointer; }
 .loglist li.empty { align-items: center; }
-.loglist .sq { flex: none; width: 40px; height: 40px; margin-top: 1px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 1.06rem; font-weight: 700; background: var(--fill); color: var(--label2); }
+.loglist .sq { flex: none; min-width: 40px; width: auto; min-height: 40px; height: 2.35em; padding: 0 0.34em; margin-top: 1px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 1.06rem; font-weight: 700; font-variant-numeric: tabular-nums; background: var(--fill); color: var(--label2); }   /* grows with the type: a three-digit score used to spill out of the tint at large Dynamic Type */
 .loglist .sq.b-green { background: var(--good-tint); color: var(--green); }
 .loglist .sq.b-best { background: var(--best-tint); color: var(--best); }
 .loglist .sq.b-orange { background: var(--poor-tint); color: var(--orange); }
