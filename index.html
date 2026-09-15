@@ -1708,8 +1708,15 @@ function nutriScoreOf(m, e) {
   var sug = sugarOrigin(m, e), sugars = m.per100.sugars;
   var exempt = sugars !== null && sugars > 0 && (sug.kind === 'lactose' || (sug.kind === 'intrinsic' && !sug.concentrated && sugars <= WHOLE_SUGAR_MAX));
   if (exempt) {
-    var free = computeNutriScore(Object.assign({}, m.per100, { sugars: 0 }), sug.kind === 'lactose' ? 'general' : kind, false,
-      { fvl5: kind === 'fat' && oliveLikeOil(m) });
+    // Only a plain dairy DRINK moves table: the point is that the beverage table exists to discourage drinking free
+    // sugars. A cheese keeps the cheese rule, which grants protein points the general table withholds above 11
+    // negative points — sending cheddar to the general table cost it a whole grade.
+    var sweetTag2 = (m.additives.v || []).some(function (a) { return /^e9(5\d|6\d)/i.test(String(a)); });
+    var sweetText2 = SWEETENER_WORDS.test(String(m.ingredients.v || ''));
+    var free = computeNutriScore(Object.assign({}, m.per100, { sugars: 0 }),
+      (sug.kind === 'lactose' && kind === 'beverage') ? 'general' : kind, sweetTag2 || sweetText2,
+      { fvl5: kind === 'fat' && oliveLikeOil(m), water: kind === 'beverage' && isPlainWater(m) });
+    if (free && sweetText2 && !sweetTag2) free.sweetenerFromText = true;
     if (free) { free.freeSugars = true; free.sugarKind = sug.kind; free.published = off && off.nutriscore ? off.nutriscore : null; return free; }
   }
   if (off && off.nutriscore) return { grade: off.nutriscore, points: off.nutriscorePoints, kind: kind, beverage: kind === 'beverage', estimated: false };
@@ -1751,7 +1758,7 @@ function standardScore(m, e) {
   if (ns && ns.notApplicable) { nsText = 'Nutri-Score not applicable to this category (per Open Food Facts)'; ns = null; }
   else if (ns && ns.freeSugars) nsText = 'Nutri-Score ' + ns.grade.toUpperCase() + ' (this app\u2019s own: scored on free sugars, so the '
     + (ns.sugarKind === 'lactose' ? 'lactose' : 'sugar inside the food') + ' is not counted'
-    + (ns.published ? ', where the pack says ' + String(ns.published).toUpperCase() : '') + ')';
+    + (ns.published && String(ns.published).toLowerCase() !== String(ns.grade).toLowerCase() ? '; the pack says ' + String(ns.published).toUpperCase() : '') + ')';
   else if (ns) nsText = 'Nutri-Score ' + ns.grade.toUpperCase() + (ns.estimated ? ' (estimated from the nutrients' + (ns.kind === 'fat' ? ', fats/oils table' : ns.kind === 'cheese' ? ', cheese rule' : ns.kind === 'beverage' ? ', beverage table' : '') + (ns.sweetenerFromText ? ', sweetener found in the ingredients' : '') + ')' : '');
   else nsText = 'not enough nutrition data' + (needs.length ? ' (needs ' + needs.join(', ') + ')' : ' (needs total fat for oils and nuts)');
   comps.push({ key: 'nutrition', label: 'Nutritional quality', max: 50, score: ns ? Math.round(nutritionPoints60(ns) * 50 / 60) : null, text: nsText, grade: ns ? ns.grade : null, estimated: !!(ns && ns.estimated) });
@@ -1842,17 +1849,27 @@ var FDC_DAIRY = /(^|\s|&\s)(milks?|yogh?urts?|cheeses?|kefir|buttermilk|dairy)(\
 var NOT_DAIRY_NAME_RE = /\b(soy|soya|oat|rice|almond|cashew|coconut|hemp|hazelnut|walnut|macadamia|pea|flax|quinoa|plant[- ]?based|non[- ]?dairy|dairy[- ]?free|vegan|milk (alternative|substitute)s?|chocolate|cocoa|choco|vanilla|caramel|coffee|mocha|malted|honey|fruit|flavou?red|sweetened|dessert|pudding|custard|ice ?cream|shake|egg ?nog|horchata|condensed|powdered|strawberr(y|ies)|raspberr(y|ies)|blueberr(y|ies)|blackberr(y|ies)|cherr(y|ies)|peach(es)?|pineapple|apricots?|mango|banana|papaya|passion ?fruit)\b|\b(latte macchiato|caff?[eè] ?latte|chai latte|matcha latte)\b/i;
 var OFF_NOT_DAIRY_TAGS = /^(plant based (milk alternatives|beverages)|(soy|soya|oat|rice|almond|cashew|hazelnut|coconut|hemp|pea|nut|quinoa|spelt|seed)[a-z ]* (milks|drinks|beverages|yogh?urts)|milk substitutes|dairy (substitutes|alternatives)|milk powders|dried milks|milkshakes|ice creams|frozen yogh?urts)$/i;
 var FDC_NOT_DAIRY = /(milk substitut|dairy alternativ|non[- ]?dairy|plant[- ]?based|soy|almond|oat|rice|coconut|flavou?red milk|chocolate|ice cream|frozen|shake|egg ?nog|creamer)/i;
-// Sugar on an ingredient list the app cannot otherwise read. ADDED_SUGAR_RE is English and is left alone; this runs
-// only inside the dairy branch, where a sugar word is enough to refuse the exemption.
+// Sugar on an ingredient list the app cannot otherwise read. ADDED_SUGAR_RE is English and is left alone; this
+// carries the same question into the other languages Open Food Facts is full of.
 var DAIRY_SUGAR_WORDS = /\b(sucres?|az[uú]cares?|zucker|zucchero|suiker|socker|sokeri|cukier|aç[uú]car|azucar|sirup|sirop|sciroppo|jarabe|glukose|glucosio|fruktose|fruttosio|saccarosio|sacarosa|saccharose)\b/i;
 var ADDED_FIBER_RE = /\b(inulin|chicory|oligofructose|fructo-?oligosaccharides?|polydextrose|acacia|psyllium|beta[- ]?glucan)\b/i;
 var PRESERVED_OFF = /^([a-z ]*canned fruits|fruits in syrup|[a-z ]*preserved fruits)$/i, PRESERVED_FDC = /canned fruit/i;
 // The first added-sugar word on the list, or null. isWholeFood asks the same question and gets the same answer.
 function addedSugarWord(ingr) {
   var t = String(ingr || '').replace(NOT_ADDED_SUGAR_RE, ' ');
-  var m = t.match(ADDED_SUGAR_RE);
+  var m = t.match(ADDED_SUGAR_RE) || t.match(DAIRY_SUGAR_WORDS);
   return m ? String(m[0]).toLowerCase() : null;
 }
+// How many things the list names. A cake lists six; an orange lists one; a produce bag lists none. Parenthesised
+// detail ("milk (whole)") is not an extra ingredient.
+function ingredientCount(t) {
+  t = String(t || '').replace(/\([^)]*\)/g, ' ').replace(/\.\s*$/, '').trim();
+  if (!t) return 0;
+  return t.split(/[,;]+/).map(function (x) { return x.trim(); }).filter(Boolean).length;
+}
+// Categories that vouch for produce when there is no ingredient list at all to read.
+var PRODUCE_OFF = /^(fruits|fresh fruits|frozen fruits|vegetables|fresh vegetables|frozen vegetables|legumes|pulses|nuts|seeds|[a-z ]* (fruits|vegetables|nuts|seeds))$/i;
+var PRODUCE_FDC = /(^|\s|&\s)(fruits?|vegetables?|produce|pre-?packaged fruit)( &|\s|$)/i;
 // Something you drink, as opposed to a liquid you eat. The old test asked whether the record was per 100 ml, which let
 // a juice or a smoothie stored per 100 g through the whole-food pass.
 function isPressedLiquid(m) { return isBeverage(m) && !LIQUID_FOOD.test(String(m.categories.v || '')); }
@@ -1888,9 +1905,17 @@ function plainDairy(m) {
   return (ingr && ALLERGENS.milk.words.test(ingr)) ? 'ingredients' : by;
 }
 // A USDA record never carries a NOVA group (normUSDA leaves it null), so isWholeFood can never fire on one. A produce
-// bag with a barcode is still a whole food: one thing, nothing added, nothing that says otherwise.
+// bag with a barcode is still a whole food. But a MISSING group is not evidence of anything, so this asks for the
+// positive kind: a list naming one thing, or no list at all and a category that says produce. Without that, a cake
+// with six ingredients and no NOVA group read as an intact whole food and had its sugar waived.
 function singleFoodNoNova(m) {
-  return m.nova.v === null && !(m.additives.v || []).length && !addedSugarWord(m.ingredients && m.ingredients.v) && !freeForm(m);
+  if (m.nova.v !== null || (m.additives.v || []).length) return false;
+  if (addedSugarWord(m.ingredients && m.ingredients.v) || freeForm(m)) return false;
+  var n = ingredientCount(m.ingredients && m.ingredients.v);
+  if (n > 1) return false;
+  if (n === 1) return true;
+  var fromOFF = m.categories.from === 'OFF';
+  return categoryTags(m).some(function (t) { return (fromOFF ? PRODUCE_OFF : PRODUCE_FDC).test(t); });
 }
 // Which kind of sugar this is, and what said so. Returns { kind, by, word, cap, waived, concentrated }.
 function sugarOrigin(m, e) {
@@ -1906,7 +1931,7 @@ function sugarOrigin(m, e) {
     // Concentrated dairy is still lactose, and WHO sets no limit on it — but a dairy record with no list and more
     // sugar than milk carries is just as likely to be a sweetened drink, so the ceiling only lifts when a list says so.
     var ingr = String((m.ingredients && m.ingredients.v) || '');
-    if (sug === null || sug <= LACTOSE_MAX || (ingr && ALLERGENS.milk.words.test(ingr))) return out('lactose', dairy);
+    if (sug === null || sug <= LACTOSE_MAX || (ingr && ALLERGENS.milk.words.test(ingr))) return out('lactose', dairy, { only: ingredientCount(ingr) <= 1 });
     return out('unknown', 'above-lactose', { cap: LACTOSE_MAX });
   }
   // Fruit canned in juice: the fruit is intact, the liquid around it is the thing the definition was written to catch.
@@ -1923,7 +1948,8 @@ function shareTilt(rows, tiltExact, divisor, applied) {
   var live = rows.filter(function (r) { return r.s !== null && r.c; });
   if (!applied || !live.length || !tiltExact) return;
   var k = applied / tiltExact;
-  var exact = live.map(function (r) { return TILT_MAX * r.w * r.c / divisor * k; });
+  // Each row is divided by the divisor its own side was weighed against, or the shares do not add up to the movement.
+  var exact = live.map(function (r) { return TILT_MAX * r.w * r.c / (r.bonusOnly ? divisor.bonus : divisor.limit) * k; });
   // Floor, never truncate toward zero: with rows of both signs, truncating and then handing every leftover out in the
   // same direction can show a factor that hurt the score as one that helped it.
   var ints = exact.map(function (x) { return Math.floor(x); });
@@ -1950,7 +1976,7 @@ function customScore(m, e, prof) {
   var thBase = Object.assign({}, DEFAULT_THRESHOLDS);
   if (drink) Object.keys(DRINK_THRESHOLDS).forEach(function (k) { thBase[k] = DRINK_THRESHOLDS[k]; });
   var whole = isWholeFood(m, e), kcal = m.per100.kcal, softened = false, sug = sugarOrigin(m, e);
-  var rows = [], wsum = 0, csum = 0, totalW = 0;
+  var rows = [], limitW = 0, limitC = 0, bonusW = 0, bonusC = 0, totalW = 0;
   METRICS.forEach(function (met) {
     var w = Number(prof.weights && prof.weights[met.key]) || 0;
     if (w <= 0) return;
@@ -2000,24 +2026,28 @@ function customScore(m, e, prof) {
       if (sug.kind === 'lactose' || (sug.kind === 'intrinsic' && v <= WHOLE_SUGAR_MAX)) { c = 0; sug.waived = true; softened = true; }
       else if (sug.kind === 'intrinsic') sug.concentrated = true;
     }
-    // A bonus you did not earn must not dilute your limits: without this, asking for more protein halves the sugar
-    // penalty on a sugary bar that has none. It dilutes by what it actually earned, not all or nothing: switching the
-    // whole weight on at the halfway mark moved a score ten points for a hundredth of a gram, and left the worked-out
-    // line unable to say where the ten points went, because the bonus itself was still ±0.
-    wsum += bonusOnly ? w * Math.min(1, Math.max(0, c)) : w;
-    csum += w * c;
+    // Limits and bonuses are weighed against their own weight and added, rather than sharing one divisor. Sharing it
+    // forced a choice between two wrong answers: counting an unearned bonus's full weight halved the sugar penalty on
+    // a sugary bar with no protein, and counting only what it earned made the divisor move with the numerator, so a
+    // profile of bonuses alone paid the whole 25 for 60% earned. Weighed apart, neither happens.
+    if (bonusOnly) { bonusW += w; bonusC += w * c; } else { limitW += w; limitC += w * c; }
     rows.push(Object.assign({ key: met.key, label: label, w: w, s: s, v: v, dir: dir, text: text, c: c, perKcal: perKcal, bonusOnly: bonusOnly, whole: whole, sugar: met.key === 'sugars' ? sug : null }, extra));
   });
   // Missing factors count as neutral rather than dropping out, or one surviving factor of weight 1 would swing the
   // whole ±25 on its own. Below half coverage the tilt is damped in proportion to what could actually be read.
-  var divisor = Math.max(wsum, totalW / 2);
-  var tiltExact = divisor ? TILT_MAX * csum / divisor : 0;
+  var floor = totalW / 2;
+  var limitDiv = Math.max(limitW, floor), bonusDiv = Math.max(bonusW, floor);
+  // tiltRaw is what the per-factor shares actually add up to; tiltExact is that bounded to the 25 points the tilt is
+  // allowed. shareTilt has to scale against the raw figure, or the shares sum past the movement the score made.
+  var tiltRaw = (limitDiv ? TILT_MAX * limitC / limitDiv : 0) + (bonusDiv ? TILT_MAX * bonusC / bonusDiv : 0);
+  var tiltExact = Math.max(-TILT_MAX, Math.min(TILT_MAX, tiltRaw));
+  var divisor = { limit: limitDiv, bonus: bonusDiv };
   var base = core ? core.score : null;
   // A profile adjusts a quality score; with no quality score there is nothing to adjust, and the things you asked
   // about are far too narrow to stand in for one.
   var score = base === null ? null : Math.max(0, Math.min(100, Math.round(base + tiltExact)));
   var applied = score === null ? 0 : score - base;
-  shareTilt(rows, tiltExact, divisor, applied);
+  shareTilt(rows, tiltRaw, divisor, applied);
   var why = rows.filter(function (r) { return r.s !== null && r.delta !== 0; })
     .map(function (r) { return { key: r.key, positive: r.delta > 0, text: r.label + ' ' + r.text, weight: Math.abs(r.delta) }; })
     .sort(function (a, b) { return b.weight - a.weight; }).slice(0, 3);
@@ -2222,15 +2252,17 @@ function sugarWords(sug, v, basis, netCarbs) {
   var by = sug.by, k = sug.kind;
   if (k === 'lactose') {
     return { title: 'Lactose, not free sugar', line: (by === 'ingredients'
-      ? 'The ingredients are milk and nothing else, so this sugar is lactose.'
-      : 'Filed as plain dairy, with no ingredient list the app could read, so this sugar is lactose.')
+      ? (sug.only ? 'The ingredients are milk and nothing else, so this sugar is lactose.'
+                  : 'A dairy product with no sugar on its ingredient list, so this sugar is lactose.')
+      : 'Filed as plain dairy from its ' + (by === 'name' ? 'name' : 'category') + ', with no ingredient list naming milk, so this sugar is lactose.')
       + ' Lactose is one glucose joined to one galactose, and galactose goes to the liver rather than into your blood.'
       + ' The WHO and UK guidelines leave lactose in milk out of free sugars by name, so it costs nothing against your'
       + ' sugar limit \u2014 it does not earn points either.' + tail };
   }
   if (k === 'intrinsic' && sug.concentrated) {
-    return { title: 'Dried or concentrated fruit sugar', line: 'Still the food\u2019s own sugar, but at ' + amt
-      + ' it has been dried well past fresh fruit, which tops out near ' + WHOLE_SUGAR_MAX + ' g. The pass stops there, so it counts in full.' };
+    return { title: 'Concentrated, so it counts', line: 'Still the food\u2019s own sugar, with nothing added, but at ' + amt
+      + ' it carries far more than anything fresh does \u2014 fresh fruit tops out near ' + WHOLE_SUGAR_MAX + ' g, and drying or'
+      + ' reducing multiplies it. The pass stops there, so it counts in full.' };
   }
   if (k === 'intrinsic') {
     return { title: 'The food\u2019s own sugar', line: 'A single-ingredient whole food: at ' + amt
@@ -2244,8 +2276,8 @@ function sugarWords(sug, v, basis, netCarbs) {
     return { title: 'Free sugar, released by pressing', line: 'Juicing or blending tears open the cells that held this sugar and leaves most of the fiber behind, so it absorbs fast and nothing stops you drinking three oranges in a minute. Guidance counts it as free sugar, in the same bucket as added sugar, so all ' + amt + ' counts against your limit.' };
   }
   if (k === 'added') return { title: 'Added sugar', line: 'The ingredient list names ' + (sug.word || 'added sugar') + '. Sugar, syrups, honey and nectars count as free sugar wherever they appear, so all ' + amt + ' counts against your limit.' };
-  if (by === 'above-lactose') return { title: 'More sugar than lactose alone', line: 'This is a milk product, but at ' + amt + ' it carries more than lactose alone \u2014 plain milk is about 5 g \u2014 so the app will not call it lactose. It counts in full: the app does not hand out a pass it cannot justify.' };
   if (by === 'no-ingredients') return { title: 'Where this sugar came from is unknown', line: 'No ingredient list, so there is no way to tell added sugar from the food\u2019s own. It counts in full: the app does not hand out a pass it cannot justify. Photograph the ingredients to have it judged as what it is.' };
+  if (by === 'above-lactose') return { title: 'More sugar than lactose alone', line: 'This is a milk product, but at ' + amt + ' it carries more than plain milk\u2019s own lactose, which is about 5 g, and its list does not settle where the rest came from. It counts in full: the app does not hand out a pass it cannot justify.' };
   if (by === 'liquid') return { title: 'Where this sugar came from is unknown', line: 'A drink the app cannot place as plain dairy or as a pressed juice. It counts in full: the app does not hand out a pass it cannot justify.' };
   return { title: 'Where this sugar came from is unknown', line: 'The ingredients do not settle whether this sugar is the food\u2019s own. It counts in full: the app does not hand out a pass it cannot justify.' };
 }
