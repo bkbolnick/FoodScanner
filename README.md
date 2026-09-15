@@ -243,6 +243,26 @@ On first open the app asks how products should be scored. Both choices can be ch
   manifest deliberately has no `start_url`, so an icon made from a `#usda=…`/`#profile=…` link keeps that link.
 - Open Food Facts data is © Open Food Facts contributors, ODbL. USDA FoodData Central data is public domain.
 
+## Look
+
+The app is set in the device's own UI face (`-apple-system`, which on an iPhone is SF Pro) and makes no third-party
+request of any kind — no webfont, no CDN, no analytics — so the only hosts it ever talks to are the two food
+databases and, for the AI features, the site's proxy or whatever you saved yourself.
+
+The ground is paper with a faint green bias and the accent is a deep teal, which frees red, amber and green to mean
+one thing only: a score. Four score colours (bad, poor, good, excellent) appear as the numeral, as a tinted band
+pill, as the severity stripe beside each reason, as the marker on the quality-and-preferences track, and as the
+rounded square that leads every row in History — never as a button or a link.
+
+Data surfaces borrow the one document this subject owns, the printed nutrition panel: a small-capitals heading over a
+heavy rule, hairlines between the rows, figures right-aligned in tabular numerals. Only the nutrition table and the
+score breakdown get that treatment; everything else stays a quiet inset list. Section headings are small capitals
+rather than an uppercase transform, so the words a screen reader is handed are the words on the page.
+
+Both themes are designed, not inverted, and every colour is checked to 4.5:1 for normal text against the surface it
+actually sits on. The layout is verified from 320 px wide up, at the root font sizes iOS Dynamic Type produces
+(17 to 34 px), with nothing clipped and no sideways scroll.
+
 ## Development
 
 Serve the folder over HTTPS or localhost (camera access needs a secure context), e.g.
