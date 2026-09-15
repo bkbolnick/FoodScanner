@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#F2F2F7" media="(prefers-color-scheme: light)">
-<meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#F3F5EF" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0E110D" media="(prefers-color-scheme: dark)">
 <meta name="color-scheme" content="light dark">
 <meta name="format-detection" content="telephone=no">
 <meta name="referrer" content="no-referrer">
@@ -17,42 +17,50 @@
 <title>FoodScanner</title>
 <style>
 /* ------------------------------------------------------------------ tokens
-   iOS semantic colours. Light values are the system ones except where Apple's
-   own value fails 4.5:1 for small text (secondary label, the dark accent, the
-   light green), which are nudged just far enough to pass.                    */
+   The ground is paper with a faint green bias and the accent is a deep teal, so
+   that red / amber / green can be spent entirely on scores and never on a
+   control. Every colour here is checked to 4.5:1 for small text against the
+   surface it sits on.                                                        */
 :root {
   color-scheme: light dark;
-  --bg: #F2F2F7;                         /* grouped background */
-  --cell: #FFFFFF;                       /* cells, sheet */
-  --fill: #F2F2F7;                       /* fill inside a cell */
-  --fill2: #E5E5EA;                      /* control fill */
-  --label: #000000;
-  --label2: #6E6E73;                     /* secondary label, 5.1:1 on white */
-  --label3: #8E8E93;                     /* icons and grabber only */
-  --sep: rgba(60, 60, 67, 0.29);
-  --accent: #5856D6;                     /* indigo */
-  --accent-fill: #5856D6;
-  --accent-btn: #4B49C9;                 /* text on the tinted button, 5.2:1 over the tint on the grouped background */
-  --accent-tint: rgba(88, 86, 214, 0.12);
-  --green: #1F7A35; --orange: #A35500; --red: #D70015;   /* orange 4.9:1 on the grouped background */
-  --bar: rgba(249, 249, 249, 0.94);      /* tab bar, nav bars */
-  --seg-track: #E5E5EA; --seg-thumb: #FFFFFF;
-  --toast: rgba(28, 28, 30, 0.92);
-  --cam-mat: rgba(28, 28, 30, 0.62);     /* frosted material over the camera */
+  --bg: #F3F5EF;                         /* paper */
+  --cell: #FFFFFF;                       /* cells, sheet, panels */
+  --fill: #EFF2EA;                       /* fill inside a cell */
+  --fill2: #E1E6D9;                      /* control fill */
+  --label: #171B14;
+  --label2: #5B6155;                     /* secondary label, 6.5:1 on white */
+  --label3: #8A9084;                     /* icons, rules and the grabber only */
+  --sep: rgba(23, 27, 20, 0.14);
+  --rule: #171B14;                       /* the heavy rule under a data panel's head */
+  --accent: #12626D;                     /* deep teal */
+  --accent-fill: #12626D;
+  --accent-btn: #0E5561;                 /* text on the tinted button, 6.4:1 over the tint on paper */
+  --accent-tint: rgba(18, 98, 109, 0.11);
+  --best: #1F6B45; --green: #3C7A2A; --orange: #A2680C; --red: #AE2A20;   /* the score ramp: excellent, good, poor, bad */
+  --best-tint: rgba(31, 107, 69, 0.12); --good-tint: rgba(60, 122, 42, 0.12); --poor-tint: rgba(162, 104, 12, 0.12); --bad-tint: rgba(174, 42, 32, 0.10);
+  --shadow: 0 1px 2px rgba(23, 27, 20, 0.05), 0 10px 26px -14px rgba(23, 27, 20, 0.22);
+  --bar: rgba(243, 245, 239, 0.90);      /* tab bar, nav bars */
+  --seg-track: #E1E6D9; --seg-thumb: #FFFFFF;
+  --toast: rgba(23, 27, 20, 0.93);
+  --cam-mat: rgba(20, 24, 19, 0.62);     /* frosted material over the camera */
   --safe-t: env(safe-area-inset-top, 0px); --safe-b: env(safe-area-inset-bottom, 0px); --safe-l: env(safe-area-inset-left, 0px); --safe-r: env(safe-area-inset-right, 0px);
   --tabbar: 49px;
   --ease: cubic-bezier(0.32, 0.72, 0, 1);
+  --caps: 0.647rem;                      /* the micro caps label used for every section heading */
 }
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #000000; --cell: #1C1C1E; --fill: #2C2C2E; --fill2: #3A3A3C;
-    --label: #FFFFFF; --label2: #98989D; --label3: #8E8E93;
-    --sep: rgba(84, 84, 88, 0.65);
-    --accent: #8A88FF; --accent-fill: #5E5CE6; --accent-btn: #8A88FF; --accent-tint: rgba(138, 136, 255, 0.14);
-    --green: #30D158; --orange: #FF9F0A; --red: #FF453A;
-    --bar: rgba(29, 29, 31, 0.90);
-    --seg-track: #2C2C2E; --seg-thumb: #636366;
-    --toast: rgba(58, 58, 60, 0.95);
+    --bg: #0E110D; --cell: #181C17; --fill: #1F241E; --fill2: #2B3129;
+    --label: #EDF0E8; --label2: #A2A99B; --label3: #7C8376;
+    --sep: rgba(237, 240, 232, 0.16);
+    --rule: #BFC7B6;
+    --accent: #5CC3CE; --accent-fill: #1C6E79; --accent-btn: #7FD4DE; --accent-tint: rgba(92, 195, 206, 0.15);
+    --best: #5FBE8C; --green: #8FC46A; --orange: #DFA54A; --red: #E4796B;
+    --best-tint: rgba(95, 190, 140, 0.16); --good-tint: rgba(143, 196, 106, 0.15); --poor-tint: rgba(223, 165, 74, 0.15); --bad-tint: rgba(228, 121, 107, 0.15);
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 10px 26px -14px rgba(0, 0, 0, 0.7);
+    --bar: rgba(18, 22, 17, 0.90);
+    --seg-track: #111510; --seg-thumb: #2E352C;   /* the track sits below the panel it is on, the thumb above it */
+    --toast: rgba(47, 54, 45, 0.95);
   }
 }
 /* ------------------------------------------------------------------- base */
@@ -82,16 +90,17 @@ input[type=text]:focus-visible, input[type=search]:focus-visible, input[type=num
 .foot { font-size: 0.765rem; color: var(--label2); line-height: 1.35; }
 .sub { font-size: 0.882rem; color: var(--label2); }
 .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--label3); vertical-align: 0.05em; margin-right: 8px; flex: none; }
-.dot.green { background: var(--green); } .dot.orange { background: var(--orange); } .dot.red { background: var(--red); }
+.dot.green { background: var(--green); } .dot.best { background: var(--best); } .dot.orange { background: var(--orange); } .dot.red { background: var(--red); }
 /* --------------------------------------------------------------- screens */
 .tab { display: none; }
 .tab.active { display: block; }
 .page { padding: calc(var(--safe-t) + 8px) max(16px, var(--safe-r)) calc(var(--tabbar) + var(--safe-b) + 28px) max(16px, var(--safe-l)); max-width: 640px; margin: 0 auto; }
-.page h1 { font-size: 2rem; font-weight: 700; line-height: 1.2; letter-spacing: 0.01em; margin: 12px 0 18px; }
-.group-h { font-size: 0.765rem; color: var(--label2); margin: 0 16px 7px; }
-.group-h span { font-weight: 400; }
-.group { background: var(--cell); border-radius: 10px; margin: 0 0 24px; padding: 0; list-style: none; overflow: hidden; }
-.group-f { font-size: 0.765rem; color: var(--label2); line-height: 1.35; margin: -16px 16px 24px; }
+.page h1 { font-size: 2rem; font-weight: 700; line-height: 1.12; letter-spacing: -0.022em; margin: 14px 0 6px; text-wrap: balance; }
+.page h1 + .sub { margin: 0 0 20px; }
+.group-h { font-size: var(--caps); font-weight: 700; letter-spacing: 0.1em; font-variant-caps: all-small-caps; color: var(--label3); margin: 0 4px 8px; }
+.group-h span { font-weight: 700; }
+.group { background: var(--cell); border-radius: 16px; margin: 0 0 24px; padding: 0; list-style: none; overflow: hidden; box-shadow: var(--shadow); }
+.group-f { font-size: 0.765rem; color: var(--label2); line-height: 1.4; margin: -16px 4px 24px; }
 .group-f + .group-f { margin-top: -18px; }
 .group > * { position: relative; }
 .group > * + *::before { content: ""; position: absolute; left: 16px; right: 0; top: 0; height: 1px; background: var(--sep); transform: scaleY(0.5); transform-origin: 0 0; pointer-events: none; }
@@ -107,9 +116,10 @@ input[type=text]:focus-visible, input[type=search]:focus-visible, input[type=num
 .row.nav::after { content: ""; position: absolute; right: 14px; top: 50%; width: 8px; height: 8px; border-right: 2px solid var(--label3); border-bottom: 2px solid var(--label3); transform: translateY(-50%) rotate(-45deg); }
 .inline-act { color: var(--accent); font-size: 1rem; min-height: 44px; padding: 0 4px; flex: none; }
 /* ------------------------------------------------------------- controls */
-.btn { display: inline-flex; align-items: center; justify-content: center; min-height: 50px; padding: 12px 20px; border-radius: 12px; background: var(--accent-tint); color: var(--accent-btn); font-weight: 600; font-size: 1rem; white-space: nowrap; text-decoration: none; }
+.btn { display: inline-flex; align-items: center; justify-content: center; min-height: 50px; padding: 12px 20px; border-radius: 14px; background: var(--accent-tint); color: var(--accent-btn); font-weight: 600; font-size: 1rem; letter-spacing: -0.01em; white-space: nowrap; text-decoration: none; }
 .btn.primary { background: var(--accent-fill); color: #FFFFFF; }
-.btn.small { min-height: 44px; padding: 8px 16px; font-size: 0.882rem; border-radius: 10px; }
+@media (prefers-color-scheme: dark) { .btn.primary { color: #0E110D; background: var(--accent); } }
+.btn.small { min-height: 44px; padding: 8px 16px; font-size: 0.882rem; border-radius: 12px; }
 .btn.block { width: 100%; }
 .btn[disabled] { opacity: 0.4; pointer-events: none; }
 .btn:active { opacity: 0.7; }
@@ -147,18 +157,34 @@ input[type=range] { accent-color: var(--accent); width: 100%; margin: 0; }
 .guide .c.br { right: -1px; bottom: -1px; border-bottom-width: 2.5px; border-right-width: 2.5px; border-bottom-right-radius: 12px; }
 .guide.hit { transform: scale(0.96); box-shadow: 0 0 0 200vmax rgba(0, 0, 0, 0.3); }
 .guide.hit .c { border-color: #30D158; }
-.placeholder { position: absolute; left: 0; right: 0; top: 0; bottom: 0; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; text-align: center; padding: calc(var(--safe-t) + 20px) 32px calc(var(--tabbar) + var(--safe-b) + 84px); overflow-y: auto; -webkit-overflow-scrolling: touch; }
+.placeholder { position: absolute; left: 0; right: 0; top: 0; bottom: 0; display: flex; flex-direction: column; align-items: stretch; justify-content: flex-start; text-align: left; padding: calc(var(--safe-t) + 20px) max(20px, var(--safe-r)) calc(var(--tabbar) + var(--safe-b) + 84px) max(20px, var(--safe-l)); overflow-y: auto; -webkit-overflow-scrolling: touch; }
 .viewport.live .placeholder { display: none; }
-.placeholder .glyph { width: 56px; height: 56px; flex: none; color: var(--label3); margin: auto 0 10px; }
+.placeholder > * { width: 100%; max-width: 420px; margin-left: auto; margin-right: auto; }
+.placeholder .glyph { width: 52px; height: 52px; flex: none; color: var(--accent); margin: auto auto 12px; }
 .placeholder .glyph svg { width: 100%; height: 100%; display: block; }
-.placeholder h2 { font-size: 1.294rem; font-weight: 700; margin: 0 0 6px; }
+.placeholder h2 { font-size: 1.882rem; font-weight: 700; line-height: 1.12; letter-spacing: -0.024em; margin: 0 0 6px; text-wrap: balance; }
+.idle-sub { font-size: 0.882rem; color: var(--label2); line-height: 1.4; margin: 0 0 18px; }
+.idle-h { font-size: var(--caps); font-weight: 700; letter-spacing: 0.1em; font-variant-caps: all-small-caps; color: var(--label3); margin: 22px 4px 8px; flex: none; }
 .placeholder .btn { margin-top: 14px; min-width: 180px; }
-.idle-actions { display: flex; flex-direction: column; gap: 10px; width: 100%; max-width: 340px; margin-top: 14px; flex: none; }
-.tile { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 54px; padding: 12px 16px; border-radius: 14px; background: var(--cell); color: var(--label); font-size: 1.06rem; font-weight: 600; text-align: left; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04); }
-.tile svg { width: 26px; height: 26px; flex: none; color: var(--accent); }
+.idle-actions { display: flex; flex-direction: column; width: 100%; flex: none; background: var(--cell); border-radius: 16px; overflow: hidden; box-shadow: var(--shadow); }
+.idle-actions .tile + .tile { border-top: 1px solid var(--sep); }
+.tile, .hrow { display: flex; align-items: center; gap: 13px; width: 100%; min-height: 60px; padding: 12px 15px; background: var(--cell); color: var(--label); text-align: left; }
+.hrow .tl .t { display: block; font-size: 1.06rem; font-weight: 500; letter-spacing: -0.01em; }
+.hrow .tl .d { display: block; font-size: 0.765rem; color: var(--label2); margin-top: 1px; line-height: 1.35; }
+.hrow .tl { flex: 1 1 auto; min-width: 0; }
+.hrow:active { background: var(--fill); }
+.tile .ti { flex: none; width: 34px; height: 34px; border-radius: 10px; background: var(--accent-tint); color: var(--accent); display: flex; align-items: center; justify-content: center; }
+.tile svg { width: 19px; height: 19px; flex: none; display: block; }
+.tile .tl { flex: 1 1 auto; min-width: 0; }
+.tile .tl .t { display: block; font-size: 1.06rem; font-weight: 500; letter-spacing: -0.01em; }
+.tile .tl .d { display: block; font-size: 0.765rem; color: var(--label2); margin-top: 1px; line-height: 1.35; }
+.tile .tc, .hrow .tc { flex: none; width: 8px; height: 8px; border-right: 2px solid var(--label3); border-bottom: 2px solid var(--label3); transform: rotate(-45deg); margin-right: 4px; }
 .tile:active { background: var(--fill); }
 .tile[disabled] { opacity: 0.4; pointer-events: none; }
-.placeholder .idle-history { margin: 20px 0 auto; min-width: 0; flex: none; }
+.placeholder .idle-history { border-radius: 16px; box-shadow: var(--shadow); flex: none; }
+.idle-foot { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 0.706rem; color: var(--label3); margin: 22px 0 auto; padding-top: 14px; border-top: 1px solid var(--sep); flex: none; }
+.idle-foot span { display: inline-flex; align-items: center; gap: 5px; }
+.idle-foot .dot { width: 6px; height: 6px; margin: 0; }
 .flag { display: flex; gap: 10px; align-items: flex-start; margin: 12px 16px 0; padding: 10px 12px; border-radius: 12px; background: var(--warn-tint, rgba(255, 149, 0, 0.12)); }
 .flag-i { flex: none; width: 20px; height: 20px; border-radius: 50%; background: var(--orange); color: #FFFFFF; font-size: 0.8rem; font-weight: 700; display: flex; align-items: center; justify-content: center; margin-top: 1px; }
 .flag-t { font-size: 0.882rem; font-weight: 600; color: var(--label); }
@@ -190,7 +216,7 @@ input[type=range] { accent-color: var(--accent); width: 100%; margin: 0; }
 #zoomWrap input[type=range] { width: 110px; }
 /* -------------------------------------------------------------- result sheet */
 .sheet { position: fixed; left: 0; right: 0; bottom: calc(var(--tabbar) + var(--safe-b)); top: calc(var(--safe-t) + 10px); z-index: 30; max-width: 640px; margin: 0 auto;
-  background: var(--cell); border-radius: 16px 16px 0 0; display: flex; flex-direction: column; transform: translateY(100%); visibility: hidden; will-change: transform;
+  background: var(--cell); border-radius: 20px 20px 0 0; display: flex; flex-direction: column; transform: translateY(100%); visibility: hidden; will-change: transform;
   transition: transform 0.42s var(--ease), clip-path 0.42s var(--ease), -webkit-clip-path 0.42s var(--ease), visibility 0s linear 0.42s; }
 .sheet.open { visibility: visible; transition: transform 0.42s var(--ease), clip-path 0.42s var(--ease), -webkit-clip-path 0.42s var(--ease), visibility 0s; }
 .sheet.dragging, .sheet.jump { transition: none; }
@@ -201,39 +227,70 @@ input[type=range] { accent-color: var(--accent); width: 100%; margin: 0; }
 .sheet-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; padding: 0 16px 28px; }
 .sheet:not([data-snap=full]) .sheet-body { overflow: hidden; }
 .sh-head { display: flex; gap: 14px; align-items: center; padding: 4px 44px 14px 0; }
-.thumb { width: 64px; height: 64px; border-radius: 8px; object-fit: contain; background: #FFFFFF; flex: none; box-shadow: inset 0 0 0 1px var(--sep); }
+.thumb { width: 60px; height: 60px; border-radius: 14px; object-fit: contain; background: #FFFFFF; flex: none; box-shadow: inset 0 0 0 1px var(--sep); }
 .thumb.noimg { background: var(--fill); color: var(--label3); display: flex; align-items: center; justify-content: center; }
 .thumb.noimg svg { width: 28px; height: 28px; }
-.sh-head .name { font-size: 1.294rem; font-weight: 700; line-height: 1.2; word-break: break-word; }
+.sh-head .name { font-size: 1.47rem; font-weight: 700; line-height: 1.15; letter-spacing: -0.02em; word-break: break-word; }
 .sh-head .brand { font-size: 0.882rem; color: var(--label2); margin-top: 2px; }
 .sh-head .meta { font-size: 0.765rem; color: var(--label2); margin-top: 3px; }
 .sec { padding: 14px 0; position: relative; }
 .sec + .sec::before, .sec.sep::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 1px; background: var(--sep); transform: scaleY(0.5); transform-origin: 0 0; }
-.sec-h { font-size: 0.765rem; color: var(--label2); margin-bottom: 8px; }
-.sec-f { font-size: 0.765rem; color: var(--label2); margin-top: 8px; line-height: 1.35; }
-.score-row { display: flex; align-items: center; gap: 14px; }
-.score-n { font-size: 1.647rem; font-weight: 700; line-height: 1; min-width: 2.2em; }
-.score-n.none { color: var(--label3); }
-.band { font-size: 1rem; font-weight: 600; display: flex; align-items: center; }
-.rsn { list-style: none; margin: 12px 0 0; padding: 0; }
-.rsn li { display: flex; align-items: center; gap: 10px; min-height: 40px; padding: 6px 0; border-top: 1px solid var(--sep); font-size: 1rem; }
-.rsn li:first-child { border-top: 0; }
-.rsn .rt { flex: 1 1 auto; min-width: 0; }
-.rsn .rd { flex: none; max-width: 48%; text-align: right; white-space: nowrap; color: var(--label2); font-size: 0.882rem; }
-.score .note { margin-top: 8px; }
+.sec-h { font-size: var(--caps); font-weight: 700; letter-spacing: 0.1em; font-variant-caps: all-small-caps; color: var(--label3); margin-bottom: 9px; }
+.sec-f { font-size: 0.765rem; color: var(--label2); margin-top: 9px; line-height: 1.4; }
+/* the number itself, the band beside it as a tinted pill, and the profile underneath */
+.score-row { display: flex; align-items: flex-end; gap: 14px; }
+.score-n { font-size: 3.2rem; font-weight: 700; line-height: 0.84; letter-spacing: -0.045em; min-width: 1.6em; }
+.score-n.none { color: var(--label3); font-size: 2.4rem; }
+.score-row .grow { padding-bottom: 3px; }
+.band { font-size: var(--caps); font-weight: 700; letter-spacing: 0.1em; font-variant-caps: all-small-caps; display: inline-flex; align-items: center; border-radius: 7px; padding: 4px 9px; background: var(--fill); color: var(--label2); }
+.band .dot { display: none; }
+.band.b-green { background: var(--good-tint); color: var(--green); }
+.band.b-best { background: var(--best-tint); color: var(--best); }
+.band.b-orange { background: var(--poor-tint); color: var(--orange); }
+.band.b-red { background: var(--bad-tint); color: var(--red); }
+.score-row .foot { margin-top: 5px; }
+.t-best { color: var(--best); } .t-green { color: var(--green); } .t-orange { color: var(--orange); } .t-red { color: var(--red); }
+/* the scoring model, drawn: where the food's own quality sits, and where your preferences moved it to */
+.tilt { margin: 16px 0 0; }
+.tilt-track { position: relative; height: 30px; }
+.tilt-zones { position: absolute; left: 0; right: 0; top: 12px; height: 7px; border-radius: 4px; overflow: hidden; display: flex; gap: 1px; }
+.tilt-zones i { display: block; height: 100%; }
+.tilt-zones i:nth-child(1) { width: 25%; background: var(--bad-tint); }
+.tilt-zones i:nth-child(2) { width: 25%; background: var(--poor-tint); }
+.tilt-zones i:nth-child(3) { width: 25%; background: var(--good-tint); }
+.tilt-zones i:nth-child(4) { width: 25%; background: var(--best-tint); }
+.tilt-move { position: absolute; top: 12px; height: 7px; background: var(--label3); opacity: 0.55; }
+.tilt-pin { position: absolute; top: 7px; width: 2px; height: 17px; margin-left: -1px; background: var(--label2); border-radius: 1px; }
+.tilt-pin::after { content: attr(data-l); position: absolute; top: 19px; left: 50%; transform: translateX(-50%); font-size: 0.588rem; font-weight: 700; letter-spacing: 0.09em; font-variant-caps: all-small-caps; color: var(--label3); white-space: nowrap; }
+.tilt-now { position: absolute; top: 4px; width: 5px; height: 23px; margin-left: -2.5px; border-radius: 3px; box-shadow: 0 0 0 2.5px var(--cell); }
+.tilt-track { padding: 0 3px; }
+.tilt-zones, .tilt-move, .tilt-pin, .tilt-now { margin-right: 0; }
+.tilt-key { display: flex; flex-wrap: wrap; gap: 3px 16px; font-size: 0.765rem; color: var(--label2); margin-top: 13px; }
+.tilt-key span { display: inline-flex; align-items: baseline; gap: 5px; }
+.tilt-key b { font-weight: 700; color: var(--label); }
+/* the reasons: a severity stripe carries the state, so the words never have to shout */
+.rsn { list-style: none; margin: 16px 0 0; padding: 0; display: grid; gap: 1px; background: var(--sep); border-radius: 12px; overflow: hidden; }
+.rsn li { display: flex; align-items: center; gap: 11px; min-height: 44px; padding: 9px 12px 9px 9px; background: var(--cell); font-size: 1rem; }
+.rsn .dot { width: 4px; height: 22px; border-radius: 3px; margin: 0; background: var(--label3); vertical-align: 0; }
+.rsn .dot.green { background: var(--green); } .rsn .dot.best { background: var(--best); }
+.rsn .dot.orange { background: var(--orange); } .rsn .dot.red { background: var(--red); }
+.rsn .rt { flex: 1 1 auto; min-width: 0; letter-spacing: -0.005em; }
+.rsn .rd { flex: none; max-width: 48%; text-align: right; white-space: nowrap; color: var(--label2); font-size: 0.824rem; }
+.score .note { margin-top: 10px; }
 .fac { list-style: none; margin: 0; padding: 0; }
-.fac li { padding: 10px 0; border-top: 1px solid var(--sep); }
+.fac li { padding: 11px 0; border-top: 1px solid var(--sep); }
 .fac li:first-child { border-top: 0; }
 .fac .fh { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
-.fac .ft { flex: 1 1 auto; min-width: 0; font-size: 1rem; }
-.fac .fs { flex: none; display: flex; flex-direction: column; align-items: flex-end; font-size: 1rem; font-weight: 600; white-space: nowrap; }
-.fac .fw { font-size: 0.765rem; font-weight: 400; color: var(--label2); margin-top: 2px; }
-.fac .fd { font-size: 0.765rem; color: var(--label2); line-height: 1.35; margin-top: 2px; word-break: break-word; }
+.fac .ft { flex: 1 1 auto; min-width: 0; font-size: 1rem; letter-spacing: -0.005em; }
+.fac .fs { flex: none; display: flex; flex-direction: column; align-items: flex-end; font-size: 1.06rem; font-weight: 700; line-height: 1.1; white-space: nowrap; }
+.fac .fw { font-size: 0.588rem; font-weight: 700; letter-spacing: 0.08em; font-variant-caps: all-small-caps; color: var(--label3); margin-top: 3px; }
+.fac .fd { font-size: 0.765rem; color: var(--label2); line-height: 1.4; margin-top: 3px; word-break: break-word; }
 .fac li.none .ft, .fac li.none .fs { color: var(--label2); }
-.fbar { height: 4px; border-radius: 2px; background: var(--fill2); margin-top: 8px; overflow: hidden; }
-.fbar span { display: block; height: 100%; border-radius: 2px; background: var(--label3); }
+.fbar { height: 4px; border-radius: 3px; background: var(--fill2); margin-top: 9px; overflow: hidden; }
+.fbar span { display: block; height: 100%; border-radius: 3px; background: var(--label3); }
 .fbar .good { background: var(--green); } .fbar .bad { background: var(--red); }
-.lowconf { font-size: 0.765rem; color: var(--orange); margin-top: 6px; }
+.worked { font-size: 0.765rem; color: var(--label2); line-height: 1.5; padding: 11px 0 2px; }
+.lowconf { font-size: 0.765rem; color: var(--orange); margin-top: 7px; }
 details.disc { margin-top: 6px; }
 details.disc summary { list-style: none; display: flex; align-items: center; min-height: 44px; font-size: 1rem; cursor: pointer; position: relative; padding-right: 26px; }
 details.disc summary::-webkit-details-marker { display: none; }
@@ -248,14 +305,32 @@ table.cov td, table.cov th { text-align: center; }
 table.cov .has { color: var(--green); } table.cov .no { color: var(--label3); }
 .avoid-row { display: flex; align-items: center; min-height: 32px; font-size: 1rem; }
 .avoid-row.warn { color: var(--label); } .avoid-row.caution { color: var(--label); }
-.nut-hero { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 14px 0 6px; }
+/* The data surfaces borrow the one document this subject owns: a printed nutrition panel. A caps head over a heavy
+   rule, hairlines between the rows, and figures right-aligned in tabular numerals. */
+/* Only the two data surfaces become panels. The Ingredients and Coverage disclosures stay plain rows: a heavy rule
+   over a one-line summary would be all weight and no data. */
+.sec.nut, .sec.score > details.disc { background: var(--cell); border-radius: 16px; box-shadow: var(--shadow); padding: 13px 14px 4px; margin-top: 12px; }
+.sec.nut::before, .sec.score > details.disc::before { display: none; }
+.sec.nut > .sec-h, .sec.score > details.disc[open] > summary { padding-bottom: 7px; border-bottom: 4px solid var(--rule); margin-bottom: 0; }
+.sec.score > details.disc:not([open]) > summary { padding-bottom: 4px; }
+.sec.score > details.disc > summary { font-size: var(--caps); font-weight: 700; letter-spacing: 0.1em; font-variant-caps: all-small-caps; color: var(--label); min-height: 34px; align-items: flex-end; }
+.sec.score > details.disc > summary::after { top: auto; bottom: 14px; transform: rotate(45deg); }
+.sec.score > details.disc[open] > summary::after { bottom: 11px; transform: rotate(-135deg); }
+.sec.score > details.disc > summary .rv { letter-spacing: 0; font-weight: 400; font-variant-caps: normal; }
+.sec.nut .sec-f, .sec.score > details.disc .sec-f { margin-top: 0; padding: 10px 0 9px; }
+.sec.nut > .sec-h { display: flex; align-items: baseline; gap: 8px; }
+.sec.nut > .sec-h span:first-child { flex: 1 1 auto; color: var(--label); }
+.sec.nut > .sec-h .basis { font-weight: 500; letter-spacing: 0.04em; color: var(--label3); }
+.nut-hero { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 11px 0 9px; border-bottom: 2px solid var(--fill2); }
 .nut-hero .hl { font-size: 1rem; font-weight: 600; }
-.nut-hero .hv { font-size: 1.647rem; font-weight: 700; line-height: 1; }
+.nut-hero .hv { font-size: 1.294rem; font-weight: 700; line-height: 1; }
 .nlist { list-style: none; margin: 0; padding: 0; }
-.nlist li { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 44px; padding: 8px 0; border-top: 1px solid var(--sep); font-size: 1rem; }
-.nlist li .v { color: var(--label2); }
+.nlist li { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 42px; padding: 8px 0; border-top: 1px solid var(--sep); font-size: 1rem; }
+.nlist li:first-child { border-top: 0; }
+.nlist li .v { color: var(--label2); font-weight: 500; }
 .nut.basis-s .v.h, .nut.basis-h .v.s { display: none; }
-.missing { display: flex; align-items: center; min-height: 40px; padding: 6px 0 0; font-size: 0.882rem; color: var(--label2); border-top: 1px solid var(--sep); }
+.nut .segmented { margin: 11px 0 3px; }
+.missing { display: flex; align-items: center; min-height: 40px; padding: 10px 0 0; font-size: 0.824rem; color: var(--label2); }
 .missing.bad { color: var(--label); }
 .ingr { white-space: pre-wrap; font-size: 0.882rem; line-height: 1.4; margin: 0 0 8px; word-break: break-word; }
 .kv { list-style: none; margin: 0; padding: 0; }
@@ -286,7 +361,19 @@ table.cov .has { color: var(--green); } table.cov .no { color: var(--label3); }
 @keyframes spin { to { transform: rotate(360deg); } }
 .loading { display: flex; align-items: center; gap: 12px; min-height: 60px; padding: 8px 0 16px; font-size: 1rem; }
 /* ----------------------------------------------------------------- log */
-.loglist li { display: flex; align-items: center; gap: 12px; min-height: 44px; padding: 10px 16px; cursor: pointer; }
+.loglist li { display: flex; align-items: flex-start; gap: 12px; min-height: 44px; padding: 11px 16px; cursor: pointer; }
+.loglist li.empty { align-items: center; }
+.loglist .sq { flex: none; width: 40px; height: 40px; margin-top: 1px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 1.06rem; font-weight: 700; background: var(--fill); color: var(--label2); }
+.loglist .sq.b-green { background: var(--good-tint); color: var(--green); }
+.loglist .sq.b-best { background: var(--best-tint); color: var(--best); }
+.loglist .sq.b-orange { background: var(--poor-tint); color: var(--orange); }
+.loglist .sq.b-red { background: var(--bad-tint); color: var(--red); }
+/* the tally: what you actually did, four figures across one card */
+.tally-strip { display: flex; background: var(--cell); border-radius: 16px; box-shadow: var(--shadow); overflow: hidden; margin: 0 0 12px; }
+.tally-strip div { flex: 1 1 0; padding: 12px 10px; min-width: 0; }
+.tally-strip div + div { border-left: 1px solid var(--sep); }
+.tally-strip .tn { display: block; font-size: 1.412rem; font-weight: 700; letter-spacing: -0.03em; line-height: 1.1; }
+.tally-strip .tl { display: block; font-size: 0.588rem; font-weight: 700; letter-spacing: 0.09em; font-variant-caps: all-small-caps; color: var(--label3); margin-top: 2px; }
 .loglist li.empty { color: var(--label2); font-size: 0.882rem; cursor: default; }
 .loglist li:active { background: var(--fill); }
 .loglist .nm { font-size: 1rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -359,7 +446,7 @@ table.cov .has { color: var(--green); } table.cov .no { color: var(--label3); }
 .chips-row .chip { flex: none; min-height: 34px; padding: 6px 14px; font-size: 0.882rem; background: var(--cell); color: var(--accent-btn); font-weight: 500; position: relative; }
 .chips-row .chip::before { content: ""; position: absolute; left: 0; right: 0; top: -5px; bottom: -5px; }   /* 44 pt hit area behind the 34 pt chip */
 .chips-row .chip:active { background: var(--fill); }
-.plate { width: 190px; height: 190px; border-radius: 50%; margin: 14px auto 6px; position: relative; box-shadow: 0 0 0 5px var(--cell), 0 0 0 6px var(--sep); background: conic-gradient(#2E8B57 0 30%, #E0A526 30% 50%, #B0743F 50% 80%, #5856D6 80% 100%); }
+.plate { width: 190px; height: 190px; border-radius: 50%; margin: 14px auto 6px; position: relative; box-shadow: 0 0 0 5px var(--cell), 0 0 0 6px var(--sep); background: conic-gradient(#2E7D4F 0 30%, #B98A22 30% 50%, #9C6A3C 50% 80%, #12626D 80% 100%); }
 .plate span { position: absolute; width: 50%; text-align: center; color: #FFFFFF; font-size: 0.706rem; font-weight: 600; line-height: 1.2; padding: 0 6px; text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5); }
 .plate .q1 { left: 50%; top: 22%; } .plate .q2 { left: 50%; top: 66%; } .plate .q3 { left: 0; top: 56%; } .plate .q4 { left: 0; top: 24%; }
 .plate-idea { font-size: 1rem; line-height: 1.4; padding: 10px 16px 14px; }
@@ -526,12 +613,15 @@ body.ob-open, body.dbg-open { overflow: hidden; }
       <div class="placeholder" id="placeholder">
         <div class="glyph" aria-hidden="true"><svg viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 20v-6a8 8 0 0 1 8-8h6M44 6h6a8 8 0 0 1 8 8v6M58 44v6a8 8 0 0 1-8 8h-6M20 58h-6a8 8 0 0 1-8-8v-6"/><path d="M32 25.5c-3.4-3.2-8.4-3.6-12-.9-5.1 3.9-5.7 12.6-2.1 19.8 2.5 5.1 6 8.6 9 8.6 1.9 0 3.3-1.1 5.1-1.1s3.2 1.1 5.1 1.1c3 0 6.5-3.5 9-8.6 3.6-7.2 3-15.9-2.1-19.8-3.6-2.7-8.6-2.3-12 .9z"/><path d="M32 25.5v-6"/><path d="M32 19.5c.6-4.6 4.5-7.4 9.3-7-.4 4.7-4.3 7.6-9.3 7z"/></svg></div>
         <h2>What are you eating?</h2>
+        <p class="idle-sub">Three ways in. Every one of them ends with a score you can argue with.</p>
         <div class="idle-actions">
-          <button class="tile" id="btnStart" type="button"><svg viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 9V6a3 3 0 0 1 3-3h3M17 3h3a3 3 0 0 1 3 3v3M23 17v3a3 3 0 0 1-3 3h-3M9 23H6a3 3 0 0 1-3-3v-3"/><path d="M8 9v8M11.5 9v8M15 9v8M18 9v8"/></svg><span>Scan a barcode</span></button>
-          <button class="tile" id="btnPhotoIdle" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.2"/></svg><span>Photograph food</span></button>
-          <button class="tile" id="btnMenuIdle" type="button"><svg viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="3" width="18" height="20" rx="3"/><path d="M8 8h10M8 12h10M8 16h6"/><circle cx="17.5" cy="17.5" r="1.2" fill="currentColor" stroke="none"/></svg><span>Review a menu</span></button>
+          <button class="tile" id="btnStart" type="button"><span class="ti" aria-hidden="true"><svg viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9V6a3 3 0 0 1 3-3h3M17 3h3a3 3 0 0 1 3 3v3M23 17v3a3 3 0 0 1-3 3h-3M9 23H6a3 3 0 0 1-3-3v-3"/><path d="M8 9v8M11.5 9v8M15 9v8M18 9v8"/></svg></span><span class="tl"><span class="t">Scan a barcode</span><span class="d">Packaged food, in about a second</span></span></button>
+          <button class="tile" id="btnPhotoIdle" type="button"><span class="ti" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.2"/></svg></span><span class="tl"><span class="t">Photograph food</span><span class="d">A plate, a lunch box, anything cooked</span></span></button>
+          <button class="tile" id="btnMenuIdle" type="button"><span class="ti" aria-hidden="true"><svg viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="18" height="20" rx="3"/><path d="M8 8h10M8 12h10M8 16h6"/><circle cx="17.5" cy="17.5" r="1.2" fill="currentColor" stroke="none"/></svg></span><span class="tl"><span class="t">Review a menu</span><span class="d">Photograph it, get the best choices</span></span></button>
         </div>
-        <button class="btn small idle-history" id="btnHistory" type="button" aria-haspopup="dialog">History</button>
+        <div class="idle-h">Already scanned</div>
+        <button class="hrow idle-history" id="btnHistory" type="button" aria-haspopup="dialog"><span class="tl"><span class="t">History</span><span class="d" id="historyHint">Everything you have scanned, on this phone</span></span><span class="tc" aria-hidden="true"></span></button>
+        <div class="idle-foot" id="idleFoot"></div>
       </div>
     </div>
     <div class="scan-ui">
@@ -691,6 +781,7 @@ body.ob-open, body.dbg-open { overflow: hidden; }
     <div class="side r"></div>
   </div>
   <div class="modal-body">
+    <div class="tally-strip" id="tallyStrip"></div>
     <div class="group-h">Coverage</div>
     <div class="group" id="tally"></div>
     <div class="group-f" id="tallyNote"></div>
@@ -1384,8 +1475,28 @@ function toCSV(entries) {
 }
 // The coverage tally counts barcode lookups against the databases; photo estimates are the model's guesses, so they
 // are counted on their own row (a lifetime counter like the barcode one) and never inside the database numbers.
+// The first screen states what it is trusting: the two databases, whether the AI features can run, and the profile
+// every score on this phone is measured against. It used to take three taps into Settings to learn any of that.
+function renderIdle() {
+  var hint = $('historyHint'), foot = clear($('idleFoot'));
+  if (hint) hint.textContent = scanLog.length ? scanLog.length + ' food' + (scanLog.length === 1 ? '' : 's') + ', newest first' : 'Everything you scan is kept on this phone';
+  var uc = usdaConfig(), ai = aiReady();
+  [['Open Food Facts', 'green'], ['USDA FoodData Central', uc ? 'green' : ''], ['Photos, menus and plans', ai ? 'green' : ''],
+   [profile ? (profile.mode === 'standard' ? 'Standard score' : profile.name || 'Custom score') : 'Scoring not chosen', profile ? 'green' : 'orange']]
+    .forEach(function (x) { foot.appendChild(h('span', {}, [h('span', { class: 'dot ' + x[1], 'aria-hidden': 'true' }), x[0]])); });
+}
 function renderTally() {
+  renderIdle();
   var t = tally, el = clear($('tally')), photos = t.photos || 0;
+  // What you actually did, four figures across: the counts you recognise, and what they averaged.
+  var scored = scanLog.filter(function (e) { return e.score !== null && e.score !== undefined; });
+  var avg = scored.length ? Math.round(scored.reduce(function (a, e) { return a + e.score; }, 0) / scored.length) : null;
+  var strip = clear($('tallyStrip'));
+  [['Barcodes', String(t.total || 0), ''], ['Photos', String(photos), ''], ['Incomplete', String(t.incomplete || 0), ''],
+   ['Average', avg === null ? '\u2013' : String(avg), avg === null ? '' : ' t-' + (bandColor(bandOf(avg).key) || 'none')]
+  ].forEach(function (x) {
+    strip.appendChild(h('div', {}, [h('span', { class: 'tn' + x[2], text: x[1] }), h('span', { class: 'tl', text: x[0] })]));
+  });
   [['Barcode scans', t.total], ['Photo estimates', photos], ['Found in Open Food Facts', t.off], ['Found in USDA', t.usda], ['Found in neither', t.neither], ['Found but incomplete', t.incomplete], ['Lookup errors', t.errors || 0]]
     .forEach(function (x) { el.appendChild(h('div', { class: 'row' }, [h('span', { class: 'rl' }, h('span', { class: 't', text: x[0] })), h('span', { class: 'rv', text: String(x[1]) })])); });
   var uniq = {};
@@ -1395,7 +1506,7 @@ function renderTally() {
 }
 function originWord(o) { return o === 'scan' ? 'scanned' : o === 'manual' ? 'typed' : o === 'refetch' ? 'refreshed' : o === 'log' ? 'reopened' : o === 'photo' ? 'from a photo' : (o || ''); }
 function statusColor(s) { return s === 'found' ? 'green' : s === 'error' ? 'orange' : s === 'skipped' ? '' : 'red'; }
-function bandColor(key) { return key === 'excellent' || key === 'good' ? 'green' : key === 'poor' ? 'orange' : key === 'bad' ? 'red' : ''; }
+function bandColor(key) { return key === 'excellent' ? 'best' : key === 'good' ? 'green' : key === 'poor' ? 'orange' : key === 'bad' ? 'red' : ''; }
 function renderLog() {
   var ul = clear($('logList'));
   if (!scanLog.length) { ul.appendChild(h('li', { class: 'empty', text: 'Nothing logged yet. Every barcode lookup and photo estimate is listed here.' })); return; }
@@ -1406,22 +1517,22 @@ function renderLog() {
       : h('span', { class: 'srcs' }, [h('span', {}, [h('span', { class: 'dot ' + statusColor(e.off), 'aria-hidden': 'true' }), 'Open Food Facts', ' ' + statusWord(e.off)])]);
     if (!e.estimate && e.usda !== 'skipped') srcs.appendChild(h('span', {}, [h('span', { class: 'dot ' + statusColor(e.usda), 'aria-hidden': 'true' }), 'USDA', ' ' + statusWord(e.usda)]));
     var hasMissing = found && e.missing && e.missing.length;
-    var right = h('div', { class: 'sc' });
-    if (e.score !== null && e.score !== undefined) {
-      var sb = bandOf(e.score);
-      right.appendChild(h('div', { class: 'n' }, [h('span', { class: 'dot ' + (e.lowConfidence ? '' : bandColor(sb.key)), 'aria-hidden': 'true' }), String(e.score), h('span', { class: 'sr', text: ', ' + (e.lowConfidence ? 'low confidence' : sb.label) })]));
-      right.appendChild(h('div', { class: 'm', text: (e.scoreMode === 'custom' ? 'Custom' : 'Standard') + (e.lowConfidence ? ', low confidence' : '') }));
-    }
+    var scored = e.score !== null && e.score !== undefined, sb = scored ? bandOf(e.score) : null;
+    var tone = (scored && !e.lowConfidence) ? bandColor(sb.key) : '';
+    var sq = h('div', { class: 'sq' + (tone ? ' b-' + tone : '') }, scored
+      ? [String(e.score), h('span', { class: 'sr', text: ', ' + (e.lowConfidence ? 'low confidence' : sb.label) })]
+      : [h('span', { 'aria-hidden': 'true' }, '\u2013'), h('span', { class: 'sr', text: 'no score' })]);
     function open() { closeHistory(); showTab('scan'); if (e.estimate) showEstimate(e.estimate); else handleCode(e.barcode, e.format || null, 'log'); }
     var li = h('li', { role: 'button', tabindex: '0', onclick: open, onkeydown: function (ev) { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); open(); } } }, [
+      sq,
       h('div', { class: 'grow' }, [
         h('div', { class: 'nm', text: e.name || (found ? '(unnamed)' : e.estimate ? '(unnamed food)' : (e.off === 'error' || e.usda === 'error') ? 'Lookup failed' : 'Not found') }),
+        scored ? h('div', { class: 'd' }, [h('span', { class: 'm' + (tone ? ' t-' + tone : '') }, e.lowConfidence ? 'Low confidence' : sb.label), ' \u00b7 ' + (e.scoreMode === 'custom' ? 'Custom' : 'Standard') + (e.lowConfidence && !e.estimate ? ', low confidence' : '')]) : null,
         h('div', { class: 'd', text: e.estimate ? 'Estimated, no barcode' : e.barcode + (e.cached ? ', cached' : '') }),
         h('div', { class: 'd' }, [srcs, ' ' + shortTime(e.ts) + (e.origin ? ', ' + originWord(e.origin) : '')]),
         hasMissing ? h('div', { class: 'd warn', text: 'Missing ' + e.missing.join(', ') }) : null,
         (e.warnings && e.warnings.length) ? h('div', { class: 'd bad', text: e.warnings.join(', ') }) : null
-      ]),
-      right
+      ])
     ]);
     ul.appendChild(li);
   });
@@ -2016,6 +2127,23 @@ function prepFlag() {
     ])
   ]);
 }
+// The scoring model, drawn to the same scale as the bands: where the food's own quality sits, the stretch the profile
+// moved it over, and where it ended up. The number and the sentence under it say the same thing in words.
+function tiltTrack(sc, tone) {
+  var base = Math.max(0, Math.min(100, sc.base)), now = Math.max(0, Math.min(100, sc.score));
+  var lo = Math.min(base, now), hi = Math.max(base, now);
+  var zones = h('div', { class: 'tilt-zones', 'aria-hidden': 'true' }, [h('i', {}), h('i', {}), h('i', {}), h('i', {})]);
+  var track = h('div', { class: 'tilt-track' }, [zones]);
+  if (hi > lo) track.appendChild(h('div', { class: 'tilt-move', style: 'left:' + lo + '%;width:' + (hi - lo) + '%', 'aria-hidden': 'true' }));
+  track.appendChild(h('div', { class: 'tilt-pin', 'data-l': 'quality', style: 'left:' + base + '%', 'aria-hidden': 'true' }));
+  track.appendChild(h('div', { class: 'tilt-now', style: 'left:' + now + '%;background:var(--' + (tone === 'best' ? 'best' : tone === 'green' ? 'green' : tone === 'orange' ? 'orange' : tone === 'red' ? 'red' : 'label3') + ')', 'aria-hidden': 'true' }));
+  var key = h('div', { class: 'tilt-key', 'aria-hidden': 'true' }, [
+    h('span', {}, ['Food quality ', h('b', { text: String(sc.base) })]),
+    h('span', {}, ['Your preferences ', h('b', { class: sc.tilt > 0 ? 't-green' : sc.tilt < 0 ? 't-red' : '', text: (sc.tilt > 0 ? '+' : sc.tilt < 0 ? '\u2212' : '\u00b1') + Math.abs(sc.tilt) })]),
+    h('span', {}, ['Score ', h('b', { class: tone ? 't-' + tone : '', text: String(sc.score) })])
+  ]);
+  return h('div', { class: 'tilt' }, [track, key]);
+}
 function renderScore(sc, estimated) {
   var sec = h('section', { class: 'sec score' });
   if (sc.score === null) {
@@ -2027,15 +2155,17 @@ function renderScore(sc, estimated) {
   items.forEach(function (x) { byKey[x.key] = x; });
   function wordsOf(x) { return standard ? componentWords(x) : factorWords(x, sc); }
   function has(x) { return (standard ? x.score : x.s) !== null; }
+  var tone = sc.lowConfidence ? '' : bandColor(sc.band.key);
   sec.appendChild(h('div', { class: 'score-row' }, [
-    h('div', { class: 'score-n', text: String(sc.score), 'aria-label': 'Score ' + sc.score + ' of 100' }),
+    h('div', { class: 'score-n' + (tone ? ' t-' + tone : ''), text: String(sc.score), 'aria-label': 'Score ' + sc.score + ' of 100' }),
     h('div', { class: 'grow' }, [
-      h('div', { class: 'band' }, [h('span', { class: 'dot ' + (sc.lowConfidence ? '' : bandColor(sc.band.key)), 'aria-hidden': 'true' }), sc.lowConfidence ? 'Low confidence' : sc.band.label]),
+      h('div', { class: 'band' + (tone ? ' b-' + tone : '') }, [h('span', { class: 'dot ' + tone, 'aria-hidden': 'true' }), sc.lowConfidence ? 'Low confidence' : sc.band.label]),
       h('div', { class: 'foot', text: standard ? 'Standard score' : 'Your profile: ' + ((profile && profile.name) || 'custom') })
     ])
   ]));
   if (!standard && sc.base !== null && sc.base !== undefined) {
-    sec.appendChild(h('div', { class: 'foot note', text: 'Food quality ' + sc.base + (sc.tilt ? ', your preferences ' + (sc.tilt > 0 ? '+' : '−') + Math.abs(sc.tilt) : ', your preferences leave it there') + '.' }));
+    sec.appendChild(tiltTrack(sc, tone));
+    sec.appendChild(h('div', { class: 'sr', text: 'Food quality ' + sc.base + (sc.tilt ? ', your preferences ' + (sc.tilt > 0 ? '+' : '−') + Math.abs(sc.tilt) : ', your preferences leave it there') + '.' }));
   }
   if (estimated) sec.appendChild(prepFlag());
   // the three factors that moved the score most, in words; a factor sitting exactly at 50 moved nothing and is not listed
@@ -2087,7 +2217,8 @@ var NUTRIENT_OPTS = {
 };
 // Every pick already means less (or more) of that nutrient; the level says how strongly it counts. Slight and medium
 // preferences use the standard guideline cut-offs and differ only in weight; a strict preference also halves the limit
-// cut-offs ('low' metrics) and raises the targets ('high' metrics such as fiber and protein) by 1.5×.
+// cut-offs ('low' metrics). The scaled 'high' targets are kept for the summary screen but the scorer ignores them:
+// anything you want more of is bonus-only, so a higher bar could only shrink the bonus (see customScore).
 var STRICTNESS = { slight: { low: 1, high: 1, weight: 1, label: 'Slight preference' }, medium: { low: 1, high: 1, weight: 3, label: 'Medium preference' }, strict: { low: 0.5, high: 1.5, weight: 5, label: 'Strict preference' } };
 var STRICT_LEVELS = ['slight', 'medium', 'strict'];
 var LEGACY_LEVELS = { relaxed: 'slight', typical: 'medium' };   // names used by earlier versions of the questionnaire
@@ -2104,7 +2235,7 @@ AVOID_OPTS.forEach(function (g) { g.items.forEach(function (it) { AVOID_LABEL[it
 var QUESTIONS = [
   { id: 'limit', title: 'What do you want less of?', hint: 'Pick any, or none. Each pick is scored against a per-100 g cut-off.', type: 'multi', options: NUTRIENT_OPTS.limit },
   { id: 'more', title: 'What do you want more of?', hint: 'Pick any, or none. Total fat and calories appear here for high-fat or weight-gain plans, unless you chose to limit them in the previous question.', type: 'multi', options: NUTRIENT_OPTS.more },
-  { id: 'strict', title: 'How strong is each preference?', hint: 'Each pick already means less (or more) of it; the level is how much it counts. Slight preference: weight 1, scored against the standard front-of-pack guideline cut-offs (e.g. sugar 5–22.5 g per 100 g). Medium preference: weight 3, same cut-offs. Strict preference: weight 5 and the cut-offs are halved (targets 1.5×) — for keto, diabetes, low-sodium or similar plans.', type: 'strictness' },
+  { id: 'strict', title: 'How strong is each preference?', hint: 'Each pick already means less (or more) of it; the level is how much it counts. Slight preference: weight 1, scored against the standard front-of-pack guideline cut-offs (e.g. sugar 5–22.5 g per 100 g). Medium preference: weight 3, same cut-offs. Strict preference: weight 5, and for something you want LESS of the cut-offs are halved as well — for keto, diabetes, low-sodium or similar plans. For something you want more of, the level sets the weight and nothing else: raising the bar on a bonus could only shrink it.', type: 'strictness' },
   { id: 'processing', title: 'Processing and additives?', type: 'single', options: [
     ['ok', 'Do not mind', 'NOVA group and additives are ignored.'],
     ['prefer', 'Prefer less processed food', 'Moderate weight on the NOVA group and on additives.'],
@@ -2483,6 +2614,7 @@ function renderResult(res) {
   }
   segS = h('button', { type: 'button', 'aria-pressed': String(hasServing), onclick: function () { setBasis('s'); } }, 'Per serving');
   segH = h('button', { type: 'button', 'aria-pressed': String(!hasServing), onclick: function () { setBasis('h'); } }, basisLabel);
+  nut.appendChild(h('div', { class: 'sec-h' }, [h('span', { text: 'Nutrition facts' }), h('span', { class: 'basis', text: hasServing ? 'per serving' : basisLabel.toLowerCase() })]));
   nut.appendChild(h('div', { class: 'segmented', id: 'basisSeg', role: 'group', 'aria-label': 'Values shown' }, [segS, segH]));
   function vals(k, unit) { return [h('span', { class: 'v s', text: fmtVal(m.perServing[k], unit) }), h('span', { class: 'v h', text: fmtVal(m.per100[k], unit) })]; }
   nut.appendChild(h('div', { class: 'nut-hero' }, [h('span', { class: 'hl', text: 'Net carbs' }), h('span', { class: 'hv' }, vals('netCarbs', 'g'))]));
@@ -3158,6 +3290,7 @@ function renderServiceRow() {
   $('btnRemoveKey').classList.toggle('hidden', !usdaKey);
 }
 function renderSettings() {
+  renderIdle();   // the first screen names the same sources and profile this one configures
   renderServiceRow();
   var si = clear($('scoringInfo'));
   function row(t, d, v) { si.appendChild(h('div', { class: 'row' }, [h('span', { class: 'rl' }, [h('span', { class: 't', text: t }), d ? h('span', { class: 'd', text: d }) : null]), v ? h('span', { class: 'rv', text: v }) : null])); }
