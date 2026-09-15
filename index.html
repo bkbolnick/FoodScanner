@@ -1265,13 +1265,26 @@ function saveLabelPart(code, kind, part) {
 var CORRECTIONS_MAX = 40;
 var COMP_NUT = [['kcal', 'kcal'], ['carbs', 'carbs'], ['sugars', 'sugars'], ['fiber', 'fiber'], ['protein', 'protein'],
   ['fat', 'fat'], ['sat_fat', 'sat_fat'], ['sodium_mg', 'sodium_mg']];
-function corrKey(name) { return String(name || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim(); }
+// Strips punctuation and spacing, not "everything that is not a-z0-9": the old rule deleted every non-ASCII letter,
+// so a dish named in Greek, Japanese or Arabic keyed to the empty string and its corrections went nowhere.
+var CORR_PUNCT = /[\s\u00a0\u2000-\u206f!"#$%&'()*+,\-./:;<=>?@\[\\\]^_`{|}~]+/g;
+function corrKey(name) { return String(name || '').toLowerCase().replace(CORR_PUNCT, ' ').replace(/\s+/g, ' ').trim(); }
+// Two parts of one plate can be named the same thing, or collapse to the same key. The key carries the position in
+// that case, so correcting one never rewrites the other.
+function componentKeys(cs) {
+  var seen = {}, keys = [];
+  (cs || []).forEach(function (c, i) { var k = corrKey(c && c.name); seen[k] = (seen[k] || 0) + 1; keys.push(k); });
+  return keys.map(function (k, i) { return (k && seen[k] === 1) ? k : (k || 'part') + '#' + i; });
+}
 function loadCorrections() { var o = store.getJSON(LS.corrections, null); return (o && typeof o === 'object' && !Array.isArray(o)) ? o : {}; }
 function correctionRecord(name) { var k = corrKey(name); if (!k) return null; var r = loadCorrections()[k]; return (r && typeof r === 'object' && r.parts) ? r : null; }
 // The cap evicts by a counter rather than by the clock: two corrections saved in the same millisecond must still have
 // an order, and isoNow() does not give one.
-function saveCorrection(name, comp, grams) {
-  var k = corrKey(name), ck = corrKey(comp);
+// `key` is the key componentKeys resolved for that part, or just its name. A resolved key for a duplicated name ends
+// in #index, and corrKey strips '#' as punctuation, so the two forms can never be confused for one another.
+function saveCorrection(name, key, grams) {
+  var k = corrKey(name), raw = String(key || '');
+  var ck = raw.indexOf('#') >= 0 ? raw : corrKey(raw);
   if (!k || !ck) return false;
   var all = loadCorrections(), rec = all[k] && all[k].parts ? all[k] : { n: 0, at: '', name: String(name || ''), parts: {} };
   var seq = 0;
@@ -1305,30 +1318,42 @@ function componentsUsable(item) {
 function applyCorrections(item) {
   if (!componentsUsable(item)) return { item: item, applied: [], usable: false };
   var rec = correctionRecord(item.name), parts = rec ? rec.parts : {};
-  var out = {}, applied = [];
+  var keys = componentKeys(item.components);
+  var out = {}, applied = [], delta = {}, gramsDelta = 0;
+  COMP_NUT.forEach(function (p) { delta[p[0]] = 0; });
   Object.keys(item).forEach(function (k) { out[k] = item[k]; });
-  out.components = item.components.map(function (c) {
-    var ck = corrKey(c.name), was = toNum(c.grams) || 0;
+  out.components = item.components.map(function (c, i) {
+    var ck = keys[i], was = toNum(c.grams) || 0;
     var now = Object.prototype.hasOwnProperty.call(parts, ck) ? toNum(parts[ck]) : null;
     var copy = {};
     Object.keys(c).forEach(function (k) { copy[k] = c[k]; });
-    if (now === null || now < 0 || !was || now === was) { copy.was = was; return copy; }
+    copy.key = ck; copy.was = was; copy.corrected = false;   // never inherit a flag from a copy that was stored corrected
+    if (now === null || now < 0 || !isFinite(now) || !was || now === was) return copy;
     var f = now / was;
-    COMP_NUT.forEach(function (p) { var v = toNum(c[p[0]]); if (v !== null) copy[p[0]] = Math.round(v * f * 100) / 100; });
-    copy.grams = now; copy.was = was; copy.corrected = true;
-    applied.push({ name: c.name, was: was, now: now });
+    COMP_NUT.forEach(function (p) {
+      var v = toNum(c[p[0]]);
+      if (v === null) return;
+      var nv = Math.round(v * f * 100) / 100;
+      copy[p[0]] = nv; delta[p[0]] += nv - v;
+    });
+    copy.grams = now; copy.corrected = true;
+    gramsDelta += now - was;
+    applied.push({ name: c.name, key: ck, was: was, now: now });
     return copy;
   });
   if (!applied.length) return { item: out, applied: [], usable: true, carried: false };
-  var grams = 0;
-  COMP_NUT.forEach(function (p) { out[p[0]] = 0; });
-  out.components.forEach(function (c) {
-    grams += toNum(c.grams) || 0;
-    COMP_NUT.forEach(function (p) { out[p[0]] += toNum(c[p[0]]) || 0; });
+  // The model's own totals are the base, moved by what the correction actually changed. Replacing them with the sum of
+  // the parts instead dumped the whole model-versus-parts gap onto the first edit: a garnish nudged by one gram moved
+  // sodium by 1400 mg and the score from Good to Excellent, which is the opposite of "nothing you did not touch
+  // changes". Anything the parts do not account for stays exactly where the model put it.
+  COMP_NUT.forEach(function (p) {
+    var base = toNum(item[p[0]]);
+    if (base === null) return;
+    out[p[0]] = Math.max(0, Math.round((base + delta[p[0]]) * 100) / 100);
   });
-  COMP_NUT.forEach(function (p) { out[p[0]] = Math.round(out[p[0]] * 100) / 100; });
-  out.serving_grams = Math.round(grams);
-  out.serving_text = out.serving_grams + ' g, as you corrected it';
+  var g = toNum(item.serving_grams);
+  if (g !== null && g > 0) out.serving_grams = Math.max(0, Math.round(g + gramsDelta));
+  out.serving_text = (out.serving_grams || 0) + ' g, as you corrected it';
   return { item: out, applied: applied, usable: true, carried: true };
 }
 function removeLabel(code) { var all = loadLabels(); if (!all[code]) return false; delete all[code]; store.setJSON(LS.labels, all); return true; }
@@ -2668,6 +2693,7 @@ function openOnboarding(step) {
 }
 function closeOnboarding() {
   $('onboard').classList.remove('open'); document.body.classList.remove('ob-open');
+  $('onboard').setAttribute('aria-label', 'Scoring setup');
   if (!$('dbgPanel').classList.contains('open')) setBackgroundInert(false);
   restoreFocus(ob.prevFocus); ob.prevFocus = null;
 }
@@ -3015,7 +3041,24 @@ function labelFill(res) {
 // corrected one, so the card never quietly becomes something the model did not say.
 function componentsPanel(res) {
   var est = res.estimate;
-  if (!est || est.kind !== 'photo' || !est.components || !est.components.length) return null;
+  if (!est || est.kind !== 'photo') return null;
+  if (est.item.kind === 'packaged' || est.item.kind === 'ingredient' || est.item.kind === 'not_food') return null;   // a package has a label, not parts
+  var raw = est.raw && Array.isArray(est.raw.components) ? est.raw.components : [];
+  // The parts are shown even when they do not add up to the totals the model stated, because saying what was read is
+  // the point of the panel; they simply cannot be corrected, and the panel says why.
+  if (!est.components || !est.components.length) {
+    if (raw.length < 2) return null;
+    var ro = h('section', { class: 'sec sep' });
+    ro.appendChild(h('div', { class: 'sec-h split' }, [h('span', { text: 'What the photo was read as' }), h('span', { class: 'basis', text: 'confidence' })]));
+    raw.forEach(function (c) {
+      ro.appendChild(h('div', { class: 'row' }, [
+        h('span', { class: 'rl' }, [h('span', { class: 't', text: String(c.name || 'part') + (toNum(c.grams) ? ', about ' + fmtVal(toNum(c.grams), 'g') : '') })]),
+        h('span', { class: 't-' + (c.confidence === 'high' ? 'best' : c.confidence === 'low' ? 'orange' : 'green'), text: c.confidence || 'medium' })
+      ]));
+    });
+    ro.appendChild(h('div', { class: 'sec-f', text: 'These parts do not add up to the totals the model gave for the whole dish, so they are shown but not used to score it, and they cannot be corrected. Photograph it again for a reading that agrees with itself.' }));
+    return ro;
+  }
   var name = est.item.name, rec = correctionRecord(name);
   var sec = h('section', { class: 'sec sep' });
   sec.appendChild(h('div', { class: 'sec-h split' }, [h('span', { text: 'What the photo was read as' }), h('span', { class: 'basis', text: 'confidence' })]));
@@ -3034,9 +3077,9 @@ function componentsPanel(res) {
   if (rec) {
     sec.appendChild(h('div', { class: 'foot note', text: (est.applied && est.applied.length)
       ? 'Carried from what you corrected on "' + rec.name + '" ' + shortTime(rec.at) + '. The same name is not always the same plate, so check it.'
-      : 'You have corrections saved for "' + rec.name + '", but none of them match what this photo was read as.' }));
+      : 'You have corrections saved for "' + rec.name + '", but they name parts this photo was not read as having.' }));
     sec.appendChild(h('div', { class: 'actions' }, [h('button', { class: 'btn small', type: 'button', onclick: function () {
-      if (clearCorrections(name)) { toast('Back to what the photo said'); redrawCurrent(); }
+      if (clearCorrections(name)) { toast('Back to what the photo said'); redrawCurrent(); relogCurrent(); }
     } }, 'Use what the photo said')]));
   }
   return sec;
@@ -3056,13 +3099,15 @@ function correctComponent(dish, c) {
     h('button', { class: 'btn primary', type: 'button', id: 'corrSave', onclick: function () {
       var v = toNum(input.value);
       if (v === null || v < 0 || v > 5000) { toast('Put in a weight between 0 and 5000 g'); return; }
-      saveCorrection(dish, c.name, v);
-      closeOnboarding(); toast('Rescored from your correction'); redrawCurrent();
+      if (!saveCorrection(dish, c.key, v)) { toast('This part cannot be saved: the dish has no name to keep it against'); return; }
+      closeOnboarding(); toast('Rescored from your correction'); redrawCurrent(); relogCurrent();
     } }, 'Save')
   ]));
   if (c.corrected) body.appendChild(h('div', { class: 'actions' }, [h('button', { class: 'btn small', type: 'button', onclick: function () {
-    saveCorrection(dish, c.name, null); closeOnboarding(); toast('Back to what the photo said'); redrawCurrent();
+    saveCorrection(dish, c.key, null); closeOnboarding(); toast('Back to what the photo said'); redrawCurrent(); relogCurrent();
   } }, 'Reset this one')]));
+  ob.prevFocus = document.activeElement;   // closeOnboarding restores this; without it the focus fell to <body>
+  $('onboard').setAttribute('aria-label', 'Correct ' + c.name);
   $('onboard').classList.add('open'); document.body.classList.add('ob-open');
   setBackgroundInert(true);
   try { input.focus(); input.select(); } catch (err) { /* ignore */ }
@@ -4138,6 +4183,22 @@ function renderEstimateError(title, err, retry) {
   focusSheet();
 }
 // A photo scan goes into the log like a scan, but not into the coverage tally: no database was asked anything.
+// A correction made after the scan has to reach the row it was logged under, or History, the tally average and the
+// CSV keep quoting a score the card no longer shows.
+function relogCurrent() {
+  if (!current || !current.estimate || !scanLog.length) return;
+  var top = scanLog[0];
+  if (!top || top.origin !== 'photo' || !top.estimate || (top.name || '') !== (current.merged.name.v || '')) return;
+  var sc = scoreProduct(current.merged, current.entry, profile || { mode: 'standard' });
+  var av = avoidFlags(current.merged, current.entry, profile);
+  top.score = (sc && sc.score !== null) ? sc.score : null;
+  top.scoreMode = sc ? sc.mode : '';
+  top.lowConfidence = !!(sc && sc.score !== null && sc.lowConfidence);
+  top.warnings = av ? av.warn.slice() : [];
+  top.estimate.item = current.estimate.raw || current.estimate.item;
+  store.setJSON(LS.log, scanLog);
+  renderLog(); renderTally();
+}
 function recordEstimate(res) {
   var e = res.entry, m = res.merged;
   var sc = scoreProduct(m, e, profile || { mode: 'standard' }), av = avoidFlags(m, e, profile);
@@ -4145,7 +4206,7 @@ function recordEstimate(res) {
     ts: isoNow(), barcode: '', format: '', name: m.name.v || '',
     score: (sc && sc.score !== null) ? sc.score : null, scoreMode: sc ? sc.mode : '', lowConfidence: !!(sc && sc.score !== null && sc.lowConfidence),
     warnings: av ? av.warn.slice() : [], off: 'skipped', offCode: '', usda: 'skipped', usdaCode: '', missing: [], cached: false, origin: 'photo',
-    estimate: { kind: res.estimate.kind, item: res.estimate.item }
+    estimate: { kind: res.estimate.kind, item: res.estimate.raw || res.estimate.item }   // the model's own reading: corrections are applied again on the way out, never baked in
   });
   if (scanLog.length > LOG_MAX) scanLog.length = LOG_MAX;
   store.setJSON(LS.log, scanLog);
@@ -5729,7 +5790,7 @@ window.FS = {
   setDefaultProxy: function (u, t) { DEFAULT_PROXY = u || ''; DEFAULT_PROXY_TOKEN = t || ''; usdaProxyOff = ''; renderSettings(); }, usdaConfig: usdaConfig,
   plan: function () { return plan; }, dayPrompt: dayPrompt, articles: LEARN_ARTICLES, openArticle: openArticle, renderMarkdown: renderMarkdown, searchArticles: searchArticles, planCSV: planCSV, planText: planText, samplePlan: samplePlan, openPlanWizard: openPlanWizard, wizard: function () { return pw; }, pwGo: pwGo, sanitizeWizard: sanitizeWizard,
   enterCode: function (code) { return handleCode(code, null, 'manual'); },
-  labelNorm: labelNorm, labelRecord: labelRecord, applyCorrections: applyCorrections, saveCorrection: saveCorrection, clearCorrections: clearCorrections, correctionRecord: correctionRecord, componentsUsable: componentsUsable, saveLabelPart: saveLabelPart, removeLabel: removeLabel, scanLabel: scanLabel, pickLabel: pickLabel,
+  labelNorm: labelNorm, labelRecord: labelRecord, applyCorrections: applyCorrections, saveCorrection: saveCorrection, componentKeys: componentKeys, clearCorrections: clearCorrections, correctionRecord: correctionRecord, componentsUsable: componentsUsable, saveLabelPart: saveLabelPart, removeLabel: removeLabel, scanLabel: scanLabel, pickLabel: pickLabel,
   _setFrameSource: function (el) { cam.frameSource = el; }
 };
 

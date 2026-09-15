@@ -250,10 +250,13 @@ On first open the app asks how products should be scored. Both choices can be ch
   actually was: the dish is re-added from its parts on the spot, so the number moves for a reason you can follow and
   nothing you did not touch changes. Corrections are kept in this browser against the dish's **name**, not the photo,
   so tomorrow's bowl of the same thing starts from what you said today — carried visibly, with one tap to drop it,
-  because the same name is not always the same plate. Two guards: a correction can only rescale a part the model
-  described, and when the parts do not add up to the totals the model itself stated (more than 15% or 25 kcal out)
-  they are shown but never scored from, because a correction cannot be honest about a sum that was not. Packaged
-  products and single ingredients have no parts and no panel.
+  because the same name is not always the same plate. Three guards. A correction can only rescale a part the model
+  described. It moves the model's stated totals by exactly what it changed, rather than replacing them with the sum of
+  the parts, so an untouched nutrient cannot move and a one-gram edit cannot move anything by more than one gram's
+  worth — replacing them dumped the whole model-versus-parts discrepancy onto the first edit, which once moved sodium
+  by 1400 mg for a one-gram nudge. And when the parts do not add up to the totals the model itself stated (more than
+  15% or 25 kcal out) they are listed, because saying what was read is the point of the panel, but they cannot be
+  corrected and are never scored from. Packaged products and single ingredients have no parts and no panel.
 - **Reading the label yourself.** Open Food Facts and USDA between them often have only a name and a brand, and a
   product with no nutrition and no ingredients cannot be scored at all. When a card is missing any of the six tracked
   fields it offers **Photograph the nutrition panel** and **Photograph the ingredients list**; the AI copies what is
