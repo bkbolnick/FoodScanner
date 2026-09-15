@@ -1706,14 +1706,15 @@ function nutriScoreOf(m, e) {
   // table as well, because the drinks table exists to discourage drinking free sugars and plain milk has none.
   // Where this changes the answer the card says the grade is the app's own and why.
   var sug = sugarOrigin(m, e), sugars = m.per100.sugars;
-  var exempt = sugars !== null && sugars > 0 && (sug.kind === 'lactose' || (sug.kind === 'intrinsic' && !sug.concentrated && sugars <= WHOLE_SUGAR_MAX));
+  var pass = sug.kind === 'lactose' ? 1 : sug.kind === 'intrinsic' ? intrinsicPass(sugars) : 0;
+  var exempt = sugars !== null && sugars > 0 && pass > 0;
   if (exempt) {
     // Only a plain dairy DRINK moves table: the point is that the beverage table exists to discourage drinking free
     // sugars. A cheese keeps the cheese rule, which grants protein points the general table withholds above 11
     // negative points — sending cheddar to the general table cost it a whole grade.
     var sweetTag2 = (m.additives.v || []).some(function (a) { return /^e9(5\d|6\d)/i.test(String(a)); });
     var sweetText2 = SWEETENER_WORDS.test(String(m.ingredients.v || ''));
-    var free = computeNutriScore(Object.assign({}, m.per100, { sugars: 0 }),
+    var free = computeNutriScore(Object.assign({}, m.per100, { sugars: sugars * (1 - pass) }),
       (sug.kind === 'lactose' && kind === 'beverage') ? 'general' : kind, sweetTag2 || sweetText2,
       { fvl5: kind === 'fat' && oliveLikeOil(m), water: kind === 'beverage' && isPlainWater(m) });
     if (free && sweetText2 && !sweetTag2) free.sweetenerFromText = true;
@@ -1805,6 +1806,14 @@ var LOW_BONUS = 0.3;                                        // how much of the u
 var DENSITY_TH = { protein: [3, 10], fiber: [1, 3.5] };
 var DENSITY_MIN_KCAL = 20;                                  // the denominator never goes below this: a food that is mostly water cannot read as concentrated
 var WHOLE_SUGAR_MAX = 20;                                   // fresh whole food tops out near 16 g of its own sugar; dried or concentrated gets no pass
+// The pass fades out between that and twice it, rather than stopping dead. A hard cut put 37 points between 19.9 g
+// and 20.1 g of the same dried apricot, and 12 points in the quality score with it. Raisins at 59 g still get none.
+function intrinsicPass(v) {
+  if (v === null || v === undefined) return 1;
+  if (v <= WHOLE_SUGAR_MAX) return 1;
+  if (v >= WHOLE_SUGAR_MAX * 2) return 0;
+  return (WHOLE_SUGAR_MAX * 2 - v) / WHOLE_SUGAR_MAX;
+}
 var ADDED_SUGAR_RE = /\b(sugar|sucrose|glucose|fructose|dextrose|maltose|syrup|honey|molasses|agave|nectar|juice concentrate|concentrated juice|malt extract)\b/i;
 // Phrases that contain a sugar word without meaning added sugar: a claim about not having any, and the pea named
 // after it. Without this, sugar snap peas lose their whole-food standing.
@@ -2023,8 +2032,14 @@ function customScore(m, e, prof) {
     // much. It is the sugar that is forgiven and nothing else: rolled oats are still a pile of carbohydrate to
     // someone counting them, and an exemption can only lift the row to neutral, never pay it a bonus.
     if (c < 0 && met.key === 'sugars') {
-      if (sug.kind === 'lactose' || (sug.kind === 'intrinsic' && v <= WHOLE_SUGAR_MAX)) { c = 0; sug.waived = true; softened = true; }
-      else if (sug.kind === 'intrinsic') sug.concentrated = true;
+      if (sug.kind === 'lactose') { c = 0; sug.waived = true; softened = true; }
+      else if (sug.kind === 'intrinsic') {
+        var pass = intrinsicPass(v);
+        sug.pass = pass;
+        if (pass > 0) { c = c * (1 - pass); softened = true; }
+        sug.waived = pass >= 1;
+        sug.concentrated = pass < 1;
+      }
     }
     // Limits and bonuses are weighed against their own weight and added, rather than sharing one divisor. Sharing it
     // forced a choice between two wrong answers: counting an unearned bonus's full weight halved the sugar penalty on
@@ -2260,9 +2275,11 @@ function sugarWords(sug, v, basis, netCarbs) {
       + ' sugar limit \u2014 it does not earn points either.' + tail };
   }
   if (k === 'intrinsic' && sug.concentrated) {
-    return { title: 'Concentrated, so it counts', line: 'Still the food\u2019s own sugar, with nothing added, but at ' + amt
-      + ' it carries far more than anything fresh does \u2014 fresh fruit tops out near ' + WHOLE_SUGAR_MAX + ' g, and drying or'
-      + ' reducing multiplies it. The pass stops there, so it counts in full.' };
+    var part = sug.pass > 0;
+    return { title: part ? 'Concentrated, so it counts for most of it' : 'Concentrated, so it counts', line:
+      'Still the food\u2019s own sugar, with nothing added, but at ' + amt + ' it carries more than anything fresh does'
+      + ' \u2014 fresh fruit tops out near ' + WHOLE_SUGAR_MAX + ' g, and drying or reducing multiplies it. The pass fades out'
+      + ' from there, so ' + (part ? 'most of this counts against your limit.' : 'all of this counts against your limit.') };
   }
   if (k === 'intrinsic') {
     return { title: 'The food\u2019s own sugar', line: 'A single-ingredient whole food: at ' + amt
@@ -2379,7 +2396,7 @@ function renderScore(sc, estimated) {
   })));
   var missingNouns = items.filter(function (x) { return !has(x); }).map(function (x) { return wordsOf(x).noun; });
   if (sc.sugar && byKey.sugars) {
-    var sRow = byKey.sugars, netC = !!(byKey.netCarbs && byKey.netCarbs.w > 0);
+    var sRow = byKey.sugars, netC = !!(byKey.netCarbs && byKey.netCarbs.w > 0 && byKey.netCarbs.s !== null);
     if (sRow.s !== null && (sc.sugar.waived || sc.sugar.concentrated || sRow.delta < 0)) {
       var sw = sugarWords(sc.sugar, sRow.v, sc.basis, netC && sc.sugar.waived);
       sec.appendChild(h('div', { class: 'foot note', text: sw.line }));

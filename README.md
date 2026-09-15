@@ -194,7 +194,9 @@ On first open the app asks how products should be scored. Both choices can be ch
     where fresh fruit stops: rolled oats are still a pile of carbohydrate to someone counting them, and dried or
     concentrated fruit carries several times what fresh does. The rule reads name, category and ingredients
     independently, and is deliberately asymmetric — one witness is enough to call a sugar free, while exempting one
-    needs a witness and no objector — so a thin record pays rather than being forgiven. Oat and rice drinks pay:
+    needs a witness and no objector — so a thin record pays rather than being forgiven. The whole-food pass fades out
+    between 20 g and 40 g per 100 g rather than stopping dead, so a fresh fig and a dried one are not 37 points apart
+    over a tenth of a gram; by raisin strength it is gone. Oat and rice drinks pay:
     enzymes liberate the sugar from the starch, so nothing names it on the label but it was freed all the same. When
     the data cannot place a sugar, it counts in full and the card says which of those it could not establish.
 
