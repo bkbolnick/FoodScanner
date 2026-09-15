@@ -143,7 +143,13 @@ On first open the app asks how products should be scored. Both choices can be ch
 - **Standard**: a 0–100 composite of nutritional quality (50 points, from the product's Nutri-Score; when Open Food
   Facts has no grade it is estimated from the nutrients with the 2023 algorithm, using the beverage, fats/oils/nuts and
   cheese variants where the category calls for them, and skipped when Open Food Facts says the Nutri-Score is not
-  applicable), additives (25 points, the riskiest additive sets the ceiling and each extra one costs a little),
+  applicable). **One deliberate deviation:** Nutri-Score charges every gram of sugar the same, which puts plain milk
+  on the drinks table beside a cola, so a glass of milk and a glass of juice are judged as the same glass. This app
+  scores the sugar points on **free sugars** instead, and scores plain unsweetened dairy on the food table, because
+  the drinks table exists to discourage drinking free sugars and plain milk has none. Where that changes the answer
+  the app recomputes rather than reporting the published grade, and the card says the grade is the app's own and what
+  the pack said. Juice is not recomputed: its sugar really is free sugar, so there is nothing to correct. Alongside
+  that, additives (25 points, the riskiest additive sets the ceiling and each extra one costs a little),
   processing (15 points from the NOVA group: 1 → 15, 2 → 12, 3 → 8, 4 → 2) and organic certification (10 points).
   Components without data are left out and the score is rescaled with a note; if nutrition is among them the score is
   shown as **low confidence**, and no score is shown when only the organic label is known.
@@ -152,8 +158,9 @@ On first open the app asks how products should be scored. Both choices can be ch
   for high-fat or weight-gain plans, total fat and calories; anything chosen in question 1 is not offered again),
   (3) how strong each preference is: every pick already means less (or more) of that nutrient, and the level says how
   much it counts: slight preference (weight 1) and medium preference (weight 3) are scored against the standard
-  front-of-pack guideline cut-offs, while a strict preference (weight 5) also halves the limit cut-offs and raises
-  the targets, i.e. fiber, protein and anything wanted more of, by 1.5×; a row sets all picks at once, (4) processing and additives (ignored, moderate weight, or the highest weight) and (5) anything to avoid or
+  front-of-pack guideline cut-offs, while a strict preference (weight 5) also halves the limit cut-offs. Anything
+  wanted **more** of is scored against the same scale for everyone whatever the level, because raising the bar on a
+  bonus could only shrink it; a row sets all picks at once, (4) processing and additives (ignored, moderate weight, or the highest weight) and (5) anything to avoid or
   look for. A custom profile does not replace the score: every food keeps the standard quality score above, and your
   preferences move it by at most 25 points either way. Each of eleven factors (net carbs, sugars, fiber, protein,
   saturated fat, total fat, sodium, calories, NOVA processing, additives, organic) gets a weight from 0 to 5 and a
@@ -173,12 +180,22 @@ On first open the app asks how products should be scored. Both choices can be ch
     guideline to comfortably above it. The denominator never drops below 20 kcal per 100 g, so a food that is mostly
     water cannot read as concentrated.
   - A limit pays only 30% of its upside, so a food does not ride up merely for lacking sugar.
-  - A bonus a food did not earn counts as neutral rather than being averaged in — otherwise asking for more protein
-    would halve the sugar penalty on a sugary bar that has none.
-  - A single-ingredient whole food (NOVA 1, no additives, no added sugar in the ingredients) pays nothing against a
-    sugar limit for up to 20 g of its own sugar per 100 g: the sugar in fresh fruit is not added sugar. Only sugar is
-    forgiven, and only in a food — rolled oats are still a pile of carbohydrate to someone counting them, dried and
-    concentrated fruit carry several times what fresh does, and a drink's sugar counts whatever it was pressed from.
+  - A bonus counts toward the divisor only by as much as it earned, so a food gets no dilution for a bonus it did not
+    earn — otherwise asking for more protein would halve the sugar penalty on a sugary bar that has none. It is a ramp
+    rather than a switch at the halfway mark: switching the whole weight on at the midpoint moved a score ten points
+    for a hundredth of a gram of protein, and left the worked-out line unable to say where the ten points went.
+  - A **sugar limit applies to free sugars**, which is what the guidelines actually ask you to cut down on. WHO and
+    SACN count as free sugars everything added to a food, plus the sugars in honey, syrups and nectars, in fruit and
+    vegetable juice and juice concentrate, and in smoothies, purées and pastes where the structure has been broken
+    down; they exempt sugar still inside intact fruit and vegetables, and lactose in milk and milk products by name.
+    So plain milk, plain yogurt and kefir pay nothing for their lactose, a whole orange pays nothing for its own
+    sugar, and 100% juice pays in full — the amount is not what separates them. Only sugar is forgiven and only up to
+    where fresh fruit stops: rolled oats are still a pile of carbohydrate to someone counting them, and dried or
+    concentrated fruit carries several times what fresh does. The rule reads name, category and ingredients
+    independently, and is deliberately asymmetric — one witness is enough to call a sugar free, while exempting one
+    needs a witness and no objector — so a thin record pays rather than being forgiven. Oat and rice drinks pay:
+    enzymes liberate the sugar from the starch, so nothing names it on the label but it was freed all the same. When
+    the data cannot place a sugar, it counts in full and the card says which of those it could not establish.
 
   The result names the three factors that moved the score most in plain words ("High in sugar", "Much less fiber than
   you want", "Ultra-processed") with the value next to each and a green or red dot for whether it helped or hurt, and
@@ -200,7 +217,7 @@ On first open the app asks how products should be scored. Both choices can be ch
   amber notes. "Prefer organic", also on that question, is the exception:
   it adds the organic label to the score.
 - Bands: Excellent 75–100, Good 50–74, Poor 25–49, Bad 0–24. A "low confidence" note appears when the nutrition data
-  behind the quality score is missing, or when a custom profile had to score a food on preferences alone.
+  behind the quality score is missing.
 - **Copy link with my profile** (and **Copy link with my key**) produce one link carrying the USDA key and the
   scoring profile, including the questionnaire answers and avoid list. Opening it seeds the profile once; changes made in
   Settings afterwards are kept, and after Safari has cleared storage the same link seeds it again. Copy a fresh link to
