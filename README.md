@@ -145,16 +145,23 @@ On first open the app asks how products should be scored. Both choices can be ch
   much it counts: slight preference (weight 1) and medium preference (weight 3) are scored against the standard
   front-of-pack guideline cut-offs, while a strict preference (weight 5) also halves the limit cut-offs and raises
   the targets, i.e. fiber, protein and anything wanted more of, by 1.5×; a row sets all picks at once, (4) processing and additives (ignored, moderate weight, or the highest weight) and (5) anything to avoid or
-  look for. Each of eleven factors (net carbs, sugars, fiber, protein, saturated fat, total fat, sodium, calories, NOVA
-  processing, additives, organic) gets a weight from 0 to 5 and a 0–100 sub-score from its per-100 g value against
-  the chosen cut-offs (drinks, whose data is per 100 ml, use the roughly half-size FSA drink cut-offs, scaled the
-  same way for strict preferences); the score is
-  the weighted average over the factors that have data, and is withheld when less than half of the weighted factors
-  have data. The result names the three factors that moved the score most in plain words ("High in sugar",
-  "Much less fiber than you want", "Ultra-processed") with the value next to each and a green or red dot for
-  whether it helped or hurt, and **How the score adds up** lists every factor with its value, its cut-offs, its
-  0–100 marks and its weight, then shows the arithmetic ("Worked out: (5 × 0 + 3 × 82 + …) ÷ 15 = 22"). Weights
-  can be fine-tuned under **Adjust weights** (custom profiles only).
+  look for. A custom profile does not replace the score: every food keeps the standard quality score above, and your
+  preferences move it by at most 25 points either way. Each of eleven factors (net carbs, sugars, fiber, protein,
+  saturated fat, total fat, sodium, calories, NOVA processing, additives, organic) gets a weight from 0 to 5 and a
+  0–100 sub-score from its per-100 g value against the chosen cut-offs (drinks, whose data is per 100 ml, use the
+  roughly half-size FSA drink cut-offs, scaled the same way for strict preferences), and the weighted average of how
+  far those sub-scores sit from the middle is what the 25 points are shared out by. Three rules keep whole food out
+  of trouble: anything you asked for **more** of only ever adds points, never takes them away, and is judged **per
+  100 calories** rather than per 100 g (nutrient density — broccoli carries more protein per calorie than milk does);
+  a limit pays only 30% of its upside, so a food does not ride up merely for lacking sugar; and a single-ingredient
+  whole food (NOVA 1, no additives, no added sugar in the ingredients) is exempt from its own sugar and has other
+  penalties halved, because the sugar in fruit is not added sugar. The result names the three factors that moved the
+  score most in plain words ("High in sugar", "Much less fiber than you want", "Ultra-processed") with the value next
+  to each and a green or red dot for whether it helped or hurt, and **How the score adds up** lists every factor with
+  its value, its cut-offs, its 0–100 marks and its weight, then shows the arithmetic ("Worked out: quality 35, then
+  net carbs −7, sugar −7, fiber ±0, processing −2, additives +1 = 19"). Weights can be fine-tuned under **Adjust
+  weights** (custom profiles only). When nothing is known about the food's quality but the things you asked about do
+  have data, the score falls back to those alone and says so; when neither has data there is no score.
 - **Avoid list** (question 5): allergens (milk, eggs, gluten, peanuts, tree nuts, soy, fish, shellfish, sesame,
   celery, mustard, lupin, sulphites), non-vegan or non-vegetarian ingredients (the "I am vegan" and "I am vegetarian"
   options) and palm oil never change the score.
@@ -166,8 +173,8 @@ On first open the app asks how products should be scored. Both choices can be ch
   for the allergens as well, and "May contain …" or "made in a facility that also processes …" advisories become
   amber notes. "Prefer organic", also on that question, is the exception:
   it adds the organic label to the score.
-- Bands: Excellent 75–100, Good 50–74, Poor 25–49, Bad 0–24. A "low confidence" note appears when much of the weighted
-  data is missing.
+- Bands: Excellent 75–100, Good 50–74, Poor 25–49, Bad 0–24. A "low confidence" note appears when the nutrition data
+  behind the quality score is missing, or when a custom profile had to score a food on preferences alone.
 - **Copy link with my profile** (and **Copy link with my key**) produce one link carrying the USDA key and the
   scoring profile, including the questionnaire answers and avoid list. Opening it seeds the profile once; changes made in
   Settings afterwards are kept, and after Safari has cleared storage the same link seeds it again. Copy a fresh link to

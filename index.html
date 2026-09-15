@@ -1581,28 +1581,65 @@ function standardScore(m, e) {
 }
 // A profile can flip a nutrient's direction (prof.dirs), e.g. total fat or calories as something to get more of.
 function metricDir(prof, met) { var d = prof && prof.dirs && prof.dirs[met.key]; return (d === 'low' || d === 'high') && (met.dir === 'low' || met.dir === 'high') ? d : met.dir; }
-// Custom score: weighted average (weights 0–5) of per-factor sub-scores over the factors that have data.
+// Custom score: the standard quality score, nudged by the profile's weighted factors.
+// A custom profile used to replace the score outright, so a food was judged only on the handful of things the profile
+// weighted: broccoli scored 0 for "protein" and blueberries were punished for the sugar that is in fruit, while an
+// ultra-processed bar could beat both. Preferences are about a meal or a day, not about every mouthful, so they now
+// adjust a quality score that every food keeps.
+//
+//   score = food quality (the standard score: nutrition, additives, processing, organic)
+//         + your preferences, worth at most TILT_MAX points either way
+//
+// Two rules keep whole food out of trouble. "More of X" only ever adds, never subtracts, so broccoli is not marked
+// down for the protein it was never meant to carry. And "more" is judged per 100 calories rather than per 100 g,
+// which is what nutrient density means: broccoli carries more protein per calorie than milk does.
+var TILT_MAX = 25;                                          // the most your preferences can move a food, in points
+var LOW_BONUS = 0.3;                                        // how much of the upside a limit pays; without it, oil and crisps ride up merely for having no sugar
+var DENSITY_TH = { protein: [3, 10], fiber: [1.5, 6] };     // grams per 100 kcal: the cut-offs for "more of X"
+var ADDED_SUGAR_RE = /\b(sugar|sucrose|glucose|fructose|dextrose|maltose|syrup|honey|molasses|agave|nectar|juice concentrate|concentrated juice|malt extract)\b/i;
+// A single-ingredient whole food: nothing was added to it, so the sugar and fat it carries are the food's own.
+function isWholeFood(m, e) {
+  if (m.nova.v !== 1) return false;
+  if ((m.additives.v || []).length) return false;
+  var ingr = String((m.ingredients && m.ingredients.v) || '');
+  return !ADDED_SUGAR_RE.test(ingr);
+}
 function customScore(m, e, prof) {
-  var rows = [], wsum = 0, acc = 0, missW = 0, totalW = 0;
+  var core = standardScore(m, e);
   var th = Object.assign({}, DEFAULT_THRESHOLDS, prof.thresholds || {});
   var drink = m.basis === 'ml' && !LIQUID_FOOD.test(String(m.categories.v || ''));
   if (drink) {
     Object.keys(DRINK_THRESHOLDS).forEach(function (k) {
       var cur = th[k], def = DEFAULT_THRESHOLDS[k], dk = DRINK_THRESHOLDS[k];
-      var r = (cur && def && (cur[0] !== def[0] || cur[1] !== def[1])) ? cur[1] / def[1] : 1;   // the profile's scaling of the food cut-offs carries over (one factor, so the pair cannot cross)
+      var r = (cur && def && (cur[0] !== def[0] || cur[1] !== def[1])) ? cur[1] / def[1] : 1;   // the profile's scaling carries over
       th[k] = (isFinite(r) && r > 0) ? [dk[0] * r, dk[1] * r] : dk;
     });
   }
+  var whole = isWholeFood(m, e), kcal = m.per100.kcal;
+  var rows = [], wsum = 0, csum = 0, missW = 0, totalW = 0;
   METRICS.forEach(function (met) {
     var w = Number(prof.weights && prof.weights[met.key]) || 0;
     if (w <= 0) return;
     totalW += w;
-    var v = null, s = null, text = '', dir = metricDir(prof, met), label = met.label + (dir !== met.dir ? (dir === 'high' ? ' (more is better)' : ' (less is better)') : ''), extra = {};
+    var v = null, s = null, text = '', dir = metricDir(prof, met), bonusOnly = false, perKcal = false;
+    var label = met.label + (dir !== met.dir ? (dir === 'high' ? ' (more is better)' : ' (less is better)') : ''), extra = {};
     if (met.dir === 'low' || met.dir === 'high') {
       v = m.per100[met.key];
       extra.th = th[met.key];
       extra.lv = (prof.answers && prof.answers.strict && Object.prototype.hasOwnProperty.call(prof.answers.strict, met.key)) ? levelOf(prof.answers.strict[met.key]) : null;
-      if (v !== null && v !== undefined) { s = linScore(v, th[met.key], dir); text = fmtVal(v, met.unit) + '/100 ' + (m.basis || 'g'); }
+      if (v !== null && v !== undefined) {
+        if (dir === 'high' && DENSITY_TH[met.key] && kcal !== null && kcal !== undefined && kcal > 0) {
+          perKcal = true; bonusOnly = true;
+          var d = v * 100 / kcal;
+          extra.density = d; extra.th = DENSITY_TH[met.key];
+          s = linScore(d, DENSITY_TH[met.key], 'high');
+          text = fmtVal(d, met.unit) + ' per 100 kcal';
+        } else {
+          if (dir === 'high') bonusOnly = true;
+          s = linScore(v, th[met.key], dir);
+          text = fmtVal(v, met.unit) + '/100 ' + (m.basis || 'g');
+        }
+      }
     } else if (met.key === 'processing') {
       var nova = m.nova.v;
       if (nova !== null && nova !== undefined && NOVA_SCORE[nova] !== undefined) { s = NOVA_SCORE[nova]; text = 'NOVA ' + nova; extra.nova = nova; }
@@ -1611,28 +1648,46 @@ function customScore(m, e, prof) {
       if (ad) { s = ad.score; text = ad.text; extra.ad = ad; }
     } else if (met.key === 'organic') {
       var org = organicOf(e);
-      if (org !== null) { s = org ? 100 : 0; text = org ? 'organic label' : 'no organic label'; }
+      bonusOnly = true;                                  // a missing organic label is not a fault
+      if (org !== null) { s = org ? 100 : 50; text = org ? 'organic label' : 'no organic label'; }
     }
-    if (s === null) { missW += w; rows.push(Object.assign({ key: met.key, label: label, w: w, s: null, v: null, dir: dir, text: 'no data' }, extra)); return; }
-    wsum += w; acc += w * s;
-    rows.push(Object.assign({ key: met.key, label: label, w: w, s: s, v: v, dir: dir, text: text }, extra));
+    if (s === null) { missW += w; rows.push(Object.assign({ key: met.key, label: label, w: w, s: null, v: null, dir: dir, text: 'no data', delta: 0 }, extra)); return; }
+    var c = (s - 50) / 50;                               // −1 … +1
+    if (bonusOnly && c < 0) c = 0;                       // "more of X" never takes points away
+    else if (!bonusOnly && c > 0) c *= LOW_BONUS;        // credit is modest: the quality score already pays for low sugar and clean additives, so the tilt is mostly a limit
+    if (whole && c < 0) c = (met.key === 'sugars') ? 0 : c / 2;   // fruit sugar is not added sugar; other whole-food penalties are halved
+    wsum += w; csum += w * c;
+    rows.push(Object.assign({ key: met.key, label: label, w: w, s: s, v: v, dir: dir, text: text, c: c, perKcal: perKcal, bonusOnly: bonusOnly, whole: whole }, extra));
   });
-  var informative = rows.some(function (r) { return r.s !== null && r.key !== 'organic'; });
-  var enoughWeight = totalW > 0 && wsum / totalW >= 0.5;     // at least half of your weighted factors must have data
-  var score = (wsum && informative && enoughWeight) ? Math.round(acc / wsum) : null;
-  if (score !== null && !isFinite(score)) score = null;
-  var why = rows.filter(function (r) { return r.s !== null; })
-    .map(function (r) { return { key: r.key, positive: r.s >= 50, text: r.label + ' ' + r.text, weight: r.w * Math.abs(r.s - 50) }; })
+  var tilt = wsum ? TILT_MAX * csum / wsum : 0;
+  var base = core ? core.score : null, prefOnly = false;
+  var score;
+  if (base !== null) score = Math.max(0, Math.min(100, Math.round(base + tilt)));
+  else if (wsum) {
+    // Nothing is known about the food's overall quality (no Nutri-Score, processing or additives), but the things you
+    // asked about do have data, so the score is those alone and is marked as the partial view it is.
+    var acc = 0; rows.forEach(function (r) { if (r.s !== null) acc += r.w * r.s; });
+    score = Math.round(acc / wsum); prefOnly = true;
+  } else score = null;
+  // what actually moved the number, in points, so the explanation and the reasons agree with the arithmetic
+  rows.forEach(function (r) { r.delta = (r.s === null || !wsum || prefOnly) ? 0 : Math.round(TILT_MAX * r.w * r.c / wsum); });
+  var why = rows.filter(function (r) { return r.s !== null && r.delta !== 0; })
+    .map(function (r) { return { key: r.key, positive: r.delta > 0, text: r.label + ' ' + r.text, weight: Math.abs(r.delta) }; })
     .sort(function (a, b) { return b.weight - a.weight; }).slice(0, 3);
   var missing = rows.filter(function (r) { return r.s === null; }).map(function (r) { return r.label.toLowerCase(); });
-  var missingNouns = rows.filter(function (r) { return r.s === null; }).map(function (r) { return factorNoun(r.key); });
   return { mode: 'custom', score: score, band: bandOf(score), rows: rows, why: why, drink: drink, basis: m.basis || 'g',
-    coverageNote: (missing.length ? 'based on ' + (rows.length - missing.length) + ' of ' + rows.length + ' weighted factors' : '') + (drink ? (missing.length ? ', ' : '') + 'drink cut-offs per 100 ml' : ''),
-    lowConfidence: totalW > 0 && missW / totalW > 0.4, missingNote: missing.length ? 'no data for ' + missing.join(', ') : '',
-    reason: score !== null ? '' : (!wsum ? 'none of the things you asked about has data for this product' : !informative ? 'only the organic label is known, and a label alone is not enough for a score' : 'too little data on what you asked about' + (missingNouns.length ? ': no data on ' + joinPlain(missingNouns) : '')) };
+    base: base, tilt: Math.round(tilt), core: core, whole: whole, prefOnly: prefOnly,
+    coverageNote: (missing.length ? 'your preferences used ' + (rows.length - missing.length) + ' of ' + rows.length + ' factors' : '') + (drink ? (missing.length ? ', ' : '') + 'drink cut-offs per 100 ml' : ''),
+    lowConfidence: prefOnly || !!(core && core.lowConfidence), missingNote: missing.length ? 'no data for ' + missing.join(', ') : '',
+    reason: score !== null ? '' : (core ? core.reason : 'no nutrition data for this product') };
 }
+// Every field the scorers read, so a product assembled from one source (or by a test) cannot crash the score by
+// simply not having a name or a category.
+var SCORE_FIELDS = ['name', 'brand', 'categories', 'nova', 'additives', 'ingredients', 'labels', 'nutriscore', 'quantity', 'servingSize'];
 function scoreProduct(m, e, prof) {
   if (!m || !m.found) return null;
+  var missing = SCORE_FIELDS.filter(function (k) { return !m[k]; });
+  if (missing.length) { m = Object.assign({}, m); missing.forEach(function (k) { m[k] = { v: null }; }); }
   return (prof && prof.mode === 'custom') ? customScore(m, e, prof) : standardScore(m, e);
 }
 // Allergens: our keys → Open Food Facts allergen taxonomy tags, plus words for US-style "Contains: …" statements.
@@ -1813,13 +1868,17 @@ function factorWords(r, sc) {
   var met = metricByKey(r.key), noun = factorNoun(r.key), tone = toneOf(r.s);
   if (r.s === null) return { title: capitalize(noun) + ' unknown', value: '', detail: 'No data, not counted.', tone: 'none', noun: noun };
   if (met && (met.dir === 'low' || met.dir === 'high')) {
-    var value = nutrientValue(r, met, sc.basis || 'g');
-    var paren = [sc.drink ? 'drink cut-offs' : '', r.lv ? STRICTNESS[r.lv].label.toLowerCase() : ''].filter(Boolean).join(', ');
-    return { title: nutrientTitle(met.key, r.dir, r.s), value: value, detail: value + '. ' + cutoffPhrase(met, r.th, r.dir) + (sc.drink ? ' per 100 ml' : '') + (paren ? ' (' + paren + ')' : '') + '.', tone: tone, noun: noun };
+    // "More of X" is measured per 100 calories, so the row has to quote the same basis it was judged on, or the
+    // marks and the number beside them disagree.
+    var per = r.perKcal ? ' per 100 kcal' : sc.drink ? ' per 100 ml' : '';
+    var value = r.perKcal ? fmtVal(r.density, met.unit) + ' per 100 kcal' : nutrientValue(r, met, sc.basis || 'g');
+    var paren = [(sc.drink && !r.perKcal) ? 'drink cut-offs' : '', r.lv ? STRICTNESS[r.lv].label.toLowerCase() : ''].filter(Boolean).join(', ');
+    var bonus = r.bonusOnly ? ' Counts as a bonus only: it never takes points away.' : '';
+    return { title: nutrientTitle(met.key, r.dir, r.s), value: value, detail: value + '. ' + cutoffPhrase(met, r.th, r.dir) + per + (paren ? ' (' + paren + ')' : '') + '.' + bonus, tone: tone, noun: noun };
   }
   if (r.key === 'processing') return { title: NOVA_WORDS[r.nova] || 'NOVA group ' + r.nova, value: 'NOVA group ' + r.nova, detail: 'NOVA group ' + r.nova + '. Groups 1 to 4 score 100, 80, 50 and 10.', tone: tone, noun: noun };
   if (r.key === 'additives') return { title: additiveTitle(r.ad), value: '', detail: additiveNames(r.ad) + (r.ad && r.ad.count ? ' The riskiest additive sets the most marks possible; each extra additive takes 5 off.' : ''), tone: tone, noun: noun };
-  if (r.key === 'organic') return { title: r.s ? 'Organic label' : 'No organic label', value: '', detail: (r.s ? 'Organic label' : 'No organic label') + ' in Open Food Facts.', tone: tone, noun: noun };
+  if (r.key === 'organic') return { title: r.s ? 'Organic label' : 'No organic label', value: '', detail: (r.s ? 'Organic label' : 'No organic label') + ' in Open Food Facts. Counts as a bonus only: a missing label never takes points away.', tone: tone, noun: noun };
   return { title: r.label, value: '', detail: r.text, tone: tone, noun: noun };
 }
 // One standard-score component, same shape.
@@ -1862,6 +1921,9 @@ function renderScore(sc, estimated) {
       h('div', { class: 'foot', text: standard ? 'Standard score' : 'Your profile: ' + ((profile && profile.name) || 'custom') })
     ])
   ]));
+  if (!standard && sc.base !== null && sc.base !== undefined) {
+    sec.appendChild(h('div', { class: 'foot note', text: 'Food quality ' + sc.base + (sc.tilt ? ', your preferences ' + (sc.tilt > 0 ? '+' : '−') + Math.abs(sc.tilt) : ', your preferences leave it there') + '.' }));
+  }
   if (estimated) sec.appendChild(prepFlag());
   // the three factors that moved the score most, in words; a factor sitting exactly at 50 moved nothing and is not listed
   var reasons = (sc.why || []).filter(function (w) { return w.weight > 0 && byKey[w.key]; }).slice(0, 3);
@@ -1870,7 +1932,11 @@ function renderScore(sc, estimated) {
     return h('li', {}, [toneDot(words.tone), h('span', { class: 'rt', text: words.title }), words.value ? h('span', { class: 'rd', text: words.value }) : null]);
   })));
   var missingNouns = items.filter(function (x) { return !has(x); }).map(function (x) { return wordsOf(x).noun; });
-  if (sc.lowConfidence) sec.appendChild(h('div', { class: 'lowconf', text: standard ? 'Low confidence: no nutrition data, which is half of the standard score.' : 'Low confidence: no data on ' + joinPlain(missingNouns) + ', and those count for a large part of your score.' }));
+  if (sc.whole) sec.appendChild(h('div', { class: 'foot note', text: 'A single-ingredient whole food: the sugar and fat it carries are its own, so your limits are applied gently.' }));
+  // In custom mode the doubt is about the quality score underneath, not about the preferences: they can only move it.
+  if (sc.lowConfidence) sec.appendChild(h('div', { class: 'lowconf', text: standard ? 'Low confidence: no nutrition data, which is half of the standard score.'
+    : sc.prefOnly ? 'Low confidence: nothing is known about this food\'s quality, so the score is only the things you asked about.'
+    : 'Low confidence: no nutrition data, which is half of the quality score your preferences move.' }));
   else if (missingNouns.length) sec.appendChild(h('div', { class: 'foot note', text: capitalize(joinPlain(missingNouns)) + ' unknown, not counted.' }));
   if (sc.drink) sec.appendChild(h('div', { class: 'foot note', text: 'Scored as a drink, with cut-offs per 100 ml.' }));
   // every factor: title, marks, weight, value, cut-offs; heaviest first, factors without data last; then how they add up
@@ -1891,10 +1957,8 @@ function renderScore(sc, estimated) {
     explain = 'Points add up to 100: nutrition 50, additives 25, processing 15, organic 10. Parts with no data are left out and the rest is scaled up to 100.';
     worked = 'Worked out: ' + (max === 100 ? counted.map(function (c) { return String(c.score); }).join(' + ') + ' = ' + sc.score : pts + ' of ' + max + ' points from the parts with data, scaled to 100: ' + sc.score) + '.';
   } else {
-    var wsum = 0;
-    counted.forEach(function (r) { wsum += r.w; });
-    explain = 'Each factor gets 0 to 100 marks. Your score is the average of those marks, with each factor counted as many times as its weight (1 to 5, from your answers; change it in Settings). Factors with no data are left out.';
-    worked = 'Worked out: (' + counted.map(function (r) { return r.w + ' × ' + r.s; }).join(' + ') + ') ÷ ' + wsum + ' = ' + sc.score + '.';
+    explain = 'Every food starts with its quality score, the same one everybody sees: nutrition, additives, processing and the organic label. Your preferences then move it by up to ' + TILT_MAX + ' points, each factor counting as many times as its weight (1 to 5, from your answers; change it in Settings). Asking for more of something can only add points, never take them away, and it is judged per 100 calories, so a food is not marked down for what it was never meant to carry. Factors with no data are left out.';
+    worked = 'Worked out: quality ' + sc.base + (counted.length ? ', then ' + counted.map(function (r) { return factorNoun(r.key) + ' ' + (r.delta > 0 ? '+' : r.delta < 0 ? '−' : '±') + Math.abs(r.delta); }).join(', ') : '') + ' = ' + sc.score + '.';
   }
   sec.appendChild(h('details', { class: 'disc' }, [h('summary', { text: 'How the score adds up' }), list, h('div', { class: 'sec-f', text: explain }), h('div', { class: 'sec-f', text: worked }),
     h('div', { class: 'sec-f', text: 'Scores are a guide computed from public data, not medical advice. Additive risk levels are this app\'s own editorial classification.' })]));
@@ -2082,7 +2146,7 @@ function renderOnboardingStep(box) {
       h('button', { class: 'row nav', type: 'button', id: 'obStandard', onclick: function () { saveProfile({ mode: 'standard', version: 1 }); closeOnboarding(); toast('Standard scoring on'); } },
         h('span', { class: 'rl' }, [h('span', { class: 't', text: 'Standard' }), h('span', { class: 'd', text: 'Nutritional quality via Nutri-Score (50%), additives weighed by risk level (25%), NOVA processing (15%) and organic certification (10%).' })])),
       h('button', { class: 'row nav', type: 'button', id: 'obCustom', onclick: function () { ob.step = 1; renderOnboarding(); } },
-        h('span', { class: 'rl' }, [h('span', { class: 't', text: 'Customize' }), h('span', { class: 'd', text: 'Five quick questions build a personal score: what to limit, what to get more of, how strong each preference is, processing, and what to avoid. Nothing to type.' })]))
+        h('span', { class: 'rl' }, [h('span', { class: 't', text: 'Customize' }), h('span', { class: 'd', text: 'Five quick questions tune that score to you: what to limit, what to get more of, how strong each preference is, processing, and what to avoid. Your preferences move a food\u2019s score, they never replace it. Nothing to type.' })]))
     ]));
     if (profile) box.appendChild(h('button', { class: 'btn block', type: 'button', id: 'obKeep', onclick: closeOnboarding }, profile.mode === 'standard' ? 'Keep the standard score' : 'Keep my custom score'));
     return;
@@ -2166,7 +2230,7 @@ function renderSummary(box) {
   METRICS.forEach(function (met) { var w = p.weights[met.key] || 0; total += w; if (met.key !== 'organic') informative += w; });   // an organic label alone never gives a score
   box.appendChild(h('h2', { text: 'Your scoring profile: ' + p.name }));
   if (!informative) box.appendChild(h('p', { class: 'warn', text: 'Nothing that can be scored is weighted yet' + (total ? ' (an organic label alone gives no score)' : '') + '. Go back and pick at least one nutrient or a processing preference.' }));
-  else box.appendChild(h('p', { text: 'Products are scored 0–100 on these factors. Strict preferences weigh 5, medium 3, slight 1; a strict preference also halves the limit cut-offs and raises the targets by 1.5×. You can fine-tune the weights later in Settings.' }));
+  else box.appendChild(h('p', { text: 'Every food keeps its 0–100 quality score; these factors move it by up to ' + TILT_MAX + ' points. Strict preferences weigh 5, medium 3, slight 1; a strict preference also halves the limit cut-offs and raises the targets by 1.5×. Anything you want more of only ever adds points, and is judged per 100 calories. You can fine-tune the weights later in Settings.' }));
   var list = h('div', { class: 'group' });
   METRICS.slice().sort(function (x, y) { return (p.weights[y.key] || 0) - (p.weights[x.key] || 0); }).forEach(function (met) {   // heaviest first
     var w = p.weights[met.key] || 0;
