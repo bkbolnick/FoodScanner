@@ -3972,7 +3972,7 @@ function estimateResult(item, opts) {
   opts = opts || {};
   // Corrections are applied before anything is derived from the item, so the score, the avoid flags, the nutrition
   // panel and the CSV all read the same corrected numbers with no further plumbing.
-  var corr = applyCorrections(item);
+  var raw = item, corr = applyCorrections(item);
   item = corr.item;
   var conf = /^(high|medium|low)$/.test(String(item.confidence)) ? item.confidence : 'medium';
   var e = { barcode: '', format: null, fetchedAt: isoNow(),
@@ -3981,7 +3981,7 @@ function estimateResult(item, opts) {
     ai: { status: 'found', kind: opts.kind || 'photo', confidence: conf, norm: estimateNorm(item, opts) } };
   var note = (opts.kind === 'menu' ? 'Estimated from the menu' : opts.kind === 'plan' ? 'Planned meal, nutrition estimated' : 'Estimated from the photo') + (opts.kind === 'plan' ? '' : ', ' + conf + ' confidence');
   return { entry: e, merged: mergeProduct(e), fromCache: false, owner: opts.owner || 'scan',
-    estimate: { kind: opts.kind || 'photo', note: note, item: item, components: corr.usable ? item.components : null, applied: corr.applied } };
+    estimate: { kind: opts.kind || 'photo', note: note, item: item, raw: raw, components: corr.usable ? item.components : null, applied: corr.applied } };
 }
 // The factor that moved a score most, in the words the sheet uses (one line for a list row).
 function scoreHeadline(sc) {
@@ -4078,7 +4078,12 @@ function scanLabel(file) {
 }
 // Re-merge and redraw the product on screen, after its stored label changed underneath it.
 function redrawCurrent() {
-  if (!current || !current.entry || !current.entry.barcode) return;
+  if (!current) return;
+  if (current.estimate && current.estimate.raw) {   // a photo or menu estimate: rebuild from what the model said, not from the corrected copy
+    renderResult(estimateResult(current.estimate.raw, { kind: current.estimate.kind, owner: current.owner }));
+    return;
+  }
+  if (!current.entry || !current.entry.barcode) return;
   var entry = current.entry;
   renderResult({ entry: entry, merged: mergeProduct(entry), fromCache: true });
 }
