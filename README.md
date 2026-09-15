@@ -180,10 +180,11 @@ On first open the app asks how products should be scored. Both choices can be ch
     guideline to comfortably above it. The denominator never drops below 20 kcal per 100 g, so a food that is mostly
     water cannot read as concentrated.
   - A limit pays only 30% of its upside, so a food does not ride up merely for lacking sugar.
-  - A bonus counts toward the divisor only by as much as it earned, so a food gets no dilution for a bonus it did not
-    earn — otherwise asking for more protein would halve the sugar penalty on a sugary bar that has none. It is a ramp
-    rather than a switch at the halfway mark: switching the whole weight on at the midpoint moved a score ten points
-    for a hundredth of a gram of protein, and left the worked-out line unable to say where the ten points went.
+  - Limits and bonuses are weighed against their own weight and then added, rather than sharing one divisor. Sharing it
+    forced a choice between two wrong answers: counting an unearned bonus's full weight halved the sugar penalty on a
+    sugary bar with no protein, and counting only the part it earned made the divisor move with the numerator, so a
+    profile of bonuses alone paid the whole 25 points for 60% earned. Weighed apart, a bonus pays in proportion to what
+    it earned and an unearned one dilutes nothing. The sum is then bounded to 25.
   - A **sugar limit applies to free sugars**, which is what the guidelines actually ask you to cut down on. WHO and
     SACN count as free sugars everything added to a food, plus the sugars in honey, syrups and nectars, in fruit and
     vegetable juice and juice concentrate, and in smoothies, purées and pastes where the structure has been broken
@@ -193,7 +194,9 @@ On first open the app asks how products should be scored. Both choices can be ch
     where fresh fruit stops: rolled oats are still a pile of carbohydrate to someone counting them, and dried or
     concentrated fruit carries several times what fresh does. The rule reads name, category and ingredients
     independently, and is deliberately asymmetric — one witness is enough to call a sugar free, while exempting one
-    needs a witness and no objector — so a thin record pays rather than being forgiven. Oat and rice drinks pay:
+    needs a witness and no objector — so a thin record pays rather than being forgiven. The whole-food pass fades out
+    between 20 g and 40 g per 100 g rather than stopping dead, so a fresh fig and a dried one are not 37 points apart
+    over a tenth of a gram; by raisin strength it is gone. Oat and rice drinks pay:
     enzymes liberate the sugar from the starch, so nothing names it on the label but it was freed all the same. When
     the data cannot place a sugar, it counts in full and the card says which of those it could not establish.
 
