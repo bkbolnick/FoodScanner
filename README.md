@@ -270,7 +270,9 @@ On first open the app asks how products should be scored. Both choices can be ch
   carries the first instead of losing it and never compounds it. And what you said is remembered against what the
   model **read**, not what it became: the next time a photo is read as yogurt with granola the card offers *you said
   it was cottage cheese* with a one-tap **It's cottage cheese again**, and does nothing on its own, because
-  tomorrow's bowl may really be yogurt.
+  tomorrow's bowl may really be yogurt. Dropping saved amounts with **Use what the photo said** leaves that memory
+  alone. And when the model reads the same thing again despite what you typed, the card says so and nothing is
+  remembered: a correction the model did not take is not a correction.
 - **Reading the label yourself.** Open Food Facts and USDA between them often have only a name and a brand, and a
   product with no nutrition and no ingredients cannot be scored at all. When a card is missing any of the six tracked
   fields it offers **Photograph the nutrition panel** and **Photograph the ingredients list**; the AI copies what is

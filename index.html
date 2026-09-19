@@ -1304,12 +1304,20 @@ function saveCorrection(name, key, grams) {
   }
   return store.setJSON(LS.corrections, all);
 }
-function clearCorrections(name) { var all = loadCorrections(), k = corrKey(name); if (!all[k]) return false; delete all[k]; store.setJSON(LS.corrections, all); return true; }
+// Drops the amounts saved for a dish. What the person said the reading WAS stays: "use what the photo said" is about
+// the weights on the plate, not about what it is.
+function clearCorrections(name) {
+  var all = loadCorrections(), k = corrKey(name), rec = all[k];
+  if (!rec) return false;
+  if (rec.is && Object.keys(rec.is).length) rec.parts = {}; else delete all[k];
+  store.setJSON(LS.corrections, all); return true;
+}
 // What the person said a reading actually was, kept against what the model READ. A later photo read the same way is
 // offered it, never handed it: tomorrow's plate may really be yogurt.
 function saveIdentity(readName, partName, text) {
-  var k = corrKey(readName), pk = partName ? corrKey(partName) : '*', t = String(text || '').trim();
-  if (!k || !t) return false;
+  var k = corrKey(readName), pk = partName ? corrKey(partName) : '*', t = String(text || '').trim().slice(0, 80);
+  if (!k || !t || (partName && !pk)) return false;
+  if (corrKey(t) === (partName ? pk : k)) return false;   // saying it is what it was read as is not a correction
   var all = loadCorrections(), rec = all[k] && typeof all[k] === 'object' ? all[k] : { n: 0, at: '', name: String(readName || ''), parts: {} };
   if (!rec.parts || typeof rec.parts !== 'object') rec.parts = {};
   if (!rec.is || typeof rec.is !== 'object') rec.is = {};
@@ -1326,8 +1334,9 @@ function identityOffers(raw) {
   var rec = correctionRecord(raw && raw.name);
   if (!rec || !rec.is) return [];
   var out = [], keys = componentKeys(raw.components || []);
+  var seen = {};
   if (rec.is['*']) out.push({ part: null, text: rec.is['*'] });
-  (raw.components || []).forEach(function (c, i) { var k = corrKey(c && c.name); if (k && rec.is[k]) out.push({ part: { name: c.name, key: keys[i] }, text: rec.is[k] }); });
+  (raw.components || []).forEach(function (c, i) { var k = corrKey(c && c.name); if (k && rec.is[k] && !seen[k]) { seen[k] = 1; out.push({ part: { name: c.name, key: keys[i] }, text: rec.is[k] }); } });
   return out;
 }
 // Are the components a faithful account of the dish, or did the model contradict itself? If the parts do not add up
@@ -1564,6 +1573,11 @@ function loadPersisted() {
   tally = store.getJSON(LS.tally, null) || emptyTally();
   scanLog = store.getJSON(LS.log, null) || [];
   if (!Array.isArray(scanLog)) scanLog = [];
+  // Rows from before ids get one now: a corrected card finds its row by id, and matching by name stopped being
+  // possible once a correction could change the name.
+  var stamped = false;
+  scanLog.forEach(function (e, i) { if (e && typeof e === 'object' && !e.id) { e.id = 'e0' + i + Math.random().toString(36).slice(2, 6); stamped = true; } });
+  if (stamped) store.setJSON(LS.log, scanLog);
   if (typeof tally.photos !== 'number') { tally.photos = 0; scanLog.forEach(function (e) { if (e && e.estimate) tally.photos++; }); }   // a tally saved before photos were counted: seed from the log
 }
 function recordScan(result, origin) {
@@ -2726,6 +2740,7 @@ function closeOnboarding() {
   $('onboard').classList.remove('open'); document.body.classList.remove('ob-open');
   $('onboard').setAttribute('aria-label', 'Scoring setup');
   if (!$('dbgPanel').classList.contains('open')) setBackgroundInert(false);
+  updatePaused();
   restoreFocus(ob.prevFocus); ob.prevFocus = null;
 }
 // While a full-screen dialog is open, everything behind it is inert for keyboards and screen readers.
@@ -3109,7 +3124,7 @@ function componentsPanel(res) {
     ]));
   });
   sec.appendChild(h('div', { class: 'sec-f', text: 'Correcting an amount re-adds the dish from its parts straight away. Nothing you did not touch changes.' }));
-  if (rec) {
+  if (rec && Object.keys(rec.parts).length) {   // a record that only remembers what you said the reading was is not an amount correction
     sec.appendChild(h('div', { class: 'foot note', text: (est.applied && est.applied.length)
       ? 'Carried from what you corrected on "' + rec.name + '" ' + shortTime(rec.at) + '. The same name is not always the same plate, so check it.'
       : 'You have corrections saved for "' + rec.name + '", but they name parts this photo was not read as having.' }));
@@ -3146,7 +3161,7 @@ function correctComponent(dish, c) {
   ob.prevFocus = document.activeElement;   // closeOnboarding restores this; without it the focus fell to <body>
   $('onboard').setAttribute('aria-label', 'Correct ' + c.name);
   $('onboard').classList.add('open'); document.body.classList.add('ob-open');
-  setBackgroundInert(true);
+  setBackgroundInert(true); updatePaused();
   try { input.focus(); input.select(); } catch (err) { /* ignore */ }
 }
 // The single source row of a photo or menu estimate: what the model looked at and how sure it was.
@@ -3918,7 +3933,7 @@ function initSheet() {
 
 /* ----------------------------------------------------------------- tabs */
 var activeTab = 'scan', manualFocused = false;
-function updatePaused() { cam.paused = activeTab !== 'scan' || manualFocused || sheet.snap === 'full'; }
+function updatePaused() { cam.paused = activeTab !== 'scan' || manualFocused || sheet.snap === 'full' || $('onboard').classList.contains('open'); }   // a dialog on top means nothing is being pointed at
 var TABS = ['scan', 'menu', 'plan', 'learn', 'settings'];
 function showTab(name) {
   // Leaving the menu view for Analyze is a "back", not a tab switch: its dish sheet is closed rather than parked, so
@@ -4228,21 +4243,31 @@ function reidentify(res, part, text) {
     + (est.before ? ' After being corrected you read it as: ' + JSON.stringify(est.raw) + '.' : '')
     + ' The person who took the photo says ' + said.map(function (x) { return (x.part ? 'the part read as "' + x.part + '"' : 'the whole thing') + ' is actually "' + x.text + '"'; }).join(', and ')
     + '. They are looking at it and you are not, so take their word for what it is. Read it again with all of that in mind and fill in the record for what it actually is, portion and all.'
-    + (est.imageBlock ? '' : ' The photo is no longer available: work from your earlier reading and what they told you.');
+    + (est.imageBlock ? '' : ' The photo is no longer available: work from your earlier reading and what they told you. No label is in front of you now, so ingredients_from_label is false and there is no barcode.');
   var content = est.imageBlock ? [est.imageBlock, { type: 'text', text: prompt }] : [{ type: 'text', text: prompt }];
   var seq = ++photoSeq;
   renderLoading('', 'Reading it again\u2026');
-  return aiRequest({ system: PHOTO_SYSTEM, content: content, schema: PHOTO_SCHEMA, effort: 'medium', maxTokens: 6000, cutHint: 'Try a shorter description.' }).then(function (out) {
-    if (seq !== photoSeq) return;
+  current = null;   // anything rendered while this runs (a History row, a barcode) sets it again, and then this answer is dropped
+  function stale() { return seq !== photoSeq || current !== null; }
+  return aiRequest({ system: PHOTO_SYSTEM, content: content, schema: PHOTO_SCHEMA, effort: 'medium', maxTokens: 6000, cutHint: 'Try it again.' }).then(function (out) {
+    if (stale()) return;
     if (!out || out.kind === 'not_food' || !String(out.name || '').trim()) throw new Error('the model could not make a food out of that');
+    if (!part && (corrKey(out.name) === corrKey(raw.name) || corrKey(out.name) === corrKey(est.raw.name))) {   // it read the same thing again: not a correction, not remembered as one
+      renderResult(res); revealResult();
+      toast('The model still read it as ' + out.name + '. Try other words for it.');
+      return;
+    }
+    if (!est.imageBlock) { out.ingredients_from_label = false; out.barcode = ''; }   // no label was in front of it, whatever the first reading said
     dbg('log', 'Re-read: "' + raw.name + '" said to be "' + text + '" \u2192 "' + out.name + '"');
-    saveIdentity(raw.name, part ? part.name : null, text);
+    // A part is remembered against the reading whose panel it was in (its name came from there); the whole thing
+    // against the first reading, which is what the model will read again on its own.
+    saveIdentity(part ? est.raw.name : raw.name, part ? part.name : null, text);
     var next = estimateResult(out, { kind: 'photo', preview: est.preview, imageBlock: est.imageBlock, owner: res.owner, before: raw, said: said });
     next.logId = res.logId || null;
     renderResult(next); relogCurrent(); revealResult();
     toast('Read again as ' + out.name);
   }).catch(function (err) {
-    if (seq !== photoSeq) return;
+    if (stale()) return;
     dbg('error', 'Re-read failed: ' + (err && err.message || err));
     renderResult(res); revealResult();
     toast('Could not read it again: ' + (err && err.message || err));
@@ -4258,9 +4283,13 @@ function askIdentity(res, part) {
   body.appendChild(h('p', { text: (part ? 'This part' : 'The photo') + ' was read as ' + was + '. Type what it actually is and the photo is read again as that. '
     + (res.estimate.imageBlock ? '' : 'This scan\u2019s photo was not kept, so the model will work from its earlier reading and your words.') }));
   body.appendChild(input);
+  var warn = h('p', { class: 'warn', role: 'alert' });   // under the field, where the keyboard cannot hide it
+  function complain(msg) { warn.textContent = msg; if (!warn.parentNode) body.insertBefore(warn, input.nextSibling); try { input.focus(); } catch (err) { /* ignore */ } }
   function go() {
     var t = String(input.value || '').trim();
-    if (t.length < 2) { toast('Type what it is in a word or two'); return; }
+    if (t.length < 2) { complain('Type what it is in a word or two.'); return; }
+    if (corrKey(t) === corrKey(was)) { complain('That is what it was read as. Type what it actually is.'); return; }
+    if (current !== res) { closeOnboarding(); toast('The screen changed underneath this. Open it again.'); return; }
     closeOnboarding();
     reidentify(res, part, t);
   }
@@ -4272,7 +4301,7 @@ function askIdentity(res, part) {
   ob.prevFocus = document.activeElement;
   $('onboard').setAttribute('aria-label', title);
   $('onboard').classList.add('open'); document.body.classList.add('ob-open');
-  setBackgroundInert(true);
+  setBackgroundInert(true); updatePaused();
   try { input.focus(); } catch (err) { /* ignore */ }
 }
 // A model's name for a dish can run to a sentence. A button that carries it is cut at a word before it wraps a
@@ -4293,18 +4322,23 @@ function identityControls(res) {
   if (est.before) out.push(h('button', { class: 'btn small named', type: 'button', onclick: function () {
     var back = estimateResult(est.before, { kind: 'photo', preview: est.preview, imageBlock: est.imageBlock, owner: res.owner });
     back.logId = res.logId || null;
-    renderResult(back); relogCurrent(); toast('Back to what the photo said first');
+    renderResult(back); relogCurrent(); revealResult(); toast('Back to what the photo said first');
   } }, 'Back to ' + shortName(est.before.name || 'the first reading')));
   return out;
 }
 function identityOfferNote(res) {
   var est = res.estimate;
-  if (!est || est.kind !== 'photo' || !est.raw || (est.said && est.said.length)) return null;
-  var offers = identityOffers(est.raw);
+  if (!est || est.kind !== 'photo' || !est.raw) return null;
+  // Offers belong to the first reading (that is what the model read); the ones already taken on this card are not
+  // offered again.
+  var base = est.before || est.raw, said = est.said || [];
+  var offers = identityOffers(base).filter(function (o) {
+    return !said.some(function (x) { return (x.part ? corrKey(x.part) : '') === (o.part ? corrKey(o.part.name) : '') && corrKey(x.text) === corrKey(o.text); });
+  });
   if (!offers.length) return null;
   return h('div', { class: 'foot note' }, offers.map(function (o) {
     return h('p', {}, [
-      'Last time ' + (o.part ? o.part.name + ' was one of the parts' : 'this was read as ' + est.raw.name) + ', you said it was ' + o.text + '.',
+      'Last time ' + (o.part ? o.part.name + ' was one of the parts' : 'this was read as ' + base.name) + ', you said it was ' + o.text + '.',
       h('button', { class: 'btn small named', type: 'button', onclick: function () { reidentify(res, o.part, o.text); } }, 'It\u2019s ' + shortName(o.text) + ' again')
     ]);
   }).concat([h('p', { text: 'Not applied on its own: the same reading is not always the same plate.' })]));
@@ -4340,7 +4374,6 @@ function relogCurrent() {
   if (!current || !current.estimate || !scanLog.length) return;
   var row = null;
   if (current.logId) scanLog.some(function (x) { if (x && x.id === current.logId) { row = x; return true; } return false; });
-  if (!row && scanLog[0] && scanLog[0].origin === 'photo' && scanLog[0].estimate && (scanLog[0].name || '') === (current.merged.name.v || '')) row = scanLog[0];   // a row from before ids
   if (!row || row.origin !== 'photo' || !row.estimate) return;
   var sc = scoreProduct(current.merged, current.entry, profile || { mode: 'standard' });
   var av = avoidFlags(current.merged, current.entry, profile);
@@ -5948,7 +5981,7 @@ window.FS = {
   plan: function () { return plan; }, dayPrompt: dayPrompt, articles: LEARN_ARTICLES, openArticle: openArticle, renderMarkdown: renderMarkdown, searchArticles: searchArticles, planCSV: planCSV, planText: planText, samplePlan: samplePlan, openPlanWizard: openPlanWizard, wizard: function () { return pw; }, pwGo: pwGo, sanitizeWizard: sanitizeWizard,
   enterCode: function (code) { return handleCode(code, null, 'manual'); },
   labelNorm: labelNorm, labelRecord: labelRecord, applyCorrections: applyCorrections, saveCorrection: saveCorrection, componentKeys: componentKeys, saveIdentity: saveIdentity, identityOffers: identityOffers, reidentify: reidentify, clearCorrections: clearCorrections, correctionRecord: correctionRecord, componentsUsable: componentsUsable, saveLabelPart: saveLabelPart, removeLabel: removeLabel, scanLabel: scanLabel, pickLabel: pickLabel,
-  _setFrameSource: function (el) { cam.frameSource = el; }
+  _setFrameSource: function (el) { cam.frameSource = el; }, camPaused: function () { return cam.paused; }, redrawCurrent: redrawCurrent, showEstimate: showEstimate
 };
 
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();
