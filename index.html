@@ -408,7 +408,11 @@ table.cov .has { color: var(--green); } table.cov .no { color: var(--label3); }
 [aria-checked=true] > .sw::after { transform: translateX(20px); }
 .row input[type=number] { width: 6em; min-height: 40px; text-align: right; flex: none; background: var(--fill); border-radius: 8px; padding: 6px 10px; -moz-appearance: textfield; }
 .ob-inner textarea { margin: 0 0 24px; }
-.ob-inner input[type=number] { width: 100%; min-height: 48px; margin: 4px 0 24px; background: var(--fill); border-radius: 12px; padding: 10px 14px; font-size: 1.176rem; font-variant-numeric: tabular-nums; -moz-appearance: textfield; }
+.ob-inner input[type=number], .ob-inner input[type=text] { width: 100%; min-height: 48px; margin: 4px 0 24px; background: var(--fill); border-radius: 12px; padding: 10px 14px; font-size: 1.176rem; font-variant-numeric: tabular-nums; -moz-appearance: textfield; }
+.foot.note p { margin: 0; }
+.foot.note p + p { margin-top: 8px; }
+.foot.note .btn.small { display: flex; width: max-content; max-width: 100%; margin: 8px 0 0; }   /* an offer's button sits under its sentence, not inside it */
+.btn.named { white-space: normal; text-align: center; max-width: 100%; min-width: 0; }   /* a button carrying a dish name wraps instead of running off the screen */
 .row.chk .box { flex: none; width: 22px; height: 22px; border-radius: 50%; border: 1.5px solid var(--label3); }
 .row.chk[aria-checked=true] .box { background: var(--accent); border-color: var(--accent); -webkit-mask: none; position: relative; }
 .row.chk[aria-checked=true] .box::after { content: ""; position: absolute; left: 7px; top: 3px; width: 5px; height: 10px; border: solid #FFFFFF; border-width: 0 2px 2px 0; transform: rotate(45deg); }
@@ -1291,7 +1295,7 @@ function saveCorrection(name, key, grams) {
   Object.keys(all).forEach(function (x) { if (all[x] && all[x].n > seq) seq = all[x].n; });
   rec.n = seq + 1; rec.at = isoNow(); rec.name = String(name || '');
   if (grams === null) delete rec.parts[ck]; else rec.parts[ck] = grams;
-  if (!Object.keys(rec.parts).length) delete all[k]; else all[k] = rec;
+  if (!Object.keys(rec.parts).length && !(rec.is && Object.keys(rec.is).length)) delete all[k]; else all[k] = rec;
   var keys = Object.keys(all);
   if (keys.length > CORRECTIONS_MAX) {
     keys.sort(function (a, b) { return (all[b].n || 0) - (all[a].n || 0); }).slice(CORRECTIONS_MAX).forEach(function (x) { delete all[x]; });
@@ -1299,6 +1303,31 @@ function saveCorrection(name, key, grams) {
   return store.setJSON(LS.corrections, all);
 }
 function clearCorrections(name) { var all = loadCorrections(), k = corrKey(name); if (!all[k]) return false; delete all[k]; store.setJSON(LS.corrections, all); return true; }
+// What the person said a reading actually was, kept against what the model READ. A later photo read the same way is
+// offered it, never handed it: tomorrow's plate may really be yogurt.
+function saveIdentity(readName, partName, text) {
+  var k = corrKey(readName), pk = partName ? corrKey(partName) : '*', t = String(text || '').trim();
+  if (!k || !t) return false;
+  var all = loadCorrections(), rec = all[k] && typeof all[k] === 'object' ? all[k] : { n: 0, at: '', name: String(readName || ''), parts: {} };
+  if (!rec.parts || typeof rec.parts !== 'object') rec.parts = {};
+  if (!rec.is || typeof rec.is !== 'object') rec.is = {};
+  var seq = 0;
+  Object.keys(all).forEach(function (x) { if (all[x] && all[x].n > seq) seq = all[x].n; });
+  rec.n = seq + 1; rec.at = isoNow(); rec.name = String(readName || '');
+  rec.is[pk] = t.slice(0, 80);
+  all[k] = rec;
+  var keys = Object.keys(all);
+  if (keys.length > CORRECTIONS_MAX) keys.sort(function (a, b) { return (all[b].n || 0) - (all[a].n || 0); }).slice(CORRECTIONS_MAX).forEach(function (x) { delete all[x]; });
+  return store.setJSON(LS.corrections, all);
+}
+function identityOffers(raw) {
+  var rec = correctionRecord(raw && raw.name);
+  if (!rec || !rec.is) return [];
+  var out = [], keys = componentKeys(raw.components || []);
+  if (rec.is['*']) out.push({ part: null, text: rec.is['*'] });
+  (raw.components || []).forEach(function (c, i) { var k = corrKey(c && c.name); if (k && rec.is[k]) out.push({ part: { name: c.name, key: keys[i] }, text: rec.is[k] }); });
+  return out;
+}
 // Are the components a faithful account of the dish, or did the model contradict itself? If the parts do not add up
 // to the totals it stated, the parts are shown but never scored from: a correction cannot be honest about a sum that
 // was not honest to begin with.
@@ -1629,7 +1658,7 @@ function renderLog() {
     var sq = h('div', { class: 'sq' + (tone ? ' b-' + tone : '') }, scored
       ? [String(e.score), h('span', { class: 'sr', text: ', ' + (e.lowConfidence ? 'low confidence' : sb.label) })]
       : [h('span', { 'aria-hidden': 'true' }, '\u2013'), h('span', { class: 'sr', text: 'no score' })]);
-    function open() { closeHistory(); showTab('scan'); if (e.estimate) showEstimate(e.estimate); else handleCode(e.barcode, e.format || null, 'log'); }
+    function open() { closeHistory(); showTab('scan'); if (e.estimate) showEstimate(e.estimate, e.id || null); else handleCode(e.barcode, e.format || null, 'log'); }
     var li = h('li', { role: 'button', tabindex: '0', onclick: open, onkeydown: function (ev) { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); open(); } } }, [
       sq,
       h('div', { class: 'grow' }, [
@@ -2931,6 +2960,8 @@ function renderResult(res) {
     var scoreSec = renderScore(sc, !!res.estimate);
     if (!profile) scoreSec.appendChild(h('div', { class: 'sec-f', text: 'Showing the standard score. Choose or customize scoring in Settings.' }));
     box.appendChild(scoreSec);
+    var offer = identityOfferNote(res);
+    if (offer) scoreSec.appendChild(offer);
     var comps = componentsPanel(res);
     if (comps) box.appendChild(comps);
   }
@@ -2999,7 +3030,10 @@ function renderResult(res) {
   else more.appendChild(h('section', { class: 'sec' }, [h('div', { class: 'sec-h', text: 'Sources' }), sourceRows(e), h('details', { class: 'disc' }, [h('summary', { text: 'Coverage by source' }), cov])]));
   var actions = h('div', { class: 'actions' });
   if (res.estimate) {
-    if (res.estimate.kind === 'photo') actions.appendChild(h('button', { class: 'btn small', type: 'button', onclick: function () { pickPhoto('photoInput'); } }, 'Photograph another'));
+    if (res.estimate.kind === 'photo') {
+      identityControls(res).forEach(function (b) { actions.appendChild(b); });
+      actions.appendChild(h('button', { class: 'btn small', type: 'button', onclick: function () { pickPhoto('photoInput'); } }, 'Photograph another'));
+    }
   } else {
     actions.appendChild(h('button', { class: 'btn small', type: 'button', onclick: function () { refetch(e); } }, 'Refresh'));
     if (m.urls.OFF) actions.appendChild(h('a', { class: 'btn small', href: m.urls.OFF, target: '_blank', rel: 'noopener noreferrer' }, 'Open in Open Food Facts'));
@@ -3103,9 +3137,11 @@ function correctComponent(dish, c) {
       closeOnboarding(); toast('Rescored from your correction'); redrawCurrent(); relogCurrent();
     } }, 'Save')
   ]));
-  if (c.corrected) body.appendChild(h('div', { class: 'actions' }, [h('button', { class: 'btn small', type: 'button', onclick: function () {
+  var extra = [h('button', { class: 'btn small named', type: 'button', onclick: function () { closeOnboarding(); if (current) askIdentity(current, { name: c.name, key: c.key }); } }, 'Not ' + shortName(c.name) + '?')];
+  if (c.corrected) extra.push(h('button', { class: 'btn small', type: 'button', onclick: function () {
     saveCorrection(dish, c.key, null); closeOnboarding(); toast('Back to what the photo said'); redrawCurrent(); relogCurrent();
-  } }, 'Reset this one')]));
+  } }, 'Reset this one'));
+  body.appendChild(h('div', { class: 'actions' }, extra));
   ob.prevFocus = document.activeElement;   // closeOnboarding restores this; without it the focus fell to <body>
   $('onboard').setAttribute('aria-label', 'Correct ' + c.name);
   $('onboard').classList.add('open'); document.body.classList.add('ob-open');
@@ -4025,8 +4061,24 @@ function estimateResult(item, opts) {
     usda: { status: 'skipped', codeUsed: null, error: null, erroredAt: null, tried: [], totalHits: null, fdcId: null, norm: null },
     ai: { status: 'found', kind: opts.kind || 'photo', confidence: conf, norm: estimateNorm(item, opts) } };
   var note = (opts.kind === 'menu' ? 'Estimated from the menu' : opts.kind === 'plan' ? 'Planned meal, nutrition estimated' : 'Estimated from the photo') + (opts.kind === 'plan' ? '' : ', ' + conf + ' confidence');
+  var said = saidList(opts.said);
+  if (said.length) note = 'Re-read after you said ' + saidPhrase(said) + (opts.imageBlock ? '' : ' (from the description; the photo was not kept)');
   return { entry: e, merged: mergeProduct(e), fromCache: false, owner: opts.owner || 'scan',
-    estimate: { kind: opts.kind || 'photo', note: note, item: item, raw: raw, components: corr.usable ? item.components : null, applied: corr.applied } };
+    // preview and imageBlock live in memory only, never in the log: a re-read needs the photo, and a redraw needs the
+    // thumbnail, and both used to be dropped the moment the card was rebuilt. before/said record an identity
+    // correction — what the model first read, and what the person said it actually was.
+    estimate: { kind: opts.kind || 'photo', note: note, item: item, raw: raw, components: corr.usable ? item.components : null, applied: corr.applied,
+      preview: opts.preview || null, imageBlock: opts.imageBlock || null, before: opts.before || null, said: said.length ? said : null } };
+}
+// Everything the person has said about one photo, in order. Each re-read is sent all of it, from the model's first
+// reading, so the second correction never loses the first and never compounds it either.
+function saidList(v) {
+  var list = Array.isArray(v) ? v : v && typeof v === 'object' ? [v] : [];
+  return list.filter(function (x) { return x && typeof x === 'object' && String(x.text || '').trim(); })
+    .map(function (x) { return { part: x.part ? String(x.part) : null, text: String(x.text).trim().slice(0, 80) }; });
+}
+function saidPhrase(list) {
+  return list.map(function (x) { return (x.part ? 'the ' + x.part + ' was ' : 'it was ') + x.text; }).join(' and ');
 }
 // The factor that moved a score most, in the words the sheet uses (one line for a list row).
 function scoreHeadline(sc) {
@@ -4125,7 +4177,10 @@ function scanLabel(file) {
 function redrawCurrent() {
   if (!current) return;
   if (current.estimate && current.estimate.raw) {   // a photo or menu estimate: rebuild from what the model said, not from the corrected copy
-    renderResult(estimateResult(current.estimate.raw, { kind: current.estimate.kind, owner: current.owner }));
+    var est = current.estimate, logId = current.logId;
+    var res = estimateResult(est.raw, { kind: est.kind, owner: current.owner, preview: est.preview, imageBlock: est.imageBlock, before: est.before, said: est.said });
+    res.logId = logId;
+    renderResult(res);
     return;
   }
   if (!current.entry || !current.entry.barcode) return;
@@ -4149,7 +4204,7 @@ function scanPhoto(file) {
     dbg('log', 'Photo read: ' + out.kind + ' "' + out.name + '"' + (code ? ' barcode ' + code : '') + ', confidence ' + out.confidence);
     if (code && (code.length === 8 || (code.length >= 12 && code.length <= 14)) && readIsValid(code, null)) { toast('Barcode read from the photo'); handleCode(code, null, 'photo'); return; }
     if (out.kind === 'not_food' || !String(out.name || '').trim()) { renderEstimateEmpty(); return; }
-    var res = estimateResult(out, { kind: 'photo', preview: r.img.preview, owner: 'scan' });
+    var res = estimateResult(out, { kind: 'photo', preview: r.img.preview, imageBlock: r.img.block, owner: 'scan' });
     renderResult(res);
     recordEstimate(res);
     revealResult();
@@ -4159,8 +4214,101 @@ function scanPhoto(file) {
     renderEstimateError('Could not read the photo', err, function () { pickPhoto('photoInput'); });
   });
 }
-function showEstimate(est) {   // reopen a logged photo scan (no image was kept)
-  var res = estimateResult(est.item, { kind: est.kind, owner: 'scan' });
+// The person is looking at the plate and the model is not. When they say a part, or the whole thing, is something
+// else, the model is told so — what it read, what they say it is — and asked to read it again: with the photo while it
+// is still in memory, from its own earlier reading when it is not. Always from the model's FIRST reading, so a second
+// correction does not compound the first.
+function reidentify(res, part, text) {
+  var est = res.estimate, raw = est.before || est.raw;
+  text = String(text || '').trim().slice(0, 80);
+  if (!text) return Promise.resolve();
+  var said = saidList(est.said).concat([{ part: part ? String(part.name) : null, text: text }]);
+  var prompt = 'You read this photo earlier as: ' + JSON.stringify(raw) + '.'
+    + (est.before ? ' After being corrected you read it as: ' + JSON.stringify(est.raw) + '.' : '')
+    + ' The person who took the photo says ' + said.map(function (x) { return (x.part ? 'the part read as "' + x.part + '"' : 'the whole thing') + ' is actually "' + x.text + '"'; }).join(', and ')
+    + '. They are looking at it and you are not, so take their word for what it is. Read it again with all of that in mind and fill in the record for what it actually is, portion and all.'
+    + (est.imageBlock ? '' : ' The photo is no longer available: work from your earlier reading and what they told you.');
+  var content = est.imageBlock ? [est.imageBlock, { type: 'text', text: prompt }] : [{ type: 'text', text: prompt }];
+  var seq = ++photoSeq;
+  renderLoading('', 'Reading it again\u2026');
+  return aiRequest({ system: PHOTO_SYSTEM, content: content, schema: PHOTO_SCHEMA, effort: 'medium', maxTokens: 6000, cutHint: 'Try a shorter description.' }).then(function (out) {
+    if (seq !== photoSeq) return;
+    if (!out || out.kind === 'not_food' || !String(out.name || '').trim()) throw new Error('the model could not make a food out of that');
+    dbg('log', 'Re-read: "' + raw.name + '" said to be "' + text + '" \u2192 "' + out.name + '"');
+    saveIdentity(raw.name, part ? part.name : null, text);
+    var next = estimateResult(out, { kind: 'photo', preview: est.preview, imageBlock: est.imageBlock, owner: res.owner, before: raw, said: said });
+    next.logId = res.logId || null;
+    renderResult(next); relogCurrent(); revealResult();
+    toast('Read again as ' + out.name);
+  }).catch(function (err) {
+    if (seq !== photoSeq) return;
+    dbg('error', 'Re-read failed: ' + (err && err.message || err));
+    renderResult(res); revealResult();
+    toast('Could not read it again: ' + (err && err.message || err));
+  });
+}
+// The sheet that asks what it actually is. One text field: the person knows the word.
+function askIdentity(res, part) {
+  var was = part ? part.name : (res.merged.name.v || 'this');
+  var body = clear($('obInner'));
+  var input = h('input', { type: 'text', id: 'identInput', maxlength: '80', autocomplete: 'off', autocapitalize: 'none', spellcheck: 'false',
+    placeholder: 'e.g. cottage cheese', 'aria-label': 'What ' + was + ' actually is' });
+  body.appendChild(h('h2', { text: 'Not ' + was + '?' }));
+  body.appendChild(h('p', { text: 'Say what it actually is and the photo is read again with that in mind. ' + (res.estimate.imageBlock ? 'The photo is still here, so the model will look at it again.' : 'This scan\u2019s photo was not kept, so the model will work from its earlier reading and your words.') }));
+  body.appendChild(input);
+  function go() {
+    var t = String(input.value || '').trim();
+    if (t.length < 2) { toast('Say what it is in a word or two'); return; }
+    closeOnboarding();
+    reidentify(res, part, t);
+  }
+  input.addEventListener('keydown', function (ev) { if (ev.key === 'Enter') { ev.preventDefault(); go(); } });
+  body.appendChild(h('div', { class: 'ob-nav' }, [
+    h('button', { class: 'btn', type: 'button', id: 'identCancel', onclick: closeOnboarding }, 'Cancel'),
+    h('button', { class: 'btn primary', type: 'button', id: 'identGo', onclick: go }, 'Read it again')
+  ]));
+  ob.prevFocus = document.activeElement;
+  $('onboard').setAttribute('aria-label', 'Not ' + was);
+  $('onboard').classList.add('open'); document.body.classList.add('ob-open');
+  setBackgroundInert(true);
+  try { input.focus(); } catch (err) { /* ignore */ }
+}
+// A model's name for a dish can run to a sentence. A button that carries it is cut at a word before it wraps a
+// third line; the heading of the sheet it opens still shows the whole name.
+function shortName(n, max) {
+  n = String(n || '').trim(); max = max || 48;
+  if (n.length <= max) return n;
+  var cut = n.slice(0, max).replace(/\s+\S*$/, '');
+  return (cut || n.slice(0, max)) + '\u2026';
+}
+// The controls under a photo card: say it is something else, take back a re-read, or accept an offered one.
+function identityControls(res) {
+  var est = res.estimate;
+  if (!est || est.kind !== 'photo' || !est.raw) return [];
+  var out = [];
+  out.push(h('button', { class: 'btn small named', type: 'button', onclick: function () { askIdentity(res, null); } }, 'Not ' + shortName(res.merged.name.v || 'this') + '?'));
+  if (est.before) out.push(h('button', { class: 'btn small named', type: 'button', onclick: function () {
+    var back = estimateResult(est.before, { kind: 'photo', preview: est.preview, imageBlock: est.imageBlock, owner: res.owner });
+    back.logId = res.logId || null;
+    renderResult(back); relogCurrent(); toast('Back to what the photo said first');
+  } }, 'Back to ' + shortName(est.before.name || 'the first reading')));
+  return out;
+}
+function identityOfferNote(res) {
+  var est = res.estimate;
+  if (!est || est.kind !== 'photo' || !est.raw || (est.said && est.said.length)) return null;
+  var offers = identityOffers(est.raw);
+  if (!offers.length) return null;
+  return h('div', { class: 'foot note' }, offers.map(function (o) {
+    return h('p', {}, [
+      'Last time ' + (o.part ? o.part.name + ' was one of the parts' : 'this was read as ' + est.raw.name) + ', you said it was ' + o.text + '.',
+      h('button', { class: 'btn small named', type: 'button', onclick: function () { reidentify(res, o.part, o.text); } }, 'It\u2019s ' + shortName(o.text) + ' again')
+    ]);
+  }).concat([h('p', { text: 'Not applied on its own: the same reading is not always the same plate.' })]));
+}
+function showEstimate(est, logId) {   // reopen a logged photo scan (no image was kept)
+  var res = estimateResult(est.item, { kind: est.kind, owner: 'scan', before: est.before || null, said: est.said || null });
+  res.logId = logId || null;
   renderResult(res);
   revealResult();
 }
@@ -4187,26 +4335,32 @@ function renderEstimateError(title, err, retry) {
 // CSV keep quoting a score the card no longer shows.
 function relogCurrent() {
   if (!current || !current.estimate || !scanLog.length) return;
-  var top = scanLog[0];
-  if (!top || top.origin !== 'photo' || !top.estimate || (top.name || '') !== (current.merged.name.v || '')) return;
+  var row = null;
+  if (current.logId) scanLog.some(function (x) { if (x && x.id === current.logId) { row = x; return true; } return false; });
+  if (!row && scanLog[0] && scanLog[0].origin === 'photo' && scanLog[0].estimate && (scanLog[0].name || '') === (current.merged.name.v || '')) row = scanLog[0];   // a row from before ids
+  if (!row || row.origin !== 'photo' || !row.estimate) return;
   var sc = scoreProduct(current.merged, current.entry, profile || { mode: 'standard' });
   var av = avoidFlags(current.merged, current.entry, profile);
-  top.score = (sc && sc.score !== null) ? sc.score : null;
-  top.scoreMode = sc ? sc.mode : '';
-  top.lowConfidence = !!(sc && sc.score !== null && sc.lowConfidence);
-  top.warnings = av ? av.warn.slice() : [];
-  top.estimate.item = current.estimate.raw || current.estimate.item;
+  row.name = current.merged.name.v || row.name;
+  row.score = (sc && sc.score !== null) ? sc.score : null;
+  row.scoreMode = sc ? sc.mode : '';
+  row.lowConfidence = !!(sc && sc.score !== null && sc.lowConfidence);
+  row.warnings = av ? av.warn.slice() : [];
+  row.estimate.item = current.estimate.raw || current.estimate.item;
+  row.estimate.before = current.estimate.before || null;
+  row.estimate.said = current.estimate.said || null;
   store.setJSON(LS.log, scanLog);
   renderLog(); renderTally();
 }
 function recordEstimate(res) {
   var e = res.entry, m = res.merged;
   var sc = scoreProduct(m, e, profile || { mode: 'standard' }), av = avoidFlags(m, e, profile);
+  res.logId = 'e' + now() + Math.random().toString(36).slice(2, 6);   // a correction later has to find this row, and a name is not stable once it can be corrected
   scanLog.unshift({
-    ts: isoNow(), barcode: '', format: '', name: m.name.v || '',
+    id: res.logId, ts: isoNow(), barcode: '', format: '', name: m.name.v || '',
     score: (sc && sc.score !== null) ? sc.score : null, scoreMode: sc ? sc.mode : '', lowConfidence: !!(sc && sc.score !== null && sc.lowConfidence),
     warnings: av ? av.warn.slice() : [], off: 'skipped', offCode: '', usda: 'skipped', usdaCode: '', missing: [], cached: false, origin: 'photo',
-    estimate: { kind: res.estimate.kind, item: res.estimate.raw || res.estimate.item }   // the model's own reading: corrections are applied again on the way out, never baked in
+    estimate: { kind: res.estimate.kind, item: res.estimate.raw || res.estimate.item, before: res.estimate.before || null, said: res.estimate.said || null }   // the model's own reading: corrections are applied again on the way out, never baked in
   });
   if (scanLog.length > LOG_MAX) scanLog.length = LOG_MAX;
   store.setJSON(LS.log, scanLog);
@@ -5790,7 +5944,7 @@ window.FS = {
   setDefaultProxy: function (u, t) { DEFAULT_PROXY = u || ''; DEFAULT_PROXY_TOKEN = t || ''; usdaProxyOff = ''; renderSettings(); }, usdaConfig: usdaConfig,
   plan: function () { return plan; }, dayPrompt: dayPrompt, articles: LEARN_ARTICLES, openArticle: openArticle, renderMarkdown: renderMarkdown, searchArticles: searchArticles, planCSV: planCSV, planText: planText, samplePlan: samplePlan, openPlanWizard: openPlanWizard, wizard: function () { return pw; }, pwGo: pwGo, sanitizeWizard: sanitizeWizard,
   enterCode: function (code) { return handleCode(code, null, 'manual'); },
-  labelNorm: labelNorm, labelRecord: labelRecord, applyCorrections: applyCorrections, saveCorrection: saveCorrection, componentKeys: componentKeys, clearCorrections: clearCorrections, correctionRecord: correctionRecord, componentsUsable: componentsUsable, saveLabelPart: saveLabelPart, removeLabel: removeLabel, scanLabel: scanLabel, pickLabel: pickLabel,
+  labelNorm: labelNorm, labelRecord: labelRecord, applyCorrections: applyCorrections, saveCorrection: saveCorrection, componentKeys: componentKeys, saveIdentity: saveIdentity, identityOffers: identityOffers, reidentify: reidentify, clearCorrections: clearCorrections, correctionRecord: correctionRecord, componentsUsable: componentsUsable, saveLabelPart: saveLabelPart, removeLabel: removeLabel, scanLabel: scanLabel, pickLabel: pickLabel,
   _setFrameSource: function (el) { cam.frameSource = el; }
 };
 
