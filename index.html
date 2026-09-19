@@ -352,6 +352,8 @@ table.cov .has { color: var(--green); } table.cov .no { color: var(--label3); }
 .src li .d { font-size: 0.765rem; color: var(--label2); margin-top: 2px; word-break: break-word; }
 .actions { display: flex; flex-wrap: wrap; gap: 8px; padding-top: 14px; }
 .actions .btn { flex: 1 1 auto; }
+.actions.ident { padding: 0 0 14px; }
+.actions.ident .btn.block { flex-basis: 100%; }
 .state { display: flex; flex-direction: column; align-items: center; text-align: center; padding: 8px 8px 12px; }
 .state .glyph { width: 44px; height: 44px; margin-bottom: 8px; color: var(--label3); }
 .state .glyph svg { width: 100%; height: 100%; }
@@ -2955,6 +2957,8 @@ function renderResult(res) {
     h('div', { class: 'meta', text: res.estimate ? res.estimate.note : e.barcode + (e.format ? ' (' + formatName(e.format) + ')' : '') + (res.fromCache ? ', cached' : '') })
   ]));
   box.appendChild(head);
+  var ident = identityControls(res);
+  if (ident.length) box.appendChild(h('div', { class: 'actions ident' }, ident));
   var sc = scoreProduct(m, e, profile || { mode: 'standard' });
   if (sc) {
     var scoreSec = renderScore(sc, !!res.estimate);
@@ -3030,10 +3034,7 @@ function renderResult(res) {
   else more.appendChild(h('section', { class: 'sec' }, [h('div', { class: 'sec-h', text: 'Sources' }), sourceRows(e), h('details', { class: 'disc' }, [h('summary', { text: 'Coverage by source' }), cov])]));
   var actions = h('div', { class: 'actions' });
   if (res.estimate) {
-    if (res.estimate.kind === 'photo') {
-      identityControls(res).forEach(function (b) { actions.appendChild(b); });
-      actions.appendChild(h('button', { class: 'btn small', type: 'button', onclick: function () { pickPhoto('photoInput'); } }, 'Photograph another'));
-    }
+    if (res.estimate.kind === 'photo') actions.appendChild(h('button', { class: 'btn small', type: 'button', onclick: function () { pickPhoto('photoInput'); } }, 'Photograph another'));
   } else {
     actions.appendChild(h('button', { class: 'btn small', type: 'button', onclick: function () { refetch(e); } }, 'Refresh'));
     if (m.urls.OFF) actions.appendChild(h('a', { class: 'btn small', href: m.urls.OFF, target: '_blank', rel: 'noopener noreferrer' }, 'Open in Open Food Facts'));
@@ -3137,7 +3138,7 @@ function correctComponent(dish, c) {
       closeOnboarding(); toast('Rescored from your correction'); redrawCurrent(); relogCurrent();
     } }, 'Save')
   ]));
-  var extra = [h('button', { class: 'btn small named', type: 'button', onclick: function () { closeOnboarding(); if (current) askIdentity(current, { name: c.name, key: c.key }); } }, 'Not ' + shortName(c.name) + '?')];
+  var extra = [h('button', { class: 'btn small', type: 'button', onclick: function () { closeOnboarding(); if (current) askIdentity(current, { name: c.name, key: c.key }); } }, 'Correct what this part is')];
   if (c.corrected) extra.push(h('button', { class: 'btn small', type: 'button', onclick: function () {
     saveCorrection(dish, c.key, null); closeOnboarding(); toast('Back to what the photo said'); redrawCurrent(); relogCurrent();
   } }, 'Reset this one'));
@@ -4249,26 +4250,27 @@ function reidentify(res, part, text) {
 }
 // The sheet that asks what it actually is. One text field: the person knows the word.
 function askIdentity(res, part) {
-  var was = part ? part.name : (res.merged.name.v || 'this');
+  var was = part ? part.name : (res.merged.name.v || 'this'), title = part ? 'Correct what this part is' : 'Correct what this food is';
   var body = clear($('obInner'));
   var input = h('input', { type: 'text', id: 'identInput', maxlength: '80', autocomplete: 'off', autocapitalize: 'none', spellcheck: 'false',
     placeholder: 'e.g. cottage cheese', 'aria-label': 'What ' + was + ' actually is' });
-  body.appendChild(h('h2', { text: 'Not ' + was + '?' }));
-  body.appendChild(h('p', { text: 'Say what it actually is and the photo is read again with that in mind. ' + (res.estimate.imageBlock ? 'The photo is still here, so the model will look at it again.' : 'This scan\u2019s photo was not kept, so the model will work from its earlier reading and your words.') }));
+  body.appendChild(h('h2', { text: title }));
+  body.appendChild(h('p', { text: (part ? 'This part' : 'The photo') + ' was read as ' + was + '. Type what it actually is and the photo is read again as that. '
+    + (res.estimate.imageBlock ? '' : 'This scan\u2019s photo was not kept, so the model will work from its earlier reading and your words.') }));
   body.appendChild(input);
   function go() {
     var t = String(input.value || '').trim();
-    if (t.length < 2) { toast('Say what it is in a word or two'); return; }
+    if (t.length < 2) { toast('Type what it is in a word or two'); return; }
     closeOnboarding();
     reidentify(res, part, t);
   }
   input.addEventListener('keydown', function (ev) { if (ev.key === 'Enter') { ev.preventDefault(); go(); } });
   body.appendChild(h('div', { class: 'ob-nav' }, [
     h('button', { class: 'btn', type: 'button', id: 'identCancel', onclick: closeOnboarding }, 'Cancel'),
-    h('button', { class: 'btn primary', type: 'button', id: 'identGo', onclick: go }, 'Read it again')
+    h('button', { class: 'btn primary', type: 'button', id: 'identGo', onclick: go }, 'Correct')
   ]));
   ob.prevFocus = document.activeElement;
-  $('onboard').setAttribute('aria-label', 'Not ' + was);
+  $('onboard').setAttribute('aria-label', title);
   $('onboard').classList.add('open'); document.body.classList.add('ob-open');
   setBackgroundInert(true);
   try { input.focus(); } catch (err) { /* ignore */ }
@@ -4281,12 +4283,13 @@ function shortName(n, max) {
   var cut = n.slice(0, max).replace(/\s+\S*$/, '');
   return (cut || n.slice(0, max)) + '\u2026';
 }
-// The controls under a photo card: say it is something else, take back a re-read, or accept an offered one.
+// The controls under a photo card's header: one plain button to say what the food actually is, and, after a
+// re-read, one to take it back.
 function identityControls(res) {
   var est = res.estimate;
   if (!est || est.kind !== 'photo' || !est.raw) return [];
   var out = [];
-  out.push(h('button', { class: 'btn small named', type: 'button', onclick: function () { askIdentity(res, null); } }, 'Not ' + shortName(res.merged.name.v || 'this') + '?'));
+  out.push(h('button', { class: 'btn small block', type: 'button', id: 'identBtn', onclick: function () { askIdentity(res, null); } }, 'Click here to correct what this food is'));
   if (est.before) out.push(h('button', { class: 'btn small named', type: 'button', onclick: function () {
     var back = estimateResult(est.before, { kind: 'photo', preview: est.preview, imageBlock: est.imageBlock, owner: res.owner });
     back.logId = res.logId || null;
