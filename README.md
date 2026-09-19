@@ -257,6 +257,19 @@ On first open the app asks how products should be scored. Both choices can be ch
   by 1400 mg for a one-gram nudge. And when the parts do not add up to the totals the model itself stated (more than
   15% or 25 kcal out) they are listed, because saying what was read is the point of the panel, but they cannot be
   corrected and are never scored from. Packaged products and single ingredients have no parts and no panel.
+- **Saying what it actually was.** Amounts are arithmetic; identity is not. When the model has read the wrong food
+  altogether (yogurt for cottage cheese) the card cannot be fixed by rescaling anything, because the app does not
+  know what cottage cheese is made of. So every photo card has **Not X?** under it, and every part in the panel has
+  one too. Put in a word or two and the photo is read again: the model is sent the picture (while the scan is still
+  open; a card reopened from History has only the words, and says so), its own first reading, and what you said —
+  *the whole thing is actually "cottage cheese"* — and told that the person looking at the plate is right. The card
+  becomes what came back, says **Re-read after you said it was cottage cheese**, keeps a **Back to** for the first
+  reading, and the History row follows it. Two rules keep this honest. Every re-read starts from the model's
+  **first** reading, with everything you have said about that photo, so a second correction (the granola was muesli)
+  carries the first instead of losing it and never compounds it. And what you said is remembered against what the
+  model **read**, not what it became: the next time a photo is read as yogurt with granola the card offers *you said
+  it was cottage cheese* with a one-tap **It's cottage cheese again**, and does nothing on its own, because
+  tomorrow's bowl may really be yogurt.
 - **Reading the label yourself.** Open Food Facts and USDA between them often have only a name and a brand, and a
   product with no nutrition and no ingredients cannot be scored at all. When a card is missing any of the six tracked
   fields it offers **Photograph the nutrition panel** and **Photograph the ingredients list**; the AI copies what is
