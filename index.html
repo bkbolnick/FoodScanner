@@ -1295,7 +1295,7 @@ function saveCorrection(name, key, grams) {
   var all = loadCorrections(), rec = all[k] && all[k].parts ? all[k] : { n: 0, at: '', name: String(name || ''), parts: {} };
   var seq = 0;
   Object.keys(all).forEach(function (x) { if (all[x] && all[x].n > seq) seq = all[x].n; });
-  rec.n = seq + 1; rec.at = isoNow(); rec.name = String(name || '');
+  rec.n = seq + 1; rec.at = isoNow(); rec.partsAt = rec.at; rec.name = String(name || '');
   if (grams === null) delete rec.parts[ck]; else rec.parts[ck] = grams;
   if (!Object.keys(rec.parts).length && !(rec.is && Object.keys(rec.is).length)) delete all[k]; else all[k] = rec;
   var keys = Object.keys(all);
@@ -3126,7 +3126,7 @@ function componentsPanel(res) {
   sec.appendChild(h('div', { class: 'sec-f', text: 'Correcting an amount re-adds the dish from its parts straight away. Nothing you did not touch changes.' }));
   if (rec && Object.keys(rec.parts).length) {   // a record that only remembers what you said the reading was is not an amount correction
     sec.appendChild(h('div', { class: 'foot note', text: (est.applied && est.applied.length)
-      ? 'Carried from what you corrected on "' + rec.name + '" ' + shortTime(rec.at) + '. The same name is not always the same plate, so check it.'
+      ? 'Carried from what you corrected on "' + rec.name + '" ' + shortTime(rec.partsAt || rec.at) + '. The same name is not always the same plate, so check it.'
       : 'You have corrections saved for "' + rec.name + '", but they name parts this photo was not read as having.' }));
     sec.appendChild(h('div', { class: 'actions' }, [h('button', { class: 'btn small', type: 'button', onclick: function () {
       if (clearCorrections(name)) { toast('Back to what the photo said'); redrawCurrent(); relogCurrent(); }
@@ -3223,7 +3223,7 @@ function handleCode(code, format, origin) {
 /* -------------------------------------------------------------- camera */
 var cam = { stream: null, track: null, scanning: false, decoder: null, detector: null, zx: null, timer: null, rotate: false,
   frames: 0, decodeMs: 0, nativeErrors: 0, lastCode: null, lastAt: 0, pending: { code: null, count: 0, at: 0 }, wakeLock: null, audio: null,
-  canvas: null, ctx: null, frameSource: null, torchOn: false, queued: null, paused: false, startSeq: 0 };
+  canvas: null, ctx: null, frameSource: null, torchOn: false, queued: null, paused: false, hold: 0, startSeq: 0 };
 var video = null;
 function setCamStatus(msg, isErr) { var el = $('camStatus'); el.textContent = msg; el.className = 'status' + (isErr ? ' err' : '') + (msg === 'Camera off' ? ' quiet' : ''); }
 function scanStatusText() { return manualFocused ? 'Paused while you type' : activeTab !== 'scan' ? 'Paused while you view the ' + activeTab + ' tab' : 'Hold a barcode inside the frame'; }
@@ -3933,7 +3933,7 @@ function initSheet() {
 
 /* ----------------------------------------------------------------- tabs */
 var activeTab = 'scan', manualFocused = false;
-function updatePaused() { cam.paused = activeTab !== 'scan' || manualFocused || sheet.snap === 'full' || $('onboard').classList.contains('open'); }   // a dialog on top means nothing is being pointed at
+function updatePaused() { cam.paused = activeTab !== 'scan' || manualFocused || sheet.snap === 'full' || cam.hold > 0 || $('onboard').classList.contains('open'); }   // a dialog on top, or a re-read in flight, means nothing is being pointed at
 var TABS = ['scan', 'menu', 'plan', 'learn', 'settings'];
 function showTab(name) {
   // Leaving the menu view for Analyze is a "back", not a tab switch: its dish sheet is closed rather than parked, so
@@ -4078,7 +4078,7 @@ function estimateResult(item, opts) {
     ai: { status: 'found', kind: opts.kind || 'photo', confidence: conf, norm: estimateNorm(item, opts) } };
   var note = (opts.kind === 'menu' ? 'Estimated from the menu' : opts.kind === 'plan' ? 'Planned meal, nutrition estimated' : 'Estimated from the photo') + (opts.kind === 'plan' ? '' : ', ' + conf + ' confidence');
   var said = saidList(opts.said);
-  if (said.length) note = 'Re-read after you said ' + saidPhrase(said) + (opts.imageBlock ? '' : ' (from the description; the photo was not kept)');
+  if (said.length) note = 'Re-read after you said ' + saidPhrase(said) + (said[said.length - 1].photo ? '' : ' (from the description; the photo was not kept)');
   return { entry: e, merged: mergeProduct(e), fromCache: false, owner: opts.owner || 'scan',
     // preview and imageBlock live in memory only, never in the log: a re-read needs the photo, and a redraw needs the
     // thumbnail, and both used to be dropped the moment the card was rebuilt. before/said record an identity
@@ -4091,7 +4091,7 @@ function estimateResult(item, opts) {
 function saidList(v) {
   var list = Array.isArray(v) ? v : v && typeof v === 'object' ? [v] : [];
   return list.filter(function (x) { return x && typeof x === 'object' && String(x.text || '').trim(); })
-    .map(function (x) { return { part: x.part ? String(x.part) : null, text: String(x.text).trim().slice(0, 80) }; });
+    .map(function (x) { return { part: x.part ? String(x.part) : null, text: String(x.text).trim().slice(0, 80), photo: x.photo === true }; });
 }
 function saidPhrase(list) {
   return list.map(function (x) { return (x.part ? 'the ' + x.part + ' was ' : 'it was ') + x.text; }).join(' and ');
@@ -4238,7 +4238,8 @@ function reidentify(res, part, text) {
   var est = res.estimate, raw = est.before || est.raw;
   text = String(text || '').trim().slice(0, 80);
   if (!text) return Promise.resolve();
-  var said = saidList(est.said).concat([{ part: part ? String(part.name) : null, text: text }]);
+  // Statements about parts add up; a statement about the whole thing replaces the last one, since only one can hold.
+  var said = saidList(est.said).filter(function (x) { return part ? true : !!x.part; }).concat([{ part: part ? String(part.name) : null, text: text, photo: !!est.imageBlock }]);
   var prompt = 'You read this photo earlier as: ' + JSON.stringify(raw) + '.'
     + (est.before ? ' After being corrected you read it as: ' + JSON.stringify(est.raw) + '.' : '')
     + ' The person who took the photo says ' + said.map(function (x) { return (x.part ? 'the part read as "' + x.part + '"' : 'the whole thing') + ' is actually "' + x.text + '"'; }).join(', and ')
@@ -4247,9 +4248,17 @@ function reidentify(res, part, text) {
   var content = est.imageBlock ? [est.imageBlock, { type: 'text', text: prompt }] : [{ type: 'text', text: prompt }];
   var seq = ++photoSeq;
   renderLoading('', 'Reading it again\u2026');
-  current = null;   // anything rendered while this runs (a History row, a barcode) sets it again, and then this answer is dropped
-  function stale() { return seq !== photoSeq || current !== null; }
+  current = null;   // anything rendered while this runs (a History row) sets it again, and then this answer is dropped
+  cam.hold++; updatePaused();   // the sheet may sit at half with the camera live: a barcode decoded now would replace the card and lose the correction
+  var held = true;
+  function release() { if (!held) return; held = false; cam.hold = Math.max(0, cam.hold - 1); updatePaused(); }
+  function stale() {
+    if (seq === photoSeq && current === null) return false;
+    if (seq === photoSeq) toast('The re-read of ' + raw.name + ' was dropped: something else was opened first.');
+    return true;
+  }
   return aiRequest({ system: PHOTO_SYSTEM, content: content, schema: PHOTO_SCHEMA, effort: 'medium', maxTokens: 6000, cutHint: 'Try it again.' }).then(function (out) {
+    release();
     if (stale()) return;
     if (!out || out.kind === 'not_food' || !String(out.name || '').trim()) throw new Error('the model could not make a food out of that');
     if (!part && (corrKey(out.name) === corrKey(raw.name) || corrKey(out.name) === corrKey(est.raw.name))) {   // it read the same thing again: not a correction, not remembered as one
@@ -4259,14 +4268,15 @@ function reidentify(res, part, text) {
     }
     if (!est.imageBlock) { out.ingredients_from_label = false; out.barcode = ''; }   // no label was in front of it, whatever the first reading said
     dbg('log', 'Re-read: "' + raw.name + '" said to be "' + text + '" \u2192 "' + out.name + '"');
-    // A part is remembered against the reading whose panel it was in (its name came from there); the whole thing
+    // A part is remembered against the reading it was named in (the panel's, or the offer's); the whole thing
     // against the first reading, which is what the model will read again on its own.
-    saveIdentity(part ? est.raw.name : raw.name, part ? part.name : null, text);
+    saveIdentity(part ? (part.of || est.raw.name) : raw.name, part ? part.name : null, text);
     var next = estimateResult(out, { kind: 'photo', preview: est.preview, imageBlock: est.imageBlock, owner: res.owner, before: raw, said: said });
     next.logId = res.logId || null;
     renderResult(next); relogCurrent(); revealResult();
     toast('Read again as ' + out.name);
   }).catch(function (err) {
+    release();
     if (stale()) return;
     dbg('error', 'Re-read failed: ' + (err && err.message || err));
     renderResult(res); revealResult();
@@ -4289,11 +4299,14 @@ function askIdentity(res, part) {
     var t = String(input.value || '').trim();
     if (t.length < 2) { complain('Type what it is in a word or two.'); return; }
     if (corrKey(t) === corrKey(was)) { complain('That is what it was read as. Type what it actually is.'); return; }
+    var first = !part && res.estimate.before ? res.estimate.before.name : null;
+    if (first && corrKey(t) === corrKey(first)) { complain('That is what the photo said first. Use \u201cBack to ' + shortName(first) + '\u201d instead.'); return; }
     if (current !== res) { closeOnboarding(); toast('The screen changed underneath this. Open it again.'); return; }
     closeOnboarding();
     reidentify(res, part, t);
   }
   input.addEventListener('keydown', function (ev) { if (ev.key === 'Enter') { ev.preventDefault(); go(); } });
+  input.addEventListener('input', function () { warn.textContent = ''; });
   body.appendChild(h('div', { class: 'ob-nav' }, [
     h('button', { class: 'btn', type: 'button', id: 'identCancel', onclick: closeOnboarding }, 'Cancel'),
     h('button', { class: 'btn primary', type: 'button', id: 'identGo', onclick: go }, 'Correct')
@@ -4332,14 +4345,17 @@ function identityOfferNote(res) {
   // Offers belong to the first reading (that is what the model read); the ones already taken on this card are not
   // offered again.
   var base = est.before || est.raw, said = est.said || [];
+  var wholeSaid = said.some(function (x) { return !x.part; });
   var offers = identityOffers(base).filter(function (o) {
+    if (!o.part && wholeSaid) return false;   // the whole thing has been said already; a second word for it would only contradict the first
     return !said.some(function (x) { return (x.part ? corrKey(x.part) : '') === (o.part ? corrKey(o.part.name) : '') && corrKey(x.text) === corrKey(o.text); });
   });
   if (!offers.length) return null;
   return h('div', { class: 'foot note' }, offers.map(function (o) {
+    var part = o.part ? { name: o.part.name, key: o.part.key, of: base.name } : null;   // the part was named in the first reading, so that is where it is kept
     return h('p', {}, [
       'Last time ' + (o.part ? o.part.name + ' was one of the parts' : 'this was read as ' + base.name) + ', you said it was ' + o.text + '.',
-      h('button', { class: 'btn small named', type: 'button', onclick: function () { reidentify(res, o.part, o.text); } }, 'It\u2019s ' + shortName(o.text) + ' again')
+      h('button', { class: 'btn small named', type: 'button', onclick: function () { reidentify(res, part, o.text); } }, 'It\u2019s ' + shortName(o.text) + ' again')
     ]);
   }).concat([h('p', { text: 'Not applied on its own: the same reading is not always the same plate.' })]));
 }
