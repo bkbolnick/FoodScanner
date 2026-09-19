@@ -259,9 +259,10 @@ On first open the app asks how products should be scored. Both choices can be ch
   corrected and are never scored from. Packaged products and single ingredients have no parts and no panel.
 - **Saying what it actually was.** Amounts are arithmetic; identity is not. When the model has read the wrong food
   altogether (yogurt for cottage cheese) the card cannot be fixed by rescaling anything, because the app does not
-  know what cottage cheese is made of. So every photo card has **Not X?** under it, and every part in the panel has
-  one too. Put in a word or two and the photo is read again: the model is sent the picture (while the scan is still
-  open; a card reopened from History has only the words, and says so), its own first reading, and what you said —
+  know what cottage cheese is made of. So every photo card has a **Click here to correct what this food is** button
+  right under its name, and every part in the panel has a **Correct what this part is** in its sheet. Type a word or
+  two and the photo is read again: the model is sent the picture (while the scan is still open; a card reopened from
+  History has only the words, and says so), its own first reading, and what you said —
   *the whole thing is actually "cottage cheese"* — and told that the person looking at the plate is right. The card
   becomes what came back, says **Re-read after you said it was cottage cheese**, keeps a **Back to** for the first
   reading, and the History row follows it. Two rules keep this honest. Every re-read starts from the model's
