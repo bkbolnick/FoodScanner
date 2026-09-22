@@ -549,7 +549,10 @@ body.ob-open, body.dbg-open { overflow: hidden; }
     if (a === undefined) return 'undefined';
     try { return JSON.stringify(a); } catch (e) { return String(a); }
   }
-  function redact(u) { return String(u).replace(/(api_key=|usda=|key=|token=|secret=|access_token=|authorization=)[^&\s]+/gi, '$1•••').replace(/\/\/[^\/\s@]+@/g, '//•••@'); }
+  // Keys are never logged on purpose, but a service that rejects one sometimes quotes it back, so the shapes the app
+  // now accepts are struck out wherever they appear, not only in a URL.
+  var KEYISH = /\b(AIza[0-9A-Za-z_-]{10,}|gsk_[0-9A-Za-z]{10,}|sk-or-[0-9A-Za-z_-]{10,}|sk-ant-[0-9A-Za-z_-]{10,})/g;
+  function redact(u) { return String(u).replace(/(api_key=|usda=|key=|token=|secret=|access_token=|authorization=)[^&\s]+/gi, '$1•••').replace(/\/\/[^\/\s@]+@/g, '//•••@').replace(KEYISH, '•••'); }
   function push(level, args) {
     var msg = redact(Array.prototype.map.call(args, fmt).join(' '));
     var line = { t: ts(), level: level, msg: msg };
@@ -710,6 +713,9 @@ body.ob-open, body.dbg-open { overflow: hidden; }
     <div class="group-f">Optional second source. A key saved here is stored only in this browser and sent only to api.nal.usda.gov. <a href="https://fdc.nal.usda.gov/api-key-signup" target="_blank" rel="noopener noreferrer">Get a free API key</a>.</div>
 
     <div class="group-h">AI features</div>
+    <div class="group" id="aiProviders"></div>
+    <div class="group-f" id="aiProvidersNote"></div>
+    <div class="group-h">Paid, if you want it</div>
     <div class="group">
       <div class="row">
         <input class="secret" type="text" id="aiKey" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="Anthropic API key" aria-label="Anthropic API key">
@@ -729,7 +735,7 @@ body.ob-open, body.dbg-open { overflow: hidden; }
         <input class="secret" type="text" id="aiProxyToken" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="Proxy token (optional)" aria-label="Proxy token">
       </div>
     </div>
-    <div class="group-f">Photo scans, the menu scanner and the meal planner send the photo or your answers to Claude. With a key, the phone talks to api.anthropic.com directly and the key stays in this browser; with a proxy URL, requests go to that server instead and it holds the key; a proxy token is sent to it as a bearer token so it can turn strangers away. <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener noreferrer">Get an API key</a>.</div>
+    <div class="group-f">Claude is the one service here that costs money, so it is only ever used with a key you save yourself. Save one and it goes to the front of the queue: the best reading of a hard photo, on your own account. With a key the phone talks to api.anthropic.com directly and the key stays in this browser; with a proxy URL, requests go to that server instead and it holds the key; a proxy token is sent to it as a bearer token so it can turn strangers away. <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener noreferrer">Get an API key</a>.</div>
     </div>
 
     <div class="group-h">Scanner</div>
@@ -855,7 +861,8 @@ var ZXING_FALLBACK_URL = 'https://unpkg.com/@zxing/browser@0.2.1/umd/zxing-brows
 var DEFAULT_PROXY = 'https://foodscanner-proxy.bkbolnick.workers.dev';   // kept in step with the deployed Worker by the deploy workflow; a value that is not a workers.dev URL is left alone
 var DEFAULT_PROXY_TOKEN = '';    // only if the Worker was deployed with PROXY_TOKEN; in a public page it deters scripts, it is not a secret
 var LS = { usdaKey: 'fs.usdaKey', decoder: 'fs.decoder', tally: 'fs.tally.v1', log: 'fs.log.v1', labels: 'fs.labels.v1', cachePrefix: 'fs.cache.v4.', oldCachePrefixes: ['fs.cache.v1.', 'fs.cache.v2.', 'fs.cache.v3.'],
-  aiKey: 'fs.ai.key', aiProxy: 'fs.ai.proxy', aiProxyToken: 'fs.ai.proxyToken', menus: 'fs.menus.v1', plan: 'fs.plan.v1', planWizard: 'fs.plan.wizard.v1', corrections: 'fs.corrections.v1' };
+  aiKey: 'fs.ai.key', aiProxy: 'fs.ai.proxy', aiProxyToken: 'fs.ai.proxyToken',
+  aiGemini: 'fs.ai.gemini', aiGroq: 'fs.ai.groq', aiOpenRouter: 'fs.ai.openrouter', menus: 'fs.menus.v1', plan: 'fs.plan.v1', planWizard: 'fs.plan.wizard.v1', corrections: 'fs.corrections.v1' };
 var NUT_KEYS = ['kcal', 'carbs', 'sugars', 'fiber', 'protein', 'fat', 'satFat', 'sodiumMg'];
 var NUT_ROWS = [['kcal', 'Calories', 'kcal'], ['carbs', 'Total carbs', 'g'], ['sugars', 'Sugars', 'g'], ['fiber', 'Fiber', 'g'],
   ['netCarbs', 'Net carbs', 'g'], ['protein', 'Protein', 'g'], ['fat', 'Fat', 'g'], ['satFat', 'Saturated fat', 'g'], ['sodiumMg', 'Sodium', 'mg']];
@@ -3171,7 +3178,8 @@ function estimateRows(res) {
     : est.kind === 'menu' ? 'Read from a menu photo. Nutrition is a typical-serving estimate for a dish of this kind, not the restaurant\'s own figures.'
     : ai.norm.additivesAnalysed ? 'Read from a photo of the package. The ingredients come from the label; nutrition is ' + (conf === 'high' ? 'read from the label where it was legible.' : 'partly estimated.')
     : 'Read from a photo. Nutrition and ingredients are estimated for the portion shown.';
-  return h('ul', { class: 'src' }, [h('li', {}, [h('span', { class: 'dot ' + (conf === 'high' ? 'green' : conf === 'low' ? 'orange' : '') }), h('div', { class: 'grow' }, [h('div', { text: 'AI estimate' }), h('div', { class: 'd', text: what + ' Confidence: ' + conf + '.' })])])]);
+  var by = est.by && est.by.name ? ' Read by ' + est.by.name + '.' : '';
+  return h('ul', { class: 'src' }, [h('li', {}, [h('span', { class: 'dot ' + (conf === 'high' ? 'green' : conf === 'low' ? 'orange' : '') }), h('div', { class: 'grow' }, [h('div', { text: 'AI estimate' }), h('div', { class: 'd', text: what + ' Confidence: ' + conf + '.' + by })])])]);
 }
 // After a lookup, present the sheet: half height while the camera runs so the viewfinder stays usable, full otherwise.
 function revealResult() {
@@ -3712,25 +3720,96 @@ function topWeights(p) {
     .sort(function (a, b) { return b[1] - a[1]; }).slice(0, 3).map(function (x) { return x[0].toLowerCase() + ' ' + x[1]; }).join(', ');
 }
 // Settings, "Data and AI": one plain row says what is on and through what. With the site's built-in proxy the
+// Which services the proxy holding the site's keys can actually answer for. Asked once, and only to put an honest
+// word on the settings screen: the request path never waits for this, because a proxy with no key for a service says
+// so in one cheap refusal and the app crosses it off there.
+var proxyHas = null, proxyAsked = '';
+function askProxyProviders() {
+  var c = proxyConfig();
+  if (!c || proxyAsked === c.proxy) return;
+  proxyAsked = c.proxy;
+  proxyHas = null;
+  PROVIDERS.forEach(function (p) { if (aiProbed[p.id]) { delete aiDown[p.id]; delete aiProbed[p.id]; } });   // what the last proxy said about itself says nothing about this one
+  fetch(c.proxy + '/v1/providers', { headers: c.token ? { authorization: 'Bearer ' + c.token } : {} })
+    .then(function (r) { return r.ok ? r.json() : null; })
+    .then(function (j) {
+      if (!j || !Array.isArray(j.providers)) return;
+      proxyHas = j.providers;
+      PROVIDERS.forEach(function (p) { if (!p.paid && proxyHas.indexOf(p.id) < 0 && !providerKey(p)) { aiDown[p.id] = true; aiProbed[p.id] = true; } });
+      dbg('log', 'The proxy holds keys for: ' + (proxyHas.join(', ') || 'nothing'));
+      if (activeTab === 'settings') renderSettings();
+    }, function () { /* the settings screen simply says less */ });
+}
+// The free services, in the order they are asked, each saying where its key comes from. A key pasted here is used
+// instead of the site's, straight from this phone.
+function renderProviders() {
+  askProxyProviders();
+  var box = clear($('aiProviders')), free = PROVIDERS.filter(function (p) { return !p.paid; });
+  var chain = [];
+  free.forEach(function (p) {
+    var st = providerState(p), own = providerKey(p);
+    if (st !== 'off' && !aiDown[p.id]) chain.push(p.name);
+    var where = aiBlocked[p.id] ? 'Blocked by the browser'
+      : st === 'own' ? 'Your key'
+      : aiDown[p.id] ? 'No key'
+      : st === 'proxy' ? (own ? 'Your proxy (your key is not sent)' : 'Your proxy')
+      : st === 'site' ? 'The site\u2019s proxy' : 'Not set up';
+    box.appendChild(h('div', { class: 'row' }, [
+      h('span', { class: 'rl' }, [h('span', { class: 't', text: p.name }), h('span', { class: 'd', text: p.what })]),
+      h('span', { class: 'rv', text: where })
+    ]));
+    var was = $('key_' + p.id);   // a render can arrive while somebody is halfway through pasting a key; what they typed wins
+    var typing = was && was.value !== own;
+    var input = h('input', { class: 'secret', type: 'text', id: 'key_' + p.id, autocomplete: 'off', autocapitalize: 'off', autocorrect: 'off',
+      spellcheck: 'false', placeholder: p.name + ' API key (optional)', 'aria-label': p.name + ' API key', value: typing ? was.value : own });
+    if (was && document.activeElement === was) setTimeout(function () { try { input.focus(); } catch (e) { /* the field moved on */ } }, 0);
+    box.appendChild(h('div', { class: 'row' }, [input, h('button', { class: 'inline-act', type: 'button', onclick: function () {
+      var v = input.value.trim();
+      if (v) { store.set(LS[p.ls], v); dbg('log', p.name + ' key saved (' + v.length + ' chars)'); }
+      else store.remove(LS[p.ls]);
+      delete aiDown[p.id]; delete aiBlocked[p.id]; delete aiProbed[p.id]; delete aiRefused[p.id];
+      renderSettings(); toast(v ? p.name + ' key saved' : p.name + ' key removed');
+    } }, own ? 'Save' : 'Save')]));
+    box.appendChild(h('div', { class: 'row' }, [
+      h('span', { class: 'rl' }, [h('a', { class: 't', href: p.signup, target: '_blank', rel: 'noopener noreferrer', text: 'Get a free ' + p.name + ' key' })])
+    ]));
+  });
+  var pxn = proxyConfig(), mine = pxn && !pxn.builtIn;
+  $('aiProvidersNote').textContent = !chain.length
+    ? 'No AI service is set up, so photo scans, the menu scanner and the meal planner are off. Paste a free key above \u2014 Gemini is the one a phone can call without a proxy \u2014 or point the app at a proxy that holds one.'
+    : 'Photo scans, the menu scanner and the meal planner ask ' + listWords(chain) + ', in that order, until one answers \u2014 so a service that is rate limited or having a bad day costs you a moment, not the feature. All of these are free. '
+      + (mine ? 'Because you have set a proxy of your own, every request goes there and no key saved here is sent anywhere.'
+        : 'A key you paste here stays in this browser and is used instead of the site\u2019s. Only Gemini says a phone may call it directly; a Groq or OpenRouter key may need a proxy, and if the browser refuses the call the app says so here and moves on.');
+}
+function listWords(a) { return a.length < 2 ? (a[0] || '') : a.slice(0, -1).join(', ') + ' then ' + a[a.length - 1]; }
+function listAnd(a) { return a.length < 2 ? (a[0] || '') : a.slice(0, -1).join(', ') + ' and ' + a[a.length - 1]; }
+// Every AI line in the debug log now opens with the name of the service that said it, so the one button that
+// collects them is built from the list of services rather than from a fixed prefix.
+function aiLogLine(msg) {
+  if (/^(AI |Plan:)/.test(msg)) return true;
+  return PROVIDERS.some(function (p) { return String(msg).indexOf(p.name + ' ') === 0; });
+}
 // own-key fields sit under "Use your own keys": a real toggle, which opens by itself the moment an own key or proxy
 // appears (saved, tested or seeded from a link) and stays where it is when one is removed, so nothing vanishes under
 // the user's finger. Without a built-in proxy the fields are simply shown, since nothing works without them.
 var ownKeysOpen = false, ownKeysSeen = false;
 function renderServiceRow() {
-  var ai = aiConfig(), uc = usdaConfig(), usdaKey = getUsdaKey();
-  var own = !!(usdaKey || ai.key || (ai.proxy && !ai.builtIn));
+  var ai = aiConfig(), uc = usdaConfig(), usdaKey = getUsdaKey(), ready = aiReady();
+  var ownAi = PROVIDERS.some(function (p) { return !!providerKey(p); });
+  var own = !!(usdaKey || ownAi || (ai.proxy && !ai.builtIn));
   if (own && !ownKeysSeen) ownKeysOpen = true;
   ownKeysSeen = own;
   var title, detail = [];
   if (!DEFAULT_PROXY) {
-    title = own ? (ai.key || ai.proxy ? 'AI features are on' : 'AI features are off') + (usdaKey ? ', USDA lookups are on' : ', USDA lookups are off') : 'No built-in proxy';
+    title = own ? (ready ? 'AI features are on' : 'AI features are off') + (usdaKey ? ', USDA lookups are on' : ', USDA lookups are off') : 'No built-in proxy';
     detail.push(own ? 'Using the keys saved below.' : 'USDA lookups and the AI features need a key of your own, saved below.');
   } else if (ai.builtIn && usdaProxyOff === 'token') {
     title = 'The site\'s built-in proxy refused this page';
     detail.push('It answered HTTP 401 to a USDA lookup, so the AI features are most likely refused too; the site\'s proxy token may be out of date. Tap Test the built-in proxy to check, or use your own keys.');
   } else {
-    title = uc ? 'AI features and USDA lookups are on' : 'AI features are on, USDA lookups are off';
-    detail.push(ai.builtIn ? 'AI requests go through the site\'s built-in proxy at ' + proxyHost(ai.proxy) + '.' : ai.proxy ? 'AI requests go to your own proxy at ' + proxyHost(ai.proxy) + '.' : 'AI requests use your own key.');
+    title = ready && uc ? 'AI features and USDA lookups are on' : ready ? 'AI features are on, USDA lookups are off'
+      : uc ? 'AI features are off, USDA lookups are on' : 'AI features and USDA lookups are off';
+    detail.push(aiWhoDetail(ai));
     detail.push(usdaKey ? 'USDA lookups use your own key.' : usdaProxyOff === 'nokey' ? 'The site has no USDA key, so USDA lookups are skipped.' : usdaProxyOff === 'token' ? 'The site\'s proxy refused this page (HTTP 401), so USDA lookups are skipped.' : usdaProxyOff ? 'The site\'s proxy could not search USDA (HTTP 403), so USDA lookups are skipped; its USDA key may have been rejected.' : 'USDA lookups go through the site\'s built-in proxy.');
     if (!own && !usdaProxyOff) detail.push('Nothing to set up.');
   }
@@ -3742,16 +3821,44 @@ function renderServiceRow() {
   $('ownKeys').classList.toggle('hidden', !show);
   $('btnOwnKeys').setAttribute('aria-expanded', show ? 'true' : 'false');
   $('ownKeysHint').textContent = own ? 'In use' : show ? 'Shown below' : 'Advanced';
-  $('serviceNote').textContent = DEFAULT_PROXY
-    ? 'The site\'s keys live on its proxy and never appear on this page. A key you save ' + (show ? 'below' : 'under Use your own keys') + ' stays in this browser and is used instead of the site\'s.'
-    : 'A key you save below stays in this browser.';
+  var pxs = proxyConfig();
+  $('serviceNote').textContent = pxs && !pxs.builtIn
+    ? 'Every AI request goes to your own proxy, which holds the keys. No key saved ' + (show ? 'below' : 'under Use your own keys') + ' is sent anywhere while that is set.'
+    : DEFAULT_PROXY
+      ? 'The site\'s keys live on its proxy and never appear on this page. A key you save ' + (show ? 'below' : 'under Use your own keys') + ' stays in this browser and is used instead of the site\'s.'
+      : 'A key you save below stays in this browser.';
   var res = $('serviceResult'); res.textContent = ''; res.classList.add('hidden');
   $('btnAiRemove').classList.toggle('hidden', !ai.key);
   $('btnRemoveKey').classList.toggle('hidden', !usdaKey);
 }
+// Where a photo actually goes, in the words the privacy footers need. Worked out from the chain rather than from the
+// proxy setting alone, because a key of your own sends the photo straight to that service and not through any proxy.
+function aiRouteWords() {
+  var steps = aiChain({});
+  if (!steps.length) return '';
+  var px = proxyConfig(), viaProxy = steps.some(function (x) { return x.cfg.mode === 'proxy'; });
+  var direct = steps.filter(function (x) { return x.cfg.mode === 'own'; }).map(function (x) { return x.p.name; });
+  if (direct.length && viaProxy) return ' to ' + listAnd(direct) + ' on your own key, or to the others through ' + (px && px.builtIn ? 'the site\u2019s proxy at ' + proxyHost(px.proxy) : 'your proxy at ' + proxyHost(px.proxy));
+  if (direct.length) return ' to ' + listAnd(direct) + ' on your own key';
+  return ' through ' + (px && px.builtIn ? 'the site\u2019s proxy at ' + proxyHost(px.proxy) : 'your proxy at ' + proxyHost(px.proxy));
+}
+// Which services would answer a request right now, and where each of them gets its key, in the order they are asked.
+function aiWhoDetail(ai) {
+  var names = [];
+  PROVIDERS.forEach(function (p) {
+    var st = providerState(p);
+    if (st === 'off' || aiDown[p.id]) return;
+    names.push(p.name + (st === 'own' ? ' (your key)' : st === 'site' ? '' : ' (your proxy)'));
+  });
+  if (!names.length) return 'No AI service is set up, so photo scans, the menu scanner and the meal planner are off.';
+  var px = proxyConfig();
+  return 'AI requests ask ' + listWords(names) + ', in that order, until one answers'
+    + (px ? '; the ones with no key of yours go through ' + (px.builtIn ? 'the site\u2019s built-in proxy' : 'your proxy') + ' at ' + proxyHost(px.proxy) + '.' : '.');
+}
 function renderSettings() {
   renderIdle();   // the first screen names the same sources and profile this one configures
   renderServiceRow();
+  renderProviders();
   var si = clear($('scoringInfo'));
   function row(t, d, v) { si.appendChild(h('div', { class: 'row' }, [h('span', { class: 'rl' }, [h('span', { class: 't', text: t }), d ? h('span', { class: 'd', text: d }) : null]), v ? h('span', { class: 'rv', text: v }) : null])); }
   if (!profile) row('Method', 'Choose one to score products.', 'Not chosen');
@@ -3777,10 +3884,12 @@ function renderSettings() {
     : 'Opening the app as …/#usda=YOURKEY saves the key automatically, which makes a handy Home Screen bookmark.';
   var ai = aiConfig();
   $('aiKey').value = ai.builtIn ? '' : ai.key; $('aiProxy').value = ai.builtIn ? '' : ai.proxy; $('aiProxyToken').value = ai.builtIn ? '' : ai.token;
-  $('aiStatus').textContent = ai.builtIn ? 'Using the site\'s built-in AI proxy at ' + proxyHost(ai.proxy) + '. Photo scans, the menu scanner and the meal planner are on. A key or proxy saved here is used instead of it.'
-    : ai.proxy ? 'Requests go to ' + ai.proxy + '/v1/messages' + (ai.token ? ' with the proxy token' : '') + (ai.key ? ' (the saved key is not sent).' : '.')
-    : ai.key ? 'Key saved (' + ai.key.length + ' characters). Photo scans, the menu scanner and the meal planner are on.'
-    : 'No key saved, so photo scans, the menu scanner and the meal planner are off.';
+  var px = proxyConfig(), freeUp = aiChain({}).filter(function (x) { return x.p.id !== 'anthropic'; }).length;
+  $('aiStatus').textContent = px && !px.builtIn ? 'Requests go to ' + px.proxy + '/v1/messages' + (px.token ? ' with the proxy token' : '') + (ai.key ? ' (the saved key is not sent).' : '.')
+    : ai.key ? 'Claude key saved (' + ai.key.length + ' characters), so Claude is asked first' + (freeUp ? ' and the free services are the fallback.' : '; nothing else is set up, so there is no fallback behind it.')
+    : !aiReady() ? 'No key saved, so photo scans, the menu scanner and the meal planner are off.'
+    : px ? 'No Claude key, so the free services above do the work. The site\u2019s proxy never spends anyone\u2019s Claude credit.'
+    : 'No Claude key, so the free services above do the work.';
   $('decoderPref').value = store.get(LS.decoder, 'auto');
   var native = typeof window.BarcodeDetector === 'function';
   $('decoderInfo').textContent = 'Automatic uses the browser\'s BarcodeDetector when it has one and ZXing otherwise. This browser ' + (native ? 'has' : 'does not have') + ' BarcodeDetector; ZXing ' + (window.ZXingBrowser ? 'is loaded' : 'is not loaded') + '. Storage ' + (store.available ? 'is available' : 'is unavailable (private browsing?)') + '.';
@@ -4084,7 +4193,8 @@ function estimateResult(item, opts) {
     // thumbnail, and both used to be dropped the moment the card was rebuilt. before/said record an identity
     // correction — what the model first read, and what the person said it actually was.
     estimate: { kind: opts.kind || 'photo', note: note, item: item, raw: raw, components: corr.usable ? item.components : null, applied: corr.applied,
-      preview: opts.preview || null, imageBlock: opts.imageBlock || null, before: opts.before || null, said: said.length ? said : null } };
+      preview: opts.preview || null, imageBlock: opts.imageBlock || null, before: opts.before || null, said: said.length ? said : null,
+      by: opts.by || null } };
 }
 // Everything the person has said about one photo, in order. Each re-read is sent all of it, from the model's first
 // reading, so the second correction never loses the first and never compounds it either.
@@ -4194,7 +4304,7 @@ function redrawCurrent() {
   if (!current) return;
   if (current.estimate && current.estimate.raw) {   // a photo or menu estimate: rebuild from what the model said, not from the corrected copy
     var est = current.estimate, logId = current.logId;
-    var res = estimateResult(est.raw, { kind: est.kind, owner: current.owner, preview: est.preview, imageBlock: est.imageBlock, before: est.before, said: est.said });
+    var res = estimateResult(est.raw, { kind: est.kind, owner: current.owner, preview: est.preview, imageBlock: est.imageBlock, before: est.before, said: est.said, by: est.by });
     res.logId = logId;
     renderResult(res);
     return;
@@ -4212,15 +4322,16 @@ function scanPhoto(file) {
   renderLoading('', 'Reading the photo…');
   dbg('log', 'Photo scan: ' + (file.type || 'image') + ', ' + Math.round(file.size / 1024) + ' KB');
   imageBlock(file).then(function (img) {
-    return aiRequest({ system: PHOTO_SYSTEM, content: [img.block, { type: 'text', text: photoPrompt() }], schema: PHOTO_SCHEMA, effort: 'medium', maxTokens: 6000, cutHint: 'Try again with a closer shot.' })
-      .then(function (out) { return { out: out, img: img }; });
+    var by = null;
+    return aiRequest({ system: PHOTO_SYSTEM, content: [img.block, { type: 'text', text: photoPrompt() }], schema: PHOTO_SCHEMA, effort: 'medium', maxTokens: 6000, cutHint: 'Try again with a closer shot.', onUsed: function (u) { by = u; } })
+      .then(function (out) { return { out: out, img: img, by: by }; });
   }).then(function (r) {
     if (seq !== photoSeq) return;   // a newer photo replaced this one
     var out = r.out, code = digitsOnly(out.barcode || '');
     dbg('log', 'Photo read: ' + out.kind + ' "' + out.name + '"' + (code ? ' barcode ' + code : '') + ', confidence ' + out.confidence);
     if (code && (code.length === 8 || (code.length >= 12 && code.length <= 14)) && readIsValid(code, null)) { toast('Barcode read from the photo'); handleCode(code, null, 'photo'); return; }
     if (out.kind === 'not_food' || !String(out.name || '').trim()) { renderEstimateEmpty(); return; }
-    var res = estimateResult(out, { kind: 'photo', preview: r.img.preview, imageBlock: r.img.block, owner: 'scan' });
+    var res = estimateResult(out, { kind: 'photo', preview: r.img.preview, imageBlock: r.img.block, owner: 'scan', by: r.by });
     renderResult(res);
     recordEstimate(res);
     revealResult();
@@ -4257,7 +4368,8 @@ function reidentify(res, part, text) {
     if (seq === photoSeq) toast('The re-read of ' + raw.name + ' was dropped: something else was opened first.');
     return true;
   }
-  return aiRequest({ system: PHOTO_SYSTEM, content: content, schema: PHOTO_SCHEMA, effort: 'medium', maxTokens: 6000, cutHint: 'Try it again.' }).then(function (out) {
+  var readBy = null;
+  return aiRequest({ system: PHOTO_SYSTEM, content: content, schema: PHOTO_SCHEMA, effort: 'medium', maxTokens: 6000, cutHint: 'Try it again.', onUsed: function (u) { readBy = u; } }).then(function (out) {
     release();
     if (stale()) return;
     if (!out || out.kind === 'not_food' || !String(out.name || '').trim()) throw new Error('the model could not make a food out of that');
@@ -4271,7 +4383,7 @@ function reidentify(res, part, text) {
     // A part is remembered against the reading it was named in (the panel's, or the offer's); the whole thing
     // against the first reading, which is what the model will read again on its own.
     saveIdentity(part ? (part.of || est.raw.name) : raw.name, part ? part.name : null, text);
-    var next = estimateResult(out, { kind: 'photo', preview: est.preview, imageBlock: est.imageBlock, owner: res.owner, before: raw, said: said });
+    var next = estimateResult(out, { kind: 'photo', preview: est.preview, imageBlock: est.imageBlock, owner: res.owner, before: raw, said: said, by: readBy });
     next.logId = res.logId || null;
     renderResult(next); relogCurrent(); revealResult();
     toast('Read again as ' + out.name);
@@ -4333,7 +4445,7 @@ function identityControls(res) {
   var out = [];
   out.push(h('button', { class: 'btn small block', type: 'button', id: 'identBtn', onclick: function () { askIdentity(res, null); } }, 'Click here to correct what this food is'));
   if (est.before) out.push(h('button', { class: 'btn small named', type: 'button', onclick: function () {
-    var back = estimateResult(est.before, { kind: 'photo', preview: est.preview, imageBlock: est.imageBlock, owner: res.owner });
+    var back = estimateResult(est.before, { kind: 'photo', preview: est.preview, imageBlock: est.imageBlock, owner: res.owner, by: est.by });
     back.logId = res.logId || null;
     renderResult(back); relogCurrent(); revealResult(); toast('Back to what the photo said first');
   } }, 'Back to ' + shortName(est.before.name || 'the first reading')));
@@ -4360,7 +4472,7 @@ function identityOfferNote(res) {
   }).concat([h('p', { text: 'Not applied on its own: the same reading is not always the same plate.' })]));
 }
 function showEstimate(est, logId) {   // reopen a logged photo scan (no image was kept)
-  var res = estimateResult(est.item, { kind: est.kind, owner: 'scan', before: est.before || null, said: est.said || null });
+  var res = estimateResult(est.item, { kind: est.kind, owner: 'scan', before: est.before || null, said: est.said || null, by: est.by || null });
   res.logId = logId || null;
   renderResult(res);
   revealResult();
@@ -4401,6 +4513,7 @@ function relogCurrent() {
   row.estimate.item = current.estimate.raw || current.estimate.item;
   row.estimate.before = current.estimate.before || null;
   row.estimate.said = current.estimate.said || null;
+  row.estimate.by = current.estimate.by ? { name: current.estimate.by.name } : null;
   store.setJSON(LS.log, scanLog);
   renderLog(); renderTally();
 }
@@ -4412,7 +4525,7 @@ function recordEstimate(res) {
     id: res.logId, ts: isoNow(), barcode: '', format: '', name: m.name.v || '',
     score: (sc && sc.score !== null) ? sc.score : null, scoreMode: sc ? sc.mode : '', lowConfidence: !!(sc && sc.score !== null && sc.lowConfidence),
     warnings: av ? av.warn.slice() : [], off: 'skipped', offCode: '', usda: 'skipped', usdaCode: '', missing: [], cached: false, origin: 'photo',
-    estimate: { kind: res.estimate.kind, item: res.estimate.raw || res.estimate.item, before: res.estimate.before || null, said: res.estimate.said || null }   // the model's own reading: corrections are applied again on the way out, never baked in
+    estimate: { kind: res.estimate.kind, item: res.estimate.raw || res.estimate.item, before: res.estimate.before || null, said: res.estimate.said || null, by: res.estimate.by ? { name: res.estimate.by.name } : null }   // the model's own reading: corrections are applied again on the way out, never baked in
   });
   if (scanLog.length > LOG_MAX) scanLog.length = LOG_MAX;
   store.setJSON(LS.log, scanLog);
@@ -4512,7 +4625,7 @@ function renderMenuTab() {
     body.appendChild(h('div', { class: 'group-f', text: 'The menu scanner sends the photo to the AI service with your own API key or through a proxy you choose.' }));
   } else {
     body.appendChild(h('div', { class: 'group' }, [h('button', { class: 'row act', type: 'button', onclick: function () { pickPhoto('menuInput'); } }, 'Photograph or choose a menu')]));
-    body.appendChild(h('div', { class: 'group-f', text: 'Only the photo goes to the AI service' + (aiConfig().builtIn ? ' through the site\'s proxy at ' + proxyHost(aiConfig().proxy) : '') + '; the ranking is done on this phone with your profile. The photo is not kept. One page at a time reads best.' }));
+    body.appendChild(h('div', { class: 'group-f', text: 'Only the photo goes to the AI service' + aiRouteWords() + '; the ranking is done on this phone with your profile. The photo is not kept. One page at a time reads best.' }));
   }
   var recent = loadMenus();
   if (recent.length) {
@@ -5113,7 +5226,7 @@ function renderPlanBody() {
     else g.appendChild(h('button', { class: 'row act', type: 'button', onclick: function () { showTab('settings'); } }, 'Set up AI features in Settings'));
     g.appendChild(h('button', { class: 'row act', type: 'button', onclick: function () { plan.data = samplePlan(); plan.week = 0; plan.view = 'plan'; plan.openMeal = null; renderPlanTab(); window.scrollTo(0, 0); } }, 'See an example plan'));
     body.appendChild(g);
-    body.appendChild(h('div', { class: 'group-f', text: 'Your answers and plans stay on this phone. Generating sends the answers to the AI service' + (aiConfig().builtIn ? ' through the site\'s proxy at ' + proxyHost(aiConfig().proxy) : '') + '. Plans are suggestions, not medical advice.' }));
+    body.appendChild(h('div', { class: 'group-f', text: 'Your answers and plans stay on this phone. Generating sends the answers to the AI service' + aiRouteWords() + '. Plans are suggestions, not medical advice.' }));
     return;
   }
   var wk = d.weeks[plan.week] || null;
@@ -5134,7 +5247,7 @@ function renderPlanBody() {
     body.appendChild(h('div', { class: 'group' }, [h('div', { class: 'row' }, h('span', { class: 'rl' }, [h('span', { class: 't', text: title }), h('span', { class: 'd', text: plan.error + (doneDays ? ' The ' + doneDays + ' day' + (doneDays === 1 ? '' : 's') + ' already written are kept.' : '') })])),
       d.weeks.length < d.form.weeks ? h('button', { class: 'row act', type: 'button', onclick: function () { generateNextWeek(); } }, doneDays ? 'Continue week ' + wkNo + ' from day ' + (doneDays + 1) : d.weeks.length ? 'Continue with week ' + (d.weeks.length + 1) : 'Try again') : null,
       h('button', { class: 'row act', type: 'button', onclick: function () {
-        var ls = (window.__dbg ? window.__dbg.lines : []).filter(function (l) { return /^(AI |Plan:)/.test(l.msg); }).slice(-14)
+        var ls = (window.__dbg ? window.__dbg.lines : []).filter(function (l) { return aiLogLine(l.msg); }).slice(-14)
           .map(function (l) { return l.t + ' ' + l.level.toUpperCase() + ' ' + l.msg; });
         copyText('FoodScanner v' + APP_VERSION + '\nPlan failed: ' + plan.error + '\n' + ls.join('\n'));
       } }, 'Copy error details')]));
@@ -5545,38 +5658,323 @@ function closeHistory() {
 }
 
 /* ------------------------------------------------------------------- AI */
-// Photo scans, the menu scanner and the meal planner call Claude through the Messages API. With a key the browser
-// talks to api.anthropic.com directly (the key never leaves this browser); with a proxy URL the request goes there
-// unchanged and the proxy adds the key. Every call asks for JSON that matches a schema.
-var AI = { model: 'claude-opus-5', version: '2023-06-01', base: 'https://api.anthropic.com', timeoutMs: 180000 };
+// Photo scans, the menu scanner and the meal planner all need the same thing: a model that can look at a photo and
+// answer in JSON. The app asks a chain of services until one does, free tiers first, and a paid key only when
+// somebody has saved one. Each service speaks its own dialect, so each has an adapter that builds its request and
+// reads its answer back into one shape; nothing above this line knows which service answered.
+//
+// The free tiers are the whole point: with the site's proxy holding the keys, the app costs nothing to run and
+// nothing to set up. Free tiers also change their minds — a model is renamed, a day's quota is gone by nine in the
+// morning, a photo is refused — so not one of them is load-bearing. A service that is rate-limited, out of keys,
+// broken, or not able to see photos at all simply hands the request to the next one down.
+var AI = { timeoutMs: 180000, used: null, version: '2023-06-01' };
+// The chain, in the order it is walked.
+//   kind       which adapter builds the request and reads the answer
+//   vision     can it look at a photo; one that cannot is skipped for photo scans rather than sent one it will refuse
+//   models     what to ask for, per kind of request, best first. A model refused as unknown advances to the next and
+//              the choice is kept for the rest of the page load, so a renamed model costs one request, not a feature.
+//   paid       asked only with a key of your own — never on the site's keys, so the site cannot run up a bill
+//   browser    is calling it straight from a phone known to work? Where it is not, a key of your own needs a proxy.
+//   jsonSchema can it be handed a JSON Schema, or does the schema have to go in the prompt instead
+var PROVIDERS = [
+  { id: 'anthropic', name: 'Claude', kind: 'anthropic', vision: true, paid: true, jsonSchema: true, browser: true, maxOut: 32000,
+    direct: 'https://api.anthropic.com/v1/messages', path: '/v1/messages', ls: 'aiKey',
+    models: { vision: ['claude-opus-5'], text: ['claude-opus-5'] },
+    what: 'The best reading of a hard photo. Paid, and only ever used with a key you saved here.',
+    signup: 'https://console.anthropic.com/settings/keys' },
+  { id: 'gemini', name: 'Gemini', kind: 'gemini', vision: true, jsonSchema: true, browser: true, maxOut: 65536,
+    direct: 'https://generativelanguage.googleapis.com/v1beta', path: '/v1/gemini', ls: 'aiGemini',
+    models: { vision: ['gemini-flash-lite-latest', 'gemini-flash-latest', 'gemini-2.5-flash'],
+      text: ['gemini-flash-lite-latest', 'gemini-flash-latest', 'gemini-2.5-flash'] },
+    what: 'Free, reads photos well, and the only one of these a phone can call directly without a proxy.',
+    signup: 'https://aistudio.google.com/apikey' },
+  { id: 'groq', name: 'Groq', kind: 'openai', vision: true, jsonSchema: false, browser: false, maxField: 'max_completion_tokens', maxOut: 8192,
+    direct: 'https://api.groq.com/openai/v1/chat/completions', path: '/v1/groq', ls: 'aiGroq',
+    models: { vision: ['meta-llama/llama-4-scout-17b-16e-instruct'], text: ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant'] },
+    what: 'Free and very fast. Groq does not say a browser may call it directly, so a key of your own may need a proxy.',
+    signup: 'https://console.groq.com/keys' },
+  { id: 'openrouter', name: 'OpenRouter', kind: 'openai', vision: true, jsonSchema: false, browser: false, maxField: 'max_tokens', maxOut: 16384,
+    direct: 'https://openrouter.ai/api/v1/chat/completions', path: '/v1/openrouter', ls: 'aiOpenRouter',
+    models: { vision: ['openrouter/free'], text: ['openrouter/free'] },
+    what: 'Free, and its router picks from whatever free models are up today. Fifty requests a day.',
+    signup: 'https://openrouter.ai/keys' }
+];
+function providerById(id) { var f = null; PROVIDERS.forEach(function (p) { if (p.id === id) f = p; }); return f; }
+function providerKey(p) { return (store.get(LS[p.ls], '') || '').trim(); }
 // What the next AI call uses: the user's own proxy, else the user's own key, else the site's built-in proxy.
 function aiConfig() {
   var key = (store.get(LS.aiKey, '') || '').trim(), proxy = (store.get(LS.aiProxy, '') || '').trim(), token = (store.get(LS.aiProxyToken, '') || '').trim();
-  if (!key && !proxy && DEFAULT_PROXY) return { key: '', proxy: DEFAULT_PROXY, token: DEFAULT_PROXY_TOKEN, builtIn: true };
+  var site = DEFAULT_PROXY ? DEFAULT_PROXY.replace(/\/+$/, '') : '';
+  // Written down as "your own proxy" or not, the site's proxy is the site's proxy — and the site's proxy is never
+  // asked to pay for the paid service.
+  if (proxy && proxy.replace(/\/+$/, '') === site) { proxy = ''; token = token || DEFAULT_PROXY_TOKEN; }
+  if (!key && !proxy && DEFAULT_PROXY) return { key: '', proxy: DEFAULT_PROXY, token: token || DEFAULT_PROXY_TOKEN, builtIn: true };
   return { key: key, proxy: proxy, token: token, builtIn: false };
 }
-function aiReady() { var c = aiConfig(); return !!(c.key || c.proxy); }
-function aiSchemaObject(props, required) { return { type: 'object', properties: props, required: required || Object.keys(props), additionalProperties: false }; }
-function aiError(status, json, text, c) {
-  var raw = String(text || '').trim();
-  var detail = (json && json.error && json.error.message) ? json.error.message : (/^</.test(raw) ? '' : raw.slice(0, 160));   // an HTML error page from a proxy is not worth showing
-  var via = c && c.proxy ? (c.builtIn ? 'the site\'s proxy' : 'the proxy') : null;
-  if (status === 401) return new Error(via ? capitalize(via) + ' refused the request' + (detail ? ': ' + detail : '.') + (c.builtIn ? ' The site\'s proxy token may be missing or out of date.' : ' Check the proxy token under Settings, AI features.') : 'The API key was rejected. Check it under Settings, AI features.');
-  if (status === 403) return new Error(via ? capitalize(via) + ' refused this page' + (detail ? ': ' + detail : '.') : 'The API key is not allowed to do this' + (detail ? ': ' + detail : '.'));
-  if (status === 429) return new Error('Rate limited by the API. Wait a moment and try again.');
-  if (status === 529 || status === 503) return new Error('The AI service is busy. Try again in a minute.');
-  var err = new Error('AI request failed (HTTP ' + status + ')' + (detail ? ': ' + detail : ''));
-  // Any 400 that names the answer-format machinery is answered by dropping it and asking for the JSON in the prompt.
-  if (status === 400 && /grammar|json_schema|output_config|schema/i.test(detail)) err.grammar = true;
-  return err;
+// The proxy that holds keys for the services you have not given one of your own: yours if you set one, otherwise the
+// site's. Read on its own rather than through aiConfig, because a Claude key of your own must not hide the site's
+// proxy from the free services — they are separate services with separate keys.
+function proxyConfig() {
+  var proxy = (store.get(LS.aiProxy, '') || '').trim(), token = (store.get(LS.aiProxyToken, '') || '').trim();
+  var site = DEFAULT_PROXY ? DEFAULT_PROXY.replace(/\/+$/, '') : '';
+  // Saving the site's own proxy URL as "your own proxy" would quietly turn the paid service on, on the site's key,
+  // for anyone who was sent that link. The site's proxy is the site's proxy however it was written down.
+  if (proxy && proxy.replace(/\/+$/, '') !== site) return { proxy: proxy.replace(/\/+$/, ''), token: token, builtIn: false };
+  if (site) return { proxy: site, token: proxy ? (token || DEFAULT_PROXY_TOKEN) : DEFAULT_PROXY_TOKEN, builtIn: true };
+  return null;
 }
-// opts: { system, content: [blocks], schema, effort, maxTokens, stream, onProgress(text), timeoutMs, signal }. Resolves with the
-// parsed JSON (or the text when there is no schema). Long answers (a week of meals) are streamed so the request cannot
-// time out and progress can be shown; the streamed text deltas are joined and parsed like a plain answer.
-// Schemas the API has refused to compile ("The compiled grammar is too large", HTTP 400). Such a request is sent again
-// with no output format: the schema is written into the prompt and the answer parsed as text, which every caller's
-// clean-up code copes with. The schema is remembered for the rest of the page load so later calls skip the refusal.
-var aiNoGrammar = [];
+// How this one service would be reached, or null when it cannot be. A proxy you set yourself is your route for
+// everything — that is the whole point of setting one, and it is why no key saved here is ever sent when you have
+// one. Otherwise a key of your own goes straight from the phone, and anything left over goes through the site's
+// proxy, which is never used for a paid service: a page anybody can open must not be able to run up somebody's bill.
+function providerConfig(p) {
+  var px = proxyConfig(), own = providerKey(p);
+  if (px && !px.builtIn) return { mode: 'proxy', key: '', proxy: px.proxy, token: px.token, builtIn: false };
+  // Two of these services do not say a browser may call them, so a key of your own cannot be used from the page. A
+  // proxy can use it on your behalf; without one the key is tried anyway, because their documentation is silent
+  // rather than negative, and a refusal costs one request that is remembered for the page load.
+  if (own && (p.browser || !px)) return { mode: 'own', key: own, proxy: '', token: '', builtIn: false };
+  if (px && !p.paid) return { mode: 'proxy', key: '', proxy: px.proxy, token: px.token, builtIn: true };
+  if (own) return { mode: 'own', key: own, proxy: '', token: '', builtIn: false };
+  return null;
+}
+function providerState(p) {
+  var c = providerConfig(p);
+  return !c ? 'off' : c.mode === 'own' ? 'own' : c.builtIn ? 'site' : 'proxy';
+}
+function aiReady() { return aiChain({}).length > 0; }
+function aiSchemaObject(props, required) { return { type: 'object', properties: props, required: required || Object.keys(props), additionalProperties: false }; }
+// Services that answered "no key here" or "this key is no good" during this page load. Asked once, then skipped, so
+// a proxy set up with only some of the keys does not cost a wasted round trip on every scan.
+var aiDown = {}, aiNoVision = {}, aiModelAt = {}, aiNoThink = {}, aiBlocked = {}, aiProbed = {}, aiRefused = {};
+function aiModel(p, vision) {
+  var list = (vision && p.models.vision.length) ? p.models.vision : p.models.text;
+  return list[Math.min(aiModelAt[p.id + (vision ? ':v' : ':t')] || 0, list.length - 1)];
+}
+function aiNextModel(p, vision) {
+  var k = p.id + (vision ? ':v' : ':t'), list = (vision && p.models.vision.length) ? p.models.vision : p.models.text;
+  var at = (aiModelAt[k] || 0) + 1;
+  if (at >= list.length) return false;
+  aiModelAt[k] = at;
+  return true;
+}
+// The services worth asking for this particular request, in order. A request carrying a photo skips anything that
+// cannot see one, which is why the chain for a photo can be shorter than the chain for the meal planner.
+function aiChain(opts) {
+  var wantsImage = (opts.content || []).some(function (b) { return b && b.type === 'image'; });
+  var out = [];
+  if (opts.key) {   // Test key: the typed key, on the service it belongs to, and nothing else
+    var only = providerById(opts.provider || 'anthropic');
+    return only ? [{ p: only, cfg: { mode: 'own', key: opts.key, proxy: '', token: '' }, vision: wantsImage }] : [];
+  }
+  PROVIDERS.forEach(function (p) {
+    if (aiDown[p.id]) return;
+    if (wantsImage && (!p.vision || aiNoVision[p.id])) return;
+    var cfg = providerConfig(p);
+    if (!cfg || (opts.proxyOnly && cfg.mode !== 'proxy')) return;
+    out.push({ p: p, cfg: cfg, vision: wantsImage });
+  });
+  return out;
+}
+// Nothing left to ask: say which of the three reasons it is, because they need different answers from the person.
+function aiNoServiceMessage(opts) {
+  if (opts.proxyOnly) return 'Nothing is routed through the proxy right now: every service is using a key of your own.';
+  var wantsImage = (opts.content || []).some(function (b) { return b && b.type === 'image'; });
+  var configured = PROVIDERS.filter(function (p) { return !!providerConfig(p); });
+  if (!configured.length) return 'No AI service is set up. Add a free key under Settings, AI features.';
+  var tried = configured.filter(function (p) { return aiDown[p.id]; }).length;
+  if (tried) return 'Every AI service is out of keys or out of quota for now. Try again later, or add a key of your own under Settings, AI features.';
+  if (wantsImage) return 'None of the AI services set up can read a photo. Add a Gemini key under Settings, AI features.';
+  return 'No AI service is set up. Add a free key under Settings, AI features.';
+}
+
+/* -------------------------------------------------- adapters: requests */
+// The app writes one kind of request: a system prompt, a list of content blocks (text, and sometimes one photo), a
+// JSON Schema for the answer, a token cap. These turn that into whatever each service wants to be told.
+function geminiParts(content) {
+  return (content || []).map(function (b) {
+    if (b && b.type === 'image' && b.source && b.source.type === 'base64') return { inlineData: { mimeType: b.source.media_type, data: b.source.data } };
+    return { text: (b && b.text) || '' };
+  });
+}
+// OpenAI-shaped services take a plain string for a turn of nothing but text, and a list of parts when there is a
+// photo. The plain string is the older, more widely accepted shape, so it is used wherever it fits.
+function openaiParts(content) {
+  var blocks = content || [];
+  var hasImage = blocks.some(function (b) { return b && b.type === 'image'; });
+  if (!hasImage) return blocks.map(function (b) { return (b && b.text) || ''; }).join('\n\n');
+  return blocks.map(function (b) {
+    if (b && b.type === 'image' && b.source && b.source.type === 'base64') return { type: 'image_url', image_url: { url: 'data:' + b.source.media_type + ';base64,' + b.source.data } };
+    return { type: 'text', text: (b && b.text) || '' };
+  });
+}
+// Gemini's answer schema is its own dialect, not JSON Schema: a keyword it does not know is rejected as an unknown
+// field, and the app's schemas are written with `additionalProperties: false` on every object. Anything outside the
+// dialect is dropped rather than translated — what it drops is strictness the prompt already asks for in words.
+var GEMINI_SCHEMA_KEYS = ['type', 'format', 'title', 'description', 'nullable', 'enum', 'properties', 'required', 'items', 'anyOf',
+  'propertyOrdering', 'minimum', 'maximum', 'minLength', 'maxLength', 'pattern', 'minItems', 'maxItems', 'minProperties', 'maxProperties'];
+function geminiSchema(s) {
+  if (Array.isArray(s)) return s.map(geminiSchema);
+  if (!s || typeof s !== 'object') return s;
+  var out = {};
+  Object.keys(s).forEach(function (k) {
+    if (GEMINI_SCHEMA_KEYS.indexOf(k) < 0) return;
+    if (k === 'properties') { var ps = {}; Object.keys(s[k] || {}).forEach(function (n) { ps[n] = geminiSchema(s[k][n]); }); out[k] = ps; }
+    else if (k === 'items' || k === 'anyOf') out[k] = geminiSchema(s[k]);
+    else out[k] = s[k];
+  });
+  return out;
+}
+function aiBuild(step, model, opts) {
+  var p = step.p, cfg = step.cfg, direct = cfg.mode === 'own';
+  var headers = { 'content-type': 'application/json' }, url, body;
+  // Asking for more than a model will write is a flat refusal, not a long answer, so the ask is trimmed per service.
+  var maxTok = Math.min(opts.maxTokens || 16000, p.maxOut || 16000);
+  if (p.kind === 'anthropic') {
+    url = direct ? p.direct : cfg.proxy + p.path;
+    headers['anthropic-version'] = AI.version;
+    headers['anthropic-beta'] = 'server-side-fallback-2026-07-01';
+    if (direct) { headers['x-api-key'] = cfg.key; headers['anthropic-dangerous-direct-browser-access'] = 'true'; }
+    body = { model: model, max_tokens: maxTok, fallbacks: 'default',
+      messages: [{ role: 'user', content: opts.content }], output_config: { effort: opts.effort || 'medium' } };
+    if (opts.system) body.system = opts.system;
+    if (opts.schema) body.output_config.format = { type: 'json_schema', schema: opts.schema };
+    if (opts.stream) body.stream = true;
+  } else if (p.kind === 'gemini') {
+    // The model rides in the URL when the phone calls Google itself, and in the body when a proxy does it, because
+    // the proxy is the one building that URL.
+    url = direct ? p.direct + '/models/' + encodeURIComponent(model) + ':' + (opts.stream ? 'streamGenerateContent?alt=sse' : 'generateContent') : cfg.proxy + p.path;
+    if (direct) headers['x-goog-api-key'] = cfg.key;
+    body = { contents: [{ role: 'user', parts: geminiParts(opts.content) }], generationConfig: { maxOutputTokens: maxTok } };
+    if (opts.system) body.systemInstruction = { parts: [{ text: opts.system }] };
+    if (opts.schema) { body.generationConfig.responseMimeType = 'application/json'; body.generationConfig.responseSchema = geminiSchema(opts.schema); }
+    else if (opts.jsonText) body.generationConfig.responseMimeType = 'application/json';
+    // These models think before they answer, and the thinking comes out of the same budget as the answer: a tight
+    // cap can be spent entirely on thoughts and come back with no text at all. So thinking is asked off. A model
+    // that refuses the field is remembered and asked again without it.
+    if (!aiNoThink[p.id + '/' + model]) body.generationConfig.thinkingConfig = { thinkingBudget: 0 };
+    if (!direct) { body.model = model; if (opts.stream) body.stream = true; }
+  } else {
+    url = direct ? p.direct : cfg.proxy + p.path;
+    if (direct) headers.authorization = 'Bearer ' + cfg.key;
+    var msgs = [];
+    if (opts.system) msgs.push({ role: 'system', content: opts.system });
+    msgs.push({ role: 'user', content: openaiParts(opts.content) });
+    body = { model: model, messages: msgs };
+    body[p.maxField || 'max_tokens'] = maxTok;
+    if (opts.schema || opts.jsonText) body.response_format = { type: 'json_object' };   // these services take a schema only on some models, so the schema goes in the prompt and this asks for JSON
+    if (opts.stream) body.stream = true;
+  }
+  if (cfg.mode === 'proxy' && cfg.token) headers.authorization = 'Bearer ' + cfg.token;   // the proxy's own token, so it can turn strangers away; it adds the service's key itself
+  return { url: url, headers: headers, body: body };
+}
+
+/* --------------------------------------------------- adapters: answers */
+// Every answer is read back into the same four things: why it stopped, what it said, how much it wrote, and what the
+// service called the stop. The callers above only ever see this shape.
+var GEMINI_STOPS = { SAFETY: 'the photo or the words were flagged as unsafe', RECITATION: 'the answer looked like recited text',
+  BLOCKLIST: 'the answer contained forbidden terms', PROHIBITED_CONTENT: 'the answer was flagged as prohibited',
+  SPII: 'the answer looked like it contained personal information', LANGUAGE: 'the language is not supported', OTHER: 'no reason was given' };
+function aiRead(p, json) {
+  if (p.kind === 'anthropic') {
+    return { stop_reason: json.stop_reason, stop_details: json.stop_details, usage: json.usage,
+      text: (json.content || []).filter(function (b) { return b.type === 'text'; }).map(function (b) { return b.text; }).join('') };
+  }
+  if (p.kind === 'gemini') {
+    var cand = (json.candidates || [])[0] || {}, fr = String(cand.finishReason || '');
+    var blocked = json.promptFeedback && json.promptFeedback.blockReason;
+    var text = ((cand.content && cand.content.parts) || []).filter(function (x) { return !x.thought && typeof x.text === 'string'; })
+      .map(function (x) { return x.text; }).join('');
+    return {
+      stop_reason: blocked ? 'refusal' : fr === 'MAX_TOKENS' ? 'max_tokens' : (fr && fr !== 'STOP') ? 'refusal' : 'end_turn',
+      stop_details: { explanation: cand.finishMessage || (blocked ? String(blocked) : '') || GEMINI_STOPS[fr] || '' },
+      usage: { output_tokens: (json.usageMetadata || {}).candidatesTokenCount }, text: text };
+  }
+  var ch = (json.choices || [])[0] || {}, msg = ch.message || {}, fin = String(ch.finish_reason || '');
+  return {
+    stop_reason: msg.refusal ? 'refusal' : fin === 'length' ? 'max_tokens' : (fin === 'content_filter' || fin === 'error') ? 'refusal' : 'end_turn',
+    stop_details: { explanation: msg.refusal || (fin === 'content_filter' ? 'a content filter stopped it' : fin === 'error' ? 'the service reported an error' : '') },
+    usage: { output_tokens: (json.usage || {}).completion_tokens }, text: typeof msg.content === 'string' ? msg.content : '' };
+}
+// One streamed event, read into the text it adds and anything it says about the end. Each service frames a stream
+// differently: Gemini sends whole answers whose text is the newest slice and just stops, the OpenAI-shaped ones send
+// deltas and a `[DONE]` line, and Claude sends typed events.
+function aiReadEvent(p, j) {
+  if (p.kind === 'anthropic') {
+    if (j.type === 'content_block_delta' && j.delta && j.delta.type === 'text_delta') return { text: j.delta.text };
+    if (j.type === 'message_delta' && j.delta) return { stop_reason: j.delta.stop_reason, stop_details: j.delta.stop_details, usage: j.usage };
+    if (j.type === 'error') return { error: (j.error && j.error.message) || 'The AI service reported an error.' };
+    return {};
+  }
+  if (p.kind === 'gemini') {
+    if (j.error) return { error: (j.error.message || 'The AI service reported an error.') };
+    var r = aiRead(p, j), cand = (j.candidates || [])[0] || {};
+    var ended = cand.finishReason || (j.promptFeedback && j.promptFeedback.blockReason);   // a prompt blocked outright arrives with no candidate at all
+    return { text: r.text, usage: r.usage, stop_reason: ended ? r.stop_reason : null, stop_details: ended ? r.stop_details : null };
+  }
+  if (j.error) return { error: (j.error.message || 'The AI service reported an error.') };
+  if (j.x_groq && j.x_groq.error) return { error: String(j.x_groq.error) };   // a failure after the answer started comes back inside the stream, not as a status
+  var c = (j.choices || [])[0] || {}, d = c.delta || {};
+  var out = {};
+  if (typeof d.content === 'string') out.text = d.content;
+  if (d.refusal) { out.stop_reason = 'refusal'; out.stop_details = { explanation: String(d.refusal) }; }
+  else if (c.finish_reason) {
+    out.stop_reason = c.finish_reason === 'length' ? 'max_tokens' : (c.finish_reason === 'content_filter' || c.finish_reason === 'error') ? 'refusal' : 'end_turn';
+    if (c.finish_reason === 'content_filter') out.stop_details = { explanation: 'a content filter stopped it' };
+  }
+  if (j.usage) out.usage = { output_tokens: j.usage.completion_tokens };
+  return out;
+}
+
+/* ---------------------------------------------------------- what went wrong */
+// One refusal, read into flags the chain can act on: skip this service for the rest of the page load, ask it again
+// with a different model, ask it again without the answer schema, or stop asking anyone.
+function geminiReason(e) {
+  var found = '';
+  ((e && e.details) || []).forEach(function (d) { if (d && d.reason && !found) found = String(d.reason); });
+  return found;
+}
+function aiError(status, json, text, step) {
+  var p = step.p, cfg = step.cfg, raw = String(text || '').trim();
+  var e = (json && json.error && typeof json.error === 'object') ? json.error : null;
+  var detail = (e && e.message) ? String(e.message) : (/^</.test(raw) ? '' : raw.slice(0, 160));   // an HTML error page from a proxy is not worth showing
+  var type = String((e && (e.type || e.status)) || ''), reason = geminiReason(e);
+  var viaProxy = cfg.mode === 'proxy', site = viaProxy && cfg.builtIn;
+  function err(msg, flags) { var x = new Error(msg); Object.keys(flags || {}).forEach(function (k) { x[k] = flags[k]; }); x.provider = p.id; return x; }
+  // The proxy is there but has no key for this service. Nothing the person can do about it in the moment, and the
+  // next service may well answer, so this is not worth a word on screen.
+  if (status === 501 || type === 'not_configured') return err(p.name + ' has no key on ' + (site ? 'the site\'s proxy' : 'the proxy') + '.', { notConfigured: true });
+  // The proxy itself turned the page away: every service behind it is unreachable, not just this one.
+  if (viaProxy && (status === 401 || status === 403) && /proxy|origin|token/i.test(detail + ' ' + type)) {
+    return err((site ? 'The site\'s proxy' : 'The proxy') + ' refused this page' + (detail ? ': ' + detail : '.') + (site ? ' Its token may be out of date.' : ' Check the proxy token under Settings, AI features.'), { proxyAuth: true });
+  }
+  if (status === 401 || status === 403 || reason === 'API_KEY_INVALID' || /api key not valid|invalid.{0,12}api key|no auth credentials/i.test(detail)) {
+    return err(cfg.mode === 'own' ? 'Your ' + p.name + ' key was rejected. Check it under Settings, AI features.' : p.name + ' rejected the key' + (detail ? ': ' + detail : '.'), { auth: true });
+  }
+  if (status === 429) return err(p.name + ' is rate limited' + (/per.?day|daily|quota/i.test(detail) ? ' for today' : ' for the moment') + '.', { rate: true });
+  if (status === 408 || status === 500 || status === 502 || status === 503 || status === 504 || status === 529) return err(p.name + ' is busy or down (HTTP ' + status + ').', { busy: true });
+  // An image sent where images are not read. OpenRouter says this with a 404 about endpoints, not a 400 about images.
+  if (/image input|support image|does not support image|vision/i.test(detail)) return err(p.name + ' cannot read a photo with the model it has.', { noVision: true });
+  // A proxy from before this feature answers 404 for the whole route. Walking that service's model list against a
+  // route that does not exist costs three round trips and says the wrong thing, so it is read as "not here".
+  if (viaProxy && (status === 404 || status === 405) && (type === 'not_found_error' || /served here|not found/i.test(detail))) {
+    return err((site ? 'The site\u2019s proxy' : 'Your proxy') + ' does not serve ' + p.name + '. It was deployed before this version; update it.', { notConfigured: true });
+  }
+  if (status === 404 || /model_not_found|is not a valid model|does not exist|not found for api version|unsupported model/i.test(detail + ' ' + type)) return err(p.name + ' does not have that model any more' + (detail ? ': ' + detail : '.'), { noModel: true });
+  if (status === 413) return err('The photo is too large for ' + p.name + '.', { tooBig: true });
+  var x = err('AI request failed (HTTP ' + status + ')' + (detail ? ': ' + detail : ''), {});
+  // A 400 that names the answer-format machinery is answered by dropping it and asking for the JSON in the prompt.
+  if (status === 400 && /grammar|json_schema|output_config|response_?schema|responseMimeType|schema/i.test(detail)) x.grammar = true;
+  if (status === 400 && /thinking/i.test(detail)) x.noThink = true;
+  return x;
+}
+// opts: { system, content: [blocks], schema, effort, maxTokens, stream, onProgress(text), timeoutMs, signal }. Resolves
+// with the parsed JSON (or the text when there is no schema). Long answers (a week of meals) are streamed so the
+// request cannot time out and progress can be shown; the streamed text is joined and parsed like a plain answer.
+// Schemas a service has refused to compile ("the compiled grammar is too large"). Such a request is sent again with
+// no answer format: the schema is written into the prompt and the answer parsed as text, which every caller's
+// clean-up code copes with. It is remembered per service for the rest of the page load, so later calls skip it.
+var aiNoGrammar = {};
 function aiTextFallback(opts) {
   var o = {}; Object.keys(opts).forEach(function (k) { o[k] = opts[k]; });
   o.content = (opts.content || []).concat([{ type: 'text', text: 'Answer with one JSON object and nothing else: no code fences, no words before or after it. It must match this JSON Schema exactly, every property present and no others: ' + JSON.stringify(opts.schema) }]);
@@ -5609,23 +6007,85 @@ function parseJsonLoose(t) {
   throw new Error('no JSON object');
 }
 var AI_RETRIES = 2, AI_RETRY_MS = 1500;
+// Ask the chain. Each service gets its own retries for a dropped connection and its own second chance without the
+// answer schema; anything else hands the request down to the next one. The message a person finally sees is the last
+// service's, because by then every earlier one has already been reported in the debug log.
 function aiRequest(opts) {
-  if (opts.schema && aiNoGrammar.indexOf(opts.schema) >= 0) opts = aiTextFallback(opts);
-  return aiAttempt(opts, 0);
+  var chain = aiChain(opts);
+  if (!chain.length) return Promise.reject(new Error(aiNoServiceMessage(opts)));
+  // The service that answered travels with the answer rather than in a global: two requests can be in flight at once
+  // (a photo while a plan is being written), and a card must name the one that read its own photo.
+  return aiWalk(chain, 0, opts, []).then(function (r) {
+    AI.used = r.used;
+    if (opts.onUsed) { try { opts.onUsed(r.used); } catch (e) { /* the name is a nicety */ } }
+    return r.v;
+  });
 }
-// A dropped connection on a phone is usually a moment of bad signal, not a bad request, so it is worth asking again
-// before telling anyone. A refusal, a bad request or a stop is not retried: asking again would fail the same way.
-function aiAttempt(opts, tries) {
-  return aiRequestOnce(opts).then(null, function (e) {
-    if (opts.schema && e && e.grammar) {
-      aiNoGrammar.push(opts.schema);
-      dbg('warn', 'The API could not compile the answer schema (' + e.message + '); asking for the JSON in the prompt instead');
-      return aiRequestOnce(aiTextFallback(opts));
+// When nothing answers, the message is the first real reason, not the last: the first service to be asked is the one
+// most likely to say something worth acting on, while the ones after it often only say they have no key. The others
+// are named after it, so it is clear the app did not give up on the first try.
+function aiFailure(errs, opts) {
+  if (!errs.length) return new Error(aiNoServiceMessage(opts));
+  var best = null;
+  errs.forEach(function (x) { if (!best && !x.err.notConfigured) best = x; });
+  best = best || errs[errs.length - 1];
+  var others = errs.filter(function (x) { return x !== best; }).map(function (x) { return x.name; });
+  var out = new Error(best.err.message + (others.length ? ' ' + listAnd(others) + ' could not answer either.' : ''));
+  ['network', 'rate', 'busy', 'auth', 'refused', 'cause'].forEach(function (k) { if (best.err[k]) out[k] = best.err[k]; });
+  return out;
+}
+function aiWalk(chain, i, opts, errs) {
+  if (opts.signal && opts.signal.aborted) { var stop = new Error('Stopped.'); stop.fatal = true; return Promise.reject(stop); }
+  if (i >= chain.length) return Promise.reject(aiFailure(errs, opts));
+  var step = chain[i];
+  return aiTry(step, opts, 0).then(null, function (e) {
+    if (e && (e.name === 'AbortError' || e.fatal)) throw e;
+    if (e && e.notConfigured) aiDown[step.p.id] = true;
+    // A key that has been rejected will probably be rejected again, so it is not worth a round trip before every
+    // scan — but one refusal can also be a service having a moment, and crossing it off would turn the app off over
+    // a blip. Said out loud the first time, crossed off the second.
+    if (e && e.auth) {
+      aiRefused[step.p.id] = (aiRefused[step.p.id] || 0) + 1;
+      if (aiRefused[step.p.id] >= 2) aiDown[step.p.id] = true;
+      if (aiRefused[step.p.id] === 1 && step.cfg.mode === 'own' && !opts.key && !opts.proxyOnly) toast('Your ' + step.p.name + ' key was rejected. Check it under Settings.');
     }
-    if (e && e.network && tries < AI_RETRIES && !(opts.signal && opts.signal.aborted)) {
-      dbg('warn', 'AI request failed on the network (' + e.message + ') — trying again, ' + (tries + 1) + ' of ' + AI_RETRIES);
+    if (e && e.network && step.cfg.mode === 'own' && !step.p.browser) { aiDown[step.p.id] = true; aiBlocked[step.p.id] = true; }
+    if (e && e.noVision) aiNoVision[step.p.id] = true;
+    if (e && e.proxyAuth) PROVIDERS.forEach(function (p) { var c = providerConfig(p); if (c && c.mode === 'proxy') aiDown[p.id] = true; });
+    var next = chain[i + 1];
+    dbg('warn', step.p.name + ' could not answer (' + (e && e.message) + ')' + (next ? ' — asking ' + next.p.name : ' — nothing left to ask'));
+    return aiWalk(chain, i + 1, opts, errs.concat([{ name: step.p.name, err: e || new Error('it failed') }]));
+  });
+}
+// One service, with the things worth trying again on the same one: a dropped connection, a model it no longer has, a
+// schema it cannot compile, a thinking budget it does not take.
+function aiTry(step, opts, tries) {
+  var p = step.p, model = aiModel(p, step.vision);
+  // A service that cannot be handed a schema is told it in words from the first ask. Waiting for it to refuse one
+  // never worked: it does not refuse, it answers neat JSON of its own invention and the card comes out empty.
+  var use = (opts.schema && (!p.jsonSchema || (aiNoGrammar[p.id] || []).indexOf(opts.schema) >= 0)) ? aiTextFallback(opts) : opts;
+  return aiSend(step, model, use).then(null, function (e) {
+    if (e && e.name === 'AbortError') throw e;
+    if (e && e.noModel && aiNextModel(p, step.vision)) {
+      dbg('warn', p.name + ' has no model "' + model + '" — trying ' + aiModel(p, step.vision));
+      return aiTry(step, opts, tries);
+    }
+    if (e && e.noThink && !aiNoThink[p.id + '/' + model]) {
+      aiNoThink[p.id + '/' + model] = true;
+      dbg('warn', p.name + ' would not take a thinking budget; asking again without one');
+      return aiTry(step, opts, tries);
+    }
+    if (e && e.grammar && use.schema) {
+      aiNoGrammar[p.id] = (aiNoGrammar[p.id] || []).concat([use.schema]);
+      dbg('warn', p.name + ' could not compile the answer schema (' + e.message + '); asking for the JSON in the prompt instead');
+      return aiSend(step, model, aiTextFallback(use));
+    }
+    // A dropped connection on a phone is usually a moment of bad signal, not a bad request, so it is worth asking
+    // the same service again before handing the work to another one.
+    if (e && e.network && tries < AI_RETRIES && !(opts.signal && opts.signal.aborted) && !(step.cfg.mode === 'own' && !p.browser)) {
+      dbg('warn', p.name + ' failed on the network (' + e.message + ') — trying again, ' + (tries + 1) + ' of ' + AI_RETRIES);
       if (opts.onRetry) { try { opts.onRetry(tries + 1, AI_RETRIES); } catch (x) { /* progress only */ } }
-      return new Promise(function (r) { setTimeout(r, AI_RETRY_MS * (tries + 1)); }).then(function () { return aiAttempt(opts, tries + 1); });
+      return new Promise(function (r) { setTimeout(r, AI_RETRY_MS * (tries + 1)); }).then(function () { return aiTry(step, opts, tries + 1); });
     }
     throw e;
   });
@@ -5635,20 +6095,11 @@ function fmtDur(ms) {
   var s = Math.round(ms / 1000);
   return s < 60 ? s + ' s' : Math.floor(s / 60) + ' min ' + (s % 60) + ' s';
 }
-function aiRequestOnce(opts) {
-  var c = aiConfig();
-  if (opts.key) c = { key: opts.key, proxy: '', token: '' };   // Test key tries the typed key without saving it
-  if (!c.key && !c.proxy) return Promise.reject(new Error('Add an API key or a proxy URL under Settings, AI features.'));
-  var url = (c.proxy || AI.base).replace(/\/+$/, '') + '/v1/messages';
-  var headers = { 'content-type': 'application/json', 'anthropic-version': AI.version, 'anthropic-beta': 'server-side-fallback-2026-07-01' };
-  if (!c.proxy) { headers['x-api-key'] = c.key; headers['anthropic-dangerous-direct-browser-access'] = 'true'; }
-  else if (c.token) headers.authorization = 'Bearer ' + c.token;   // so a proxy can refuse strangers
-  var body = { model: AI.model, max_tokens: opts.maxTokens || 16000, fallbacks: 'default', messages: [{ role: 'user', content: opts.content }],
-    output_config: { effort: opts.effort || 'medium' } };
-  if (opts.system) body.system = opts.system;
-  if (opts.schema) body.output_config.format = { type: 'json_schema', schema: opts.schema };
-  if (opts.stream) body.stream = true;
-  if (opts.signal && opts.signal.aborted) return Promise.reject(new Error('Stopped.'));
+// One request to one service. Everything service-specific has already been decided by the adapters above; what is
+// left is the part that is the same everywhere — the timeout, the dropped-connection wording, the stream reader.
+function aiSend(step, model, opts) {
+  var p = step.p, req = aiBuild(step, model, opts);
+  if (opts.signal && opts.signal.aborted) { var stop = new Error('Stopped.'); stop.fatal = true; return Promise.reject(stop); }
   var ctrl = (typeof AbortController === 'function') ? new AbortController() : null;
   if (ctrl && opts.signal) opts.signal.addEventListener('abort', function () { ctrl.abort(); }, { once: true });
   var timer = ctrl ? setTimeout(function () { ctrl.abort(); }, opts.timeoutMs || AI.timeoutMs) : null;
@@ -5660,47 +6111,61 @@ function aiRequestOnce(opts) {
   function netError(err) {
     var ran = now() - t0;
     var e2 = new Error(!firstByte && ran < 5000
-      ? 'Could not reach the AI service. Check the connection and try again.'
-      : 'The connection dropped after ' + fmtDur(ran) + (firstByte ? ', ' + Math.max(1, Math.round(bytes / 1024)) + ' KB into the answer' : ', before any of the answer arrived') + '. '
+      ? 'Could not reach ' + p.name + '. Check the connection and try again.'
+      : 'The connection to ' + p.name + ' dropped after ' + fmtDur(ran) + (firstByte ? ', ' + Math.max(1, Math.round(bytes / 1024)) + ' KB into the answer' : ', before any of the answer arrived') + '. '
         + (wentAway ? 'The screen locked or you left the app, which cancels a request that is still running.' : 'A weak signal, or moving between Wi-Fi and mobile data, will do this.'));
     e2.network = true;
     e2.cause = String((err && err.message) || err || '');
     return e2;
   }
-  function finish(json, textBlock) {
-    dbg('log', 'AI answer: stop_reason ' + json.stop_reason + (json.usage && json.usage.output_tokens ? ', ' + json.usage.output_tokens + ' output tokens' : '') + ', ' + String(textBlock || '').length + ' characters');
-    if (json.stop_reason === 'refusal') throw new Error('The AI declined this request' + (json.stop_details && json.stop_details.explanation ? ': ' + json.stop_details.explanation : '.'));
-    if (json.stop_reason === 'max_tokens') throw new Error('The AI answer was cut short: it reached the length limit.' + (opts.cutHint ? ' ' + opts.cutHint : ''));
+  function finish(meta, textBlock) {
+    dbg('log', p.name + ' answered: ' + (meta.stop_reason || 'end_turn') + (meta.usage && meta.usage.output_tokens ? ', ' + meta.usage.output_tokens + ' output tokens' : '') + ', ' + String(textBlock || '').length + ' characters');
+    if (meta.stop_reason === 'refusal') { var r = new Error(p.name + ' declined this request' + (meta.stop_details && meta.stop_details.explanation ? ': ' + meta.stop_details.explanation : '.')); r.refused = true; throw r; }
+    if (meta.stop_reason === 'max_tokens') throw new Error('The answer was cut short: it reached the length limit.' + (opts.cutHint ? ' ' + opts.cutHint : ''));   // one service's length, not the end of the road: the next one may be terser
     if (!opts.schema && !opts.jsonText) return textBlock;
-    try { return opts.jsonText ? parseJsonLoose(textBlock) : JSON.parse(textBlock); } catch (e) { throw new Error('The AI answer could not be read. Try again.'); }
+    try { return opts.jsonText ? parseJsonLoose(textBlock) : JSON.parse(textBlock); }
+    catch (e) { throw new Error(p.name + '’s answer could not be read as JSON.'); }   // another service may do better, so this is not the end of the road
   }
-  return fetch(url, { method: 'POST', headers: headers, body: JSON.stringify(body), signal: ctrl ? ctrl.signal : undefined }).then(function (res) {
+  return fetch(req.url, { method: 'POST', headers: req.headers, body: JSON.stringify(req.body), signal: ctrl ? ctrl.signal : undefined }).then(function (res) {
     if (!res.ok) return res.text().then(function (text) {
       var json = null; try { json = JSON.parse(text); } catch (e) { /* not JSON */ }
-      dbg('error', 'AI HTTP ' + res.status + ' (request-id ' + (res.headers.get('request-id') || '?') + '): ' + String(text).slice(0, 400));   // the debug log redacts keys and tokens itself
-      throw aiError(res.status, json, text, c);
+      dbg('error', p.name + ' HTTP ' + res.status + ' (request-id ' + (res.headers.get('request-id') || '?') + '): ' + String(text).slice(0, 400));   // the debug log redacts keys and tokens itself
+      throw aiError(res.status, json, text, step);
     });
     if (!opts.stream) {
       return res.text().then(function (text) {
         var json = null;
         try { json = JSON.parse(text); } catch (e) { /* not JSON */ }
-        if (!json) throw new Error('The AI service returned something that is not JSON.');
-        return finish(json, (json.content || []).filter(function (b) { return b.type === 'text'; }).map(function (b) { return b.text; }).join(''));
+        if (!json) throw new Error(p.name + ' returned something that is not JSON.');
+        var r = aiRead(p, json);
+        return finish(r, r.text);
       });
     }
-    // Server-sent events: text deltas are appended, message_delta carries the stop reason, error events abort.
+    // Server-sent events. The framing differs by service — one of them ends the stream by simply stopping, another
+    // sends `[DONE]`, and one sends comment lines to hold the connection open — so the reader is written for all of
+    // them: split on any of the three event separators, skip comments and the sentinel, and let the adapter read the
+    // rest.
     var acc = '', meta = { stop_reason: null, stop_details: null }, buf = '', dec = (typeof TextDecoder === 'function') ? new TextDecoder() : null;
+    function cut(s) {
+      var at = -1, len = 0;
+      ['\r\n\r\n', '\n\n', '\r\r'].forEach(function (d) { var i = s.indexOf(d); if (i >= 0 && (at < 0 || i < at)) { at = i; len = d.length; } });
+      return at < 0 ? null : { head: s.slice(0, at), rest: s.slice(at + len) };
+    }
     function handle(chunk) {
       buf += chunk;
-      var parts = buf.split('\n\n'); buf = parts.pop();
-      parts.forEach(function (ev) {
-        var data = ev.split('\n').filter(function (l) { return l.indexOf('data:') === 0; }).map(function (l) { return l.slice(5).trim(); }).join('');
-        if (!data) return;
-        var j; try { j = JSON.parse(data); } catch (e) { return; }
-        if (j.type === 'content_block_delta' && j.delta && j.delta.type === 'text_delta') { acc += j.delta.text; if (opts.onProgress) { try { opts.onProgress(acc); } catch (e2) { /* ignore */ } } }
-        else if (j.type === 'message_delta' && j.delta) { if (j.delta.stop_reason) meta.stop_reason = j.delta.stop_reason; if (j.delta.stop_details) meta.stop_details = j.delta.stop_details; if (j.usage) meta.usage = j.usage; }
-        else if (j.type === 'error') throw new Error((j.error && j.error.message) || 'The AI service reported an error.');
-      });
+      var piece;
+      while ((piece = cut(buf))) {
+        buf = piece.rest;
+        var data = piece.head.split(/\r\n|\n|\r/).filter(function (l) { return l.indexOf('data:') === 0; }).map(function (l) { return l.slice(5).trim(); }).join('');
+        if (!data || data === '[DONE]') continue;   // a comment line holding the connection open, or the end marker
+        var j; try { j = JSON.parse(data); } catch (e) { continue; }
+        var ev = aiReadEvent(p, j);
+        if (ev.error) throw new Error(ev.error);
+        if (ev.text) { acc += ev.text; if (opts.onProgress) { try { opts.onProgress(acc); } catch (e2) { /* ignore */ } } }
+        if (ev.stop_reason) meta.stop_reason = ev.stop_reason;
+        if (ev.stop_details) meta.stop_details = ev.stop_details;
+        if (ev.usage) meta.usage = ev.usage;
+      }
     }
     if (res.body && res.body.getReader && dec) {
       var reader = res.body.getReader();
@@ -5714,7 +6179,7 @@ function aiRequestOnce(opts) {
               handle(dec.decode(r.value, { stream: true }));
               pump();
             } catch (e) { reject(e); }
-          }, function (err) { reject((err && err.name === 'AbortError') ? err : netError(err)); });   // the stream died mid-answer, which the browser reports as a bare "Load failed" 
+          }, function (err) { reject((err && err.name === 'AbortError') ? err : netError(err)); });   // the stream died mid-answer, which the browser reports as a bare "Load failed"
         }
         pump();
       });
@@ -5723,9 +6188,16 @@ function aiRequestOnce(opts) {
   }, function (err) {
     if (err && err.name === 'AbortError') throw err;   // worded below, where a mid-stream abort lands too
     throw netError(err);
-  }).then(function (v) { done(); return v; }, function (e) {
+  }).then(function (v) { done(); return { v: v, used: { id: p.id, name: p.name, model: model, via: step.cfg.mode } }; }, function (e) {
     done();
-    if (e && e.name === 'AbortError') throw new Error(opts.signal && opts.signal.aborted ? 'Stopped.' : 'The AI request timed out. Check the connection and try again.');
+    if (e && e.name === 'AbortError') {
+      // Stopped by the person: nothing else is asked. Timed out on its own: this service is the one that stalled, so
+      // the request is handed to the next one rather than given up on.
+      var stopped = !!(opts.signal && opts.signal.aborted);
+      var a = new Error(stopped ? 'Stopped.' : p.name + ' did not answer in time.');
+      if (stopped) a.fatal = true;
+      throw a;
+    }
     throw e;
   });
   function done() {
@@ -5754,13 +6226,17 @@ function imageBlock(file) {
     reader.readAsDataURL(file);
   });
 }
-function aiTestKey(typed, out) {
-  var el = out || $('aiStatus'), saved = aiConfig().key;
+// Ask for one word and say who answered. A key typed but not yet saved is tried on its own, on the service it
+// belongs to; otherwise the whole chain is tried, which is the honest test of "does this app work right now".
+function aiTestKey(typed, out, id, proxyOnly) {
+  var p = providerById(id || 'anthropic'), el = out || $('aiStatus'), saved = providerKey(p);
   el.textContent = 'Testing…';
-  var fresh = typed && typed !== saved;   // a newly typed key is tried on its own; otherwise the saved set-up (proxy or key) is what gets tested
-  aiRequest({ content: [{ type: 'text', text: 'Reply with the single word OK.' }], maxTokens: 256, effort: 'low', key: fresh ? typed : undefined }).then(function (t) {
-    var used = aiConfig();
-    el.textContent = (fresh ? 'Key works' : used.proxy ? 'Proxy works' + (used.builtIn ? ' (the site\'s built-in one at ' + proxyHost(used.proxy) + ')' : '') : 'Key works') + '. The model answered: ' + String(t).trim().slice(0, 40) + (fresh ? '. Tap Save key to keep it.' : '');
+  var fresh = typed && typed !== saved, u = {};
+  aiRequest({ content: [{ type: 'text', text: 'Reply with the single word OK.' }], maxTokens: 256, effort: 'low',
+    key: fresh ? typed : undefined, provider: fresh ? p.id : undefined, proxyOnly: proxyOnly, onUsed: function (x) { u = x || {}; } }).then(function (t) {
+    el.textContent = (fresh ? p.name + ' key works' : (u.name || 'It') + ' answered'
+      + (u.via === 'proxy' ? ' through ' + ((proxyConfig() || {}).builtIn ? 'the site\u2019s proxy' : 'the proxy') : u.via === 'own' ? ' on your key' : ''))
+      + ': ' + String(t).trim().slice(0, 40) + (fresh ? '. Tap Save key to keep it.' : '');
   }, function (e) { el.textContent = 'Test failed: ' + e.message; });
 }
 function proxyHost(u) { try { return new URL(u).host; } catch (e) { return u; } }
@@ -5831,14 +6307,14 @@ function init() {
     showTab('learn'); openArticle(la[1]);
   }
   $('btnAiShow').addEventListener('click', function () { var i = $('aiKey'); var hidden = i.classList.toggle('secret'); this.textContent = hidden ? 'Show' : 'Hide'; this.setAttribute('aria-label', hidden ? 'Show key' : 'Hide key'); });
-  $('btnAiSave').addEventListener('click', function () { var k = $('aiKey').value.trim(); if (!k) { toast('Type a key first'); return; } store.set(LS.aiKey, k); dbg('log', 'AI key saved (' + k.length + ' chars)'); renderSettings(); toast('Key saved'); });
-  $('btnServiceTest').addEventListener('click', function () { var el = $('serviceResult'); el.classList.remove('hidden'); aiTestKey('', el); });
+  $('btnAiSave').addEventListener('click', function () { var k = $('aiKey').value.trim(); if (!k) { toast('Type a key first'); return; } store.set(LS.aiKey, k); delete aiDown.anthropic; delete aiBlocked.anthropic; delete aiRefused.anthropic; dbg('log', 'AI key saved (' + k.length + ' chars)'); renderSettings(); toast('Key saved'); });
+  $('btnServiceTest').addEventListener('click', function () { var el = $('serviceResult'); el.classList.remove('hidden'); aiTestKey('', el, null, true); });
   $('btnOwnKeys').addEventListener('click', function () {
     ownKeysOpen = !ownKeysOpen;
     renderServiceRow();
     if (ownKeysOpen) $('ownKeys').scrollIntoView({ block: 'start', behavior: 'smooth' });
   });
-  $('btnAiRemove').addEventListener('click', function () { store.remove(LS.aiKey); $('aiKey').value = ''; renderSettings(); toast('Key removed'); });
+  $('btnAiRemove').addEventListener('click', function () { store.remove(LS.aiKey); delete aiDown.anthropic; delete aiBlocked.anthropic; delete aiRefused.anthropic; $('aiKey').value = ''; renderSettings(); toast('Key removed'); });
   $('btnAiTest').addEventListener('click', function () {
     var typed = $('aiKey').value.trim(), c = aiConfig();
     if (!typed && !c.key && (!c.proxy || c.builtIn)) { toast('Type a key first'); return; }   // the site's proxy has its own Test button
@@ -5993,6 +6469,9 @@ window.FS = {
   profile: function () { return profile; }, openOnboarding: openOnboarding,
   state: function () { return { cam: cam, tally: tally, log: scanLog, current: current, sheet: sheet.snap, menu: menu }; }, sheet: snapTo,
   estimateResult: estimateResult, rankMenu: rankMenu, scanPhoto: scanPhoto, scanMenu: scanMenu, aiRequest: aiRequest, aiConfig: aiConfig, profileWords: profileWords, showTab: showTab,
+  providers: function () { return PROVIDERS.map(function (p) { return { id: p.id, name: p.name, state: providerState(p), down: !!aiDown[p.id] }; }); },
+  aiChain: function (opts) { return aiChain(opts || {}).map(function (s) { return s.p.id; }); }, aiUsed: function () { return AI.used; },
+  aiReady: aiReady, geminiSchema: geminiSchema, openaiParts: openaiParts,
   setDefaultProxy: function (u, t) { DEFAULT_PROXY = u || ''; DEFAULT_PROXY_TOKEN = t || ''; usdaProxyOff = ''; renderSettings(); }, usdaConfig: usdaConfig,
   plan: function () { return plan; }, dayPrompt: dayPrompt, articles: LEARN_ARTICLES, openArticle: openArticle, renderMarkdown: renderMarkdown, searchArticles: searchArticles, planCSV: planCSV, planText: planText, samplePlan: samplePlan, openPlanWizard: openPlanWizard, wizard: function () { return pw; }, pwGo: pwGo, sanitizeWizard: sanitizeWizard,
   enterCode: function (code) { return handleCode(code, null, 'manual'); },

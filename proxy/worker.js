@@ -1,8 +1,12 @@
-// FoodScanner AI proxy: a Cloudflare Worker that holds the site's API keys (Anthropic, and optionally USDA) so the public
-// site never carries them. The app sends the same Messages API request it would send to api.anthropic.com; the Worker
-// rate-limits, checks the origin and the optional shared token, keeps only the request fields the app uses, adds the
-// key, forwards the request and streams the answer back. With a USDA_API_KEY secret it also answers the app's barcode
-// lookups against USDA FoodData Central the same way. See README.md.
+// FoodScanner AI proxy: a Cloudflare Worker that holds the site's API keys so the public site never carries them. The
+// app sends the request it would have sent to the service itself; the Worker rate-limits, checks the origin and the
+// optional shared token, keeps only the fields the app uses, adds the key, forwards it and streams the answer back.
+//
+// It serves one route per AI service. The free ones — Gemini, Groq, OpenRouter — are what the app asks by default, in
+// that order, so the site costs nothing to run: give the Worker whichever of those keys you have and the app works for
+// everyone who opens the page. Anthropic is here too but is never the default; the app only asks for it when somebody
+// has saved a key of their own, so a public page cannot spend a paid balance. With a USDA_API_KEY secret it also
+// answers the app's barcode lookups against USDA FoodData Central. See README.md.
 
 const UPSTREAM = 'https://api.anthropic.com/v1/messages';
 const BETA = 'server-side-fallback-2026-07-01';   // the one beta the app relies on; a caller's own beta header is ignored (fast mode would double the price)
@@ -12,6 +16,62 @@ const ALLOWED_HEADERS = 'content-type, authorization, anthropic-version, anthrop
 // still bounded) and a few that would add cost or outbound connections on the key owner's account are refused outright.
 const KEEP = ['model', 'max_tokens', 'messages', 'system', 'stream', 'output_config', 'fallbacks', 'metadata', 'temperature', 'top_p', 'top_k', 'stop_sequences', 'thinking'];
 const REFUSE = ['tools', 'tool_choice', 'mcp_servers', 'container', 'context_management'];
+// The free services, one entry each. `secret` is the environment variable holding the key; a route whose secret is
+// missing answers 501 so the app can cross it off for the rest of the page load and ask the next one instead of
+// retrying it on every scan. `keep` is the only fields forwarded — everything else is dropped, and the few that would
+// spend money or open outbound connections on the key owner's account are refused outright.
+const FREE = {
+  gemini: {
+    secret: 'GEMINI_API_KEY',
+    // The model rides in the body from the app and in the URL to Google, which is the whole reason this route exists
+    // rather than the app calling Google itself: on a phone with no key of its own, the key has to be added here.
+    url: (model, stream) => 'https://generativelanguage.googleapis.com/v1beta/models/' + encodeURIComponent(model)
+      + ':' + (stream ? 'streamGenerateContent?alt=sse' : 'generateContent'),
+    auth: key => ({ 'x-goog-api-key': key }),
+    model: /^[a-z0-9][a-z0-9.\-]{2,63}$/,
+    // The models the app asks for, and nothing else. Without this the route is a general-purpose key for whatever
+    // that account can reach, which for a URL printed in a public page is not a thing to leave open. Widen it with
+    // the GEMINI_MODELS variable if you want others.
+    models: ['gemini-flash-lite-latest', 'gemini-flash-latest', 'gemini-2.5-flash'],
+    defaultModel: 'gemini-flash-lite-latest',
+    maxOut: 65536,
+    keep: ['contents', 'systemInstruction', 'generationConfig'],   // safetySettings is not forwarded: the app never sends it, and a stranger could use it to turn the filters off on the owner's key
+    // generationConfig is rebuilt field by field for the same reason: candidateCount alone could multiply the bill.
+    conf: ['maxOutputTokens', 'responseMimeType', 'responseSchema', 'thinkingConfig', 'temperature', 'topP', 'stopSequences'],
+    cap: (body, max) => {
+      const g = body.generationConfig && typeof body.generationConfig === 'object' ? body.generationConfig : {};
+      const out = {};
+      for (const k of FREE.gemini.conf) if (k in g) out[k] = g[k];
+      if (!(Number(out.maxOutputTokens) > 0) || Number(out.maxOutputTokens) > max) out.maxOutputTokens = max;
+      body.generationConfig = out;
+    }
+  },
+  groq: {
+    secret: 'GROQ_API_KEY',
+    url: () => 'https://api.groq.com/openai/v1/chat/completions',
+    auth: key => ({ authorization: 'Bearer ' + key }),
+    model: /^[A-Za-z0-9][A-Za-z0-9._\-]{0,63}(\/[A-Za-z0-9][A-Za-z0-9._\-]{0,63})?$/,
+    models: ['meta-llama/llama-4-scout-17b-16e-instruct', 'llama-3.3-70b-versatile', 'llama-3.1-8b-instant'],
+    defaultModel: 'llama-3.3-70b-versatile',
+    maxOut: 8192,   // these models take far less than the app's biggest ask, and a request over the limit is a flat 400
+    keep: ['model', 'messages', 'stream', 'response_format', 'max_completion_tokens', 'temperature', 'top_p', 'stop', 'seed', 'reasoning_effort'],
+    cap: (body, max) => { if (!(Number(body.max_completion_tokens) > 0) || Number(body.max_completion_tokens) > max) body.max_completion_tokens = max; }
+  },
+  openrouter: {
+    secret: 'OPENROUTER_API_KEY',
+    url: () => 'https://openrouter.ai/api/v1/chat/completions',
+    auth: (key, env) => ({ authorization: 'Bearer ' + key, 'HTTP-Referer': env.SITE_URL || 'https://foodscanner.example', 'X-Title': 'FoodScanner' }),
+    model: /^[A-Za-z0-9][A-Za-z0-9._\-]{0,63}(\/[A-Za-z0-9][A-Za-z0-9._:\-]{0,63})?$/,
+    // Only the free router. OpenRouter will happily serve paid models on the same key, so an open route here would
+    // be a way to spend the owner's credit.
+    models: ['openrouter/free'],
+    defaultModel: 'openrouter/free',
+    maxOut: 16384,
+    keep: ['model', 'messages', 'stream', 'response_format', 'max_tokens', 'temperature', 'top_p', 'stop', 'seed'],
+    cap: (body, max) => { if (!(Number(body.max_tokens) > 0) || Number(body.max_tokens) > max) body.max_tokens = max; }
+  }
+};
+const FREE_REFUSE = ['tools', 'tool_choice', 'functions', 'function_call', 'tool_config', 'cachedContent', 'plugins', 'transforms'];
 const USDA_UPSTREAM = 'https://api.nal.usda.gov/fdc/v1/foods/search';
 // The only search the Worker makes for a caller is the app's own: a barcode (8 to 14 digits) among branded foods, one
 // page of at most 25. Anything else is refused, so the route is worthless as a general USDA search on the owner's key.
@@ -25,14 +85,28 @@ export default {
     if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors });
     const url = new URL(request.url);
     const path = url.pathname.replace(/\/{2,}/g, '/').replace(/(.)\/$/, '$1');   // a base URL pasted with a trailing slash gives '//usda/...'
+    const served = Object.keys(FREE).filter(id => !!env[FREE[id].secret]);
     if (request.method === 'GET' && (path === '/' || path === '')) {
-      const usda = env.USDA_API_KEY ? ' and GET /usda/foods/search' : '';
-      return new Response('FoodScanner AI proxy is running. It only serves POST /v1/messages' + usda + ' for the allowed origins.\n', { status: 200, headers: { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'no-store' } });
+      const routes = served.map(id => 'POST /v1/' + id).concat(env.ANTHROPIC_API_KEY ? ['POST /v1/messages'] : [], env.USDA_API_KEY ? ['GET /usda/foods/search'] : []);
+      return new Response('FoodScanner AI proxy is running. It serves ' + (routes.length ? routes.join(', ') : 'nothing yet: no key is set') + ' for the allowed origins.\n', { status: 200, headers: { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'no-store' } });
     }
+    // What this proxy can actually answer, so the app's settings screen can say so without spending a request
+    // finding out. Deliberately before the token check: it names no key and reveals nothing worth hiding.
+    if (request.method === 'GET' && path === '/v1/providers') {
+      const out = new Headers(cors);
+      out.set('content-type', 'application/json');
+      out.set('cache-control', 'no-store');
+      return new Response(JSON.stringify({ providers: served.concat(env.ANTHROPIC_API_KEY ? ['anthropic'] : []), usda: !!env.USDA_API_KEY }), { status: 200, headers: out });
+    }
+    const freeId = request.method === 'POST' && /^\/v1\/([a-z]+)$/.test(path) ? path.slice(4) : '';
+    const isFree = !!(freeId && Object.prototype.hasOwnProperty.call(FREE, freeId));   // a bare lookup would make /v1/constructor a service
     const isAI = request.method === 'POST' && path === '/v1/messages';
     const isUSDA = request.method === 'GET' && path === '/usda/foods/search';
-    if (!isAI && !isUSDA) return reply(404, 'not_found_error', 'Only POST /v1/messages and GET /usda/foods/search are served here.', cors);
-    if (isAI && !env.ANTHROPIC_API_KEY) return reply(500, 'api_error', 'The proxy has no ANTHROPIC_API_KEY secret. Run: wrangler secret put ANTHROPIC_API_KEY', cors);
+    if (!isAI && !isUSDA && !isFree) return reply(404, 'not_found_error', 'Only POST /v1/messages, POST /v1/{gemini,groq,openrouter} and GET /usda/foods/search are served here.', cors);
+    // 501 rather than 500: the app reads it as "this proxy does not do that service", crosses it off for the rest of
+    // the page load and asks the next one, instead of a wasted round trip on every scan.
+    if (isFree && !env[FREE[freeId].secret]) return reply(501, 'not_configured', 'The proxy has no ' + FREE[freeId].secret + ' secret. Run: wrangler secret put ' + FREE[freeId].secret, cors);
+    if (isAI && !env.ANTHROPIC_API_KEY) return reply(501, 'not_configured', 'The proxy has no ANTHROPIC_API_KEY secret. Run: wrangler secret put ANTHROPIC_API_KEY', cors);
     // The app treats this 404 as "this proxy does not do USDA" and stops asking for the rest of the page load.
     if (isUSDA && !env.USDA_API_KEY) return reply(404, 'not_found_error', 'The proxy has no USDA_API_KEY secret, so it does not serve USDA lookups. Run: wrangler secret put USDA_API_KEY', cors);
     if (env.LIMITER) {   // optional Workers rate-limiting binding, per client address, counted before any other check so guesses cost too (see wrangler.toml)
@@ -55,6 +129,7 @@ export default {
       text = new TextDecoder().decode(buf);
       body = JSON.parse(text);
     } catch (e) { return reply(400, 'invalid_request_error', 'The request body must be JSON.', cors); }
+    if (isFree) return freeForward(freeId, body, env, cors);
     if (!body || typeof body !== 'object' || Array.isArray(body) || !Array.isArray(body.messages)) return reply(400, 'invalid_request_error', 'The request body must be a Messages API request.', cors);
     for (const k of REFUSE) if (k in body) return reply(400, 'invalid_request_error', 'The proxy does not forward ' + k + '.', cors);
     const models = list(env.ALLOWED_MODELS);
@@ -73,6 +148,32 @@ export default {
     return passThrough(upstream, cors);   // streamed through, so SSE answers arrive as they are written
   }
 };
+
+// One free service, forwarded with the Worker's key. The body is rebuilt field by field from a list of what the app
+// actually sends, so nothing a caller invents reaches the service, and the model name has to look like a model name.
+async function freeForward(id, body, env, cors) {
+  const p = FREE[id];
+  if (!body || typeof body !== 'object' || Array.isArray(body)) return reply(400, 'invalid_request_error', 'The request body must be an object.', cors);
+  for (const k of FREE_REFUSE) if (k in body) return reply(400, 'invalid_request_error', 'The proxy does not forward ' + k + '.', cors);
+  const stream = body.stream === true;
+  const allowed = list(env[id.toUpperCase() + '_MODELS']).concat(p.models);   // the variable widens the built-in list, it does not replace the guard
+  let model = typeof body.model === 'string' && body.model ? body.model : p.defaultModel;
+  if (!p.model.test(model)) return reply(400, 'invalid_request_error', 'That model name is not one this proxy will forward.', cors);
+  if (allowed.indexOf(model) < 0) return reply(400, 'invalid_request_error', 'This model is not allowed by the proxy.', cors);
+  const out = {};
+  for (const k of p.keep) if (k in body) out[k] = body[k];
+  if ('model' in out) out.model = model;
+  if (stream && 'stream' in out) out.stream = true;
+  // Each service has its own ceiling: one shared number is either far above what the smallest model accepts (a flat
+  // 400 the app cannot do anything with) or needlessly below what the largest one would write.
+  const envMax = Number(env.MAX_TOKENS) > 0 ? Number(env.MAX_TOKENS) : 32000;
+  p.cap(out, Math.min(p.maxOut, envMax));
+  const headers = Object.assign({ 'content-type': 'application/json' }, p.auth(env[p.secret], env));
+  let upstream;
+  try { upstream = await fetch(p.url(model, stream), { method: 'POST', headers, body: JSON.stringify(out) }); }
+  catch (e) { return reply(502, 'api_error', 'The proxy could not reach ' + id + '.', cors); }
+  return passThrough(upstream, cors);   // streamed through, so SSE answers arrive as they are written
+}
 
 // USDA FoodData Central search with the Worker's key: the query is rebuilt from scratch (a caller's api_key or any
 // other field never reaches USDA), the query must look like a barcode and the page size is bounded.
