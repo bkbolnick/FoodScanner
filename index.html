@@ -1988,9 +1988,15 @@ var ADDED_SUGAR_RE = /\b(sugar|sucrose|glucose|fructose|dextrose|maltose|syrup|h
 // after it. Without this, sugar snap peas lose their whole-food standing.
 var NOT_ADDED_SUGAR_RE = /\b(no|without|zero)\s+added\s+sugars?\b|\bsugars?[-\s]?free\b|\bunsweetened\b|\bsugar[-\s]?snap\b/gi;
 // A single-ingredient whole food: nothing was added to it, so the sugar and fat it carries are the food's own.
+// A group 1 from a photo is not evidence of one ingredient. The estimate rules tell the model that a dish cooked at
+// home from whole foods is group 1, which is what NOVA means — but a home-baked flapjack is group 1 and its sugar is
+// not intrinsic. So an estimated group only stands in for "one intact food" when the list it came with names one
+// thing, the same shape test singleFoodNoNova makes below, and for the same reason: a list of six ingredients once
+// read as an intact whole food and had its sugar waived. A group from a database is left exactly as it was.
 function isWholeFood(m, e) {
   if (m.nova.v !== 1) return false;
   if ((m.additives.v || []).length) return false;
+  if (m.nova.from === 'AI estimate' && ingredientCount(m.ingredients && m.ingredients.v) !== 1) return false;
   return !addedSugarWord(m.ingredients && m.ingredients.v);
 }
 // ------------------------------------------------------------------ free sugars
