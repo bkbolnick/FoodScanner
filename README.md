@@ -39,8 +39,9 @@ type, semantic colours in light and dark, a bottom tab bar, grouped settings and
    with a **Per serving / Per 100 g** switch: net carbs (carbs − fiber) on top, then calories, carbs, sugars,
    fiber, protein, fat, saturated fat and sodium, the serving size, and a **Missing fields** line naming whichever
    of serving size, carbs, sugars, fiber, protein and ingredients no source provided. Below that: ingredients, NOVA
-   group, Nutri-Score, additives, categories, a **Sources** section saying what each database returned, a
-   per-source coverage table, and **Refresh** (bypasses the cache), **Open in Open Food Facts / USDA** and **Copy JSON**.
+   group (with what decided it, when the model judged it rather than a database), Nutri-Score, additives,
+   categories, a **Sources** section saying what each database returned, a per-source coverage table, and
+   **Refresh** (bypasses the cache), **Open in Open Food Facts / USDA** and **Copy JSON**.
 5. **Photograph food** (on the Analyze screen, below Scan a barcode, or the camera button while scanning) reads a
    photo of a product, a dish or a meal with no barcode: the model names it, estimates the nutrition of the portion
    shown, reads the ingredients and allergens off the label when one is legible, and the result opens in the same
@@ -181,6 +182,10 @@ On first open the app asks how products should be scored. Both choices can be ch
   the pack said. Juice is not recomputed: its sugar really is free sugar, so there is nothing to correct. Alongside
   that, additives (25 points, the riskiest additive sets the ceiling and each extra one costs a little),
   processing (15 points from the NOVA group: 1 → 15, 2 → 12, 3 → 8, 4 → 2) and organic certification (10 points).
+  The NOVA group says how a food was **made**, not how elaborate the dish looks, so cooking at home from whole
+  ingredients keeps a dish in group 1 however many pans it took; a dish is group 3 or 4 only when a manufactured
+  product is part of it (the shop-bought bread under it, the jarred sauce over it). For anything the model judged
+  rather than a database supplied, the card shows the few words it gave for why, beside the group.
   Components without data are left out and the score is rescaled with a note; if nutrition is among them the score is
   shown as **low confidence**, and no score is shown when only the organic label is known.
 - **Custom**: five questions, each about one thing, all answered by tapping: (1) which nutrients you want less of

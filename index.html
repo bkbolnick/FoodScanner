@@ -276,6 +276,7 @@ input[type=range] { accent-color: var(--accent); width: 100%; margin: 0; }
 .rsn .dot.green { background: var(--green); } .rsn .dot.best { background: var(--best); }
 .rsn .dot.orange { background: var(--orange); } .rsn .dot.red { background: var(--red); }
 .rsn .rt { flex: 1 1 auto; min-width: 0; letter-spacing: -0.005em; }
+.rsn .rs { display: block; margin-top: 2px; color: var(--label2); font-size: 0.824rem; letter-spacing: 0; }
 .rsn .rd { flex: none; max-width: 48%; text-align: right; white-space: nowrap; color: var(--label2); font-size: 0.824rem; }
 .score .note { margin-top: 10px; }
 .fac { list-style: none; margin: 0; padding: 0; }
@@ -1453,7 +1454,7 @@ function mergeProduct(entry) {
     return { v: null, from: null };
   }
   var m = { barcode: entry.barcode, found: srcs.length > 0, sources: srcs.map(function (s) { return s.source; }), label: lab };
-  ['name', 'brand', 'image', 'quantity', 'servingSize', 'ingredients', 'nova', 'nutriscore', 'additives', 'categories'].forEach(function (f) { m[f] = pick(f); });
+  ['name', 'brand', 'image', 'quantity', 'servingSize', 'ingredients', 'nova', 'novaWhy', 'nutriscore', 'additives', 'categories'].forEach(function (f) { m[f] = pick(f); });
   var per100 = emptyNut(), per100From = {};
   NUT_KEYS.forEach(function (k) {
     for (var i = 0; i < srcs.length; i++) { if (srcs[i].per100[k] !== null) { per100[k] = srcs[i].per100[k]; per100From[k] = srcs[i].source; break; } }
@@ -1906,6 +1907,18 @@ function linScore(v, th, dir) {
 // Standard score: nutritional quality 50 (Nutri-Score), additives 25 (by risk level), processing 15 (NOVA group),
 // organic 10. Rescaled over the components that have data.
 var NOVA_LABELS = { 1: 'unprocessed / minimally processed', 2: 'processed culinary ingredient', 3: 'processed', 4: 'ultra-processed' };
+// A photo or menu estimate is asked to say in a few words what decided the NOVA group, because the group is the one
+// judgement on the card with no ingredient list behind it. It is shown only when the group and the reason came from
+// the same source: a reason the model gave must never end up attached to a group Open Food Facts supplied.
+function novaWhyOf(m) {
+  if (!m || !m.nova || !m.novaWhy) return '';
+  if (m.nova.v === null || m.nova.v === undefined) return '';
+  if (m.nova.from !== m.novaWhy.from) return '';
+  var w = String(m.novaWhy.v === null || m.novaWhy.v === undefined ? '' : m.novaWhy.v).replace(/\s+/g, ' ').trim().replace(/[.;,\s]+$/, '');
+  if (!w) return '';
+  if (w.length > 64) w = w.slice(0, 63).replace(/\s+\S*$/, '') + '\u2026';   // the model is asked for six words; it is not always obeyed
+  return w;
+}
 function standardScore(m, e) {
   var comps = [];
   var ns = nutriScoreOf(m, e);
@@ -1922,7 +1935,8 @@ function standardScore(m, e) {
   var est = !!(e.ai && e.ai.norm);
   comps.push({ key: 'additives', label: 'Additives', max: 25, score: ad ? Math.round(ad.score * 0.25) : null, text: ad ? ad.text : est ? 'no ingredient label was read' : 'no additive analysis (Open Food Facts only)', ad: ad });
   var nova = m.nova.v, novaKnown = nova !== null && nova !== undefined && NOVA_SCORE[nova] !== undefined;
-  comps.push({ key: 'processing', label: 'Processing', max: 15, score: novaKnown ? Math.round(NOVA_SCORE[nova] * 0.15) : null, text: novaKnown ? 'NOVA ' + nova + ' (' + NOVA_LABELS[nova] + ')' : est ? 'NOVA group not judged' : 'NOVA group unknown (Open Food Facts only)', nova: novaKnown ? nova : null });
+  var novaWhy = novaKnown ? novaWhyOf(m) : '';
+  comps.push({ key: 'processing', label: 'Processing', max: 15, score: novaKnown ? Math.round(NOVA_SCORE[nova] * 0.15) : null, text: novaKnown ? 'NOVA ' + nova + ' (' + NOVA_LABELS[nova] + ')' + (novaWhy ? ' \u2014 ' + novaWhy : '') : est ? 'NOVA group not judged' : 'NOVA group unknown (Open Food Facts only)', nova: novaKnown ? nova : null, novaWhy: novaWhy });
   var org = organicOf(e);
   comps.push({ key: 'organic', label: 'Organic', max: 10, score: org === null ? null : (org ? 10 : 0), text: org === null ? 'unknown' : (org ? 'organic label' : 'no organic label') });
   var have = comps.filter(function (c) { return c.score !== null; });
@@ -1974,9 +1988,15 @@ var ADDED_SUGAR_RE = /\b(sugar|sucrose|glucose|fructose|dextrose|maltose|syrup|h
 // after it. Without this, sugar snap peas lose their whole-food standing.
 var NOT_ADDED_SUGAR_RE = /\b(no|without|zero)\s+added\s+sugars?\b|\bsugars?[-\s]?free\b|\bunsweetened\b|\bsugar[-\s]?snap\b/gi;
 // A single-ingredient whole food: nothing was added to it, so the sugar and fat it carries are the food's own.
+// A group 1 from a photo is not evidence of one ingredient. The estimate rules tell the model that a dish cooked at
+// home from whole foods is group 1, which is what NOVA means — but a home-baked flapjack is group 1 and its sugar is
+// not intrinsic. So an estimated group only stands in for "one intact food" when the list it came with names one
+// thing, the same shape test singleFoodNoNova makes below, and for the same reason: a list of six ingredients once
+// read as an intact whole food and had its sugar waived. A group from a database is left exactly as it was.
 function isWholeFood(m, e) {
   if (m.nova.v !== 1) return false;
   if ((m.additives.v || []).length) return false;
+  if (m.nova.from === 'AI estimate' && ingredientCount(m.ingredients && m.ingredients.v) !== 1) return false;
   return !addedSugarWord(m.ingredients && m.ingredients.v);
 }
 // ------------------------------------------------------------------ free sugars
@@ -2168,7 +2188,10 @@ function customScore(m, e, prof) {
       }
     } else if (met.key === 'processing') {
       var nova = m.nova.v;
-      if (nova !== null && nova !== undefined && NOVA_SCORE[nova] !== undefined) { s = NOVA_SCORE[nova]; text = 'NOVA ' + nova; extra.nova = nova; }
+      if (nova !== null && nova !== undefined && NOVA_SCORE[nova] !== undefined) {
+        var novaWhy = novaWhyOf(m);
+        s = NOVA_SCORE[nova]; text = 'NOVA ' + nova + (novaWhy ? ' \u2014 ' + novaWhy : ''); extra.nova = nova; extra.novaWhy = novaWhy;
+      }
     } else if (met.key === 'additives') {
       var ad = additivesScore(m, e);
       if (ad) { s = ad.score; text = ad.text; extra.ad = ad; }
@@ -2475,7 +2498,7 @@ function factorWords(r, sc) {
     var wouldRead = sw && r.sugar.waived ? ' On the cut-offs alone it would have read ' + r.s + ' of 100.' : '';
     return { title: sw ? sw.title : nutrientTitle(met.key, r.dir, r.s), value: value, detail: value + '. ' + cutoffPhrase(met, r.th, r.dir) + per + (paren ? ' (' + paren + ')' : '') + '.' + bonus + floored + wouldRead, tone: (sw && r.sugar.waived) ? 'mid' : tone, noun: noun };
   }
-  if (r.key === 'processing') return { title: NOVA_WORDS[r.nova] || 'NOVA group ' + r.nova, value: 'NOVA group ' + r.nova, detail: 'NOVA group ' + r.nova + '. Groups 1 to 4 score 100, 80, 50 and 10.', tone: tone, noun: noun };
+  if (r.key === 'processing') return { title: NOVA_WORDS[r.nova] || 'NOVA group ' + r.nova, value: 'NOVA group ' + r.nova, sub: r.novaWhy || '', detail: 'NOVA group ' + r.nova + (r.novaWhy ? ', ' + r.novaWhy : '') + '. Groups 1 to 4 score 100, 80, 50 and 10.', tone: tone, noun: noun };
   if (r.key === 'additives') return { title: additiveTitle(r.ad), value: '', detail: additiveNames(r.ad) + (r.ad && r.ad.count ? ' The riskiest additive sets the most marks possible; each extra additive takes 5 off.' : ''), tone: tone, noun: noun };
   if (r.key === 'organic') { var hasOrg = r.org === true; return { title: hasOrg ? 'Organic label' : 'No organic label', value: '', detail: (hasOrg ? 'Organic label' : 'No organic label') + ' in Open Food Facts. Counts as a bonus only: a missing label never takes points away.', tone: hasOrg ? 'good' : 'mid', noun: noun }; }
   return { title: r.label, value: '', detail: r.text, tone: tone, noun: noun };
@@ -2487,7 +2510,7 @@ function componentWords(c) {
   var ratio = Math.round(100 * c.score / c.max), tone = toneOf(ratio);
   if (c.key === 'nutrition') return { title: ['Good nutrition', 'Fairly good nutrition', 'Fairly poor nutrition', 'Poor nutrition'][tierOf(ratio)], value: c.grade ? 'Nutri-Score ' + String(c.grade).toUpperCase() + (c.estimated ? ', estimated' : '') : '', detail: capitalize(c.text) + '. A scores about 48, B 40, C 30, D 18, E 6.', tone: tone, noun: noun };
   if (c.key === 'additives') return { title: additiveTitle(c.ad), value: '', detail: additiveNames(c.ad) + (c.ad && c.ad.count ? ' The riskiest additive sets the most marks possible; each extra additive takes 5 off. Scaled to 25.' : ''), tone: tone, noun: noun };
-  if (c.key === 'processing') return { title: NOVA_WORDS[c.nova] || 'Processing', value: 'NOVA group ' + c.nova, detail: 'NOVA group ' + c.nova + '. Groups 1 to 4 score 15, 12, 8 and 2.', tone: tone, noun: noun };
+  if (c.key === 'processing') return { title: NOVA_WORDS[c.nova] || 'Processing', value: 'NOVA group ' + c.nova, sub: c.novaWhy || '', detail: 'NOVA group ' + c.nova + (c.novaWhy ? ', ' + c.novaWhy : '') + '. Groups 1 to 4 score 15, 12, 8 and 2.', tone: tone, noun: noun };
   return { title: c.score ? 'Organic label' : 'No organic label', value: '', detail: (c.score ? 'Organic label' : 'No organic label') + ' in Open Food Facts.', tone: tone, noun: noun };
 }
 // Photographed food is scored from what the model can see. How it was cooked is invisible: restaurant and home
@@ -2547,7 +2570,7 @@ function renderScore(sc, estimated) {
   var reasons = (sc.why || []).filter(function (w) { return w.weight > 0 && byKey[w.key]; }).slice(0, 3);
   if (reasons.length) sec.appendChild(h('ul', { class: 'rsn' }, reasons.map(function (w) {
     var words = wordsOf(byKey[w.key]);
-    return h('li', {}, [toneDot(words.tone), h('span', { class: 'rt', text: words.title }), words.value ? h('span', { class: 'rd', text: words.value }) : null]);
+    return h('li', {}, [toneDot(words.tone), h('span', { class: 'rt' }, [words.title, words.sub ? h('span', { class: 'rs', text: words.sub }) : null]), words.value ? h('span', { class: 'rd', text: words.value }) : null]);
   })));
   var missingNouns = items.filter(function (x) { return !has(x); }).map(function (x) { return wordsOf(x).noun; });
   if (sc.sugar && byKey.sugars) {
@@ -3036,7 +3059,8 @@ function renderResult(res) {
   ]));
   var kv = h('ul', { class: 'kv' });
   function kvRow(k, v) { kv.appendChild(h('li', {}, [h('span', { class: 'k', text: k }), h('span', { class: 'v' }, v)])); }
-  kvRow('NOVA group', m.nova.v !== null ? [String(m.nova.v), NOVA_LABELS[m.nova.v] ? h('span', { class: 'd', style: 'display:block', text: capitalize(NOVA_LABELS[m.nova.v]) }) : null] : 'unknown');
+  var novaWhy = novaWhyOf(m), novaSub = NOVA_LABELS[m.nova.v] ? capitalize(NOVA_LABELS[m.nova.v]) + (novaWhy ? ' \u2014 ' + novaWhy : '') : (novaWhy ? capitalize(novaWhy) : null);
+  kvRow('NOVA group', m.nova.v !== null ? [String(m.nova.v), novaSub ? h('span', { class: 'd', style: 'display:block', text: novaSub }) : null] : 'unknown');
   var ns = (m.nutriscore.v && /^[a-e]$/i.test(String(m.nutriscore.v))) ? String(m.nutriscore.v).toLowerCase() : null;
   var nsNote = (e.off.norm && e.off.norm.nutriscoreNote) ? String(e.off.norm.nutriscoreNote).replace(/-/g, ' ') : null;
   kvRow('Nutri-Score', ns ? h('span', { class: 'nutri ' + ns, text: ns.toUpperCase(), 'aria-label': 'Nutri-Score ' + ns.toUpperCase() }) : (nsNote ? nsNote + ' (no grade)' : 'unknown'));
@@ -4090,7 +4114,8 @@ function estItemProps() {
     fat: { type: 'number', description: 'Total fat in the portion, grams' },
     sat_fat: { type: 'number', description: 'Saturated fat in the portion, grams' },
     sodium_mg: { type: 'number', description: 'Sodium in the portion, milligrams' },
-    nova: { type: 'integer', description: 'NOVA processing group 1 to 4 for the food as served; 0 if it cannot be judged' },
+    nova: { type: 'integer', description: 'NOVA processing group 1 to 4, judged from how the food was made; 0 if it cannot be judged' },
+    nova_why: { type: 'string', description: 'One short phrase, six words or fewer, saying what decided the NOVA group, e.g. "cooked from whole ingredients" or "shop-bought bread underneath"; empty when nova is 0' },
     ingredients: { type: 'string', description: 'The ingredient list as printed when a label is legible; otherwise the likely main ingredients, comma-separated' },
     ingredients_from_label: { type: 'boolean', description: 'true only when the ingredient list was read from a printed label in the photo' },
     additives: { type: 'array', items: { type: 'string' }, description: 'Additives read from a printed label, as E-numbers ("e322") or names; empty when there is no label' },
@@ -4134,7 +4159,14 @@ var MENU_SCHEMA = aiSchemaObject({
 });
 var EST_SHARED = 'Allergen keys are exactly: ' + EST_ALLERGEN_KEYS.join(', ') + ' (gluten covers wheat, barley, rye; nuts means tree nuts; soybeans means soy). ' +
   'Estimate nutrition the way a registered dietitian would from standard food composition references; give a best estimate rather than leaving a figure at zero. ' +
-  'NOVA: 1 unprocessed or minimally processed, 2 culinary ingredient, 3 processed, 4 ultra-processed; judge the food as served.';
+  'NOVA groups describe how a food was MADE, not how elaborate the dish looks. ' +
+  '1 is unprocessed or minimally processed food: fresh, dried, frozen, ground, roasted, boiled or otherwise plainly cooked vegetables, fruit, grains, pulses, meat, fish, eggs, plain milk and yogurt, unsalted nuts and seeds. ' +
+  '2 is a culinary ingredient used to cook and season with: oil, butter, lard, salt, sugar, honey, vinegar. ' +
+  '3 is a MANUFACTURED product made by adding group 2 ingredients to group 1 food, usually to preserve it or make it more palatable: canned vegetables or beans in brine, salted or sugared nuts, cheese, shop-bought bread, cured or smoked meat, canned fish, most jarred sauces. ' +
+  '4 is an ultra-processed formulation built from substances not used in home cooking. ' +
+  'Cooking does not move a food up a group. A dish made at home from group 1 foods, roasted or fried or dressed with oil, salt, lemon, herbs and spices, is group 1 \u2014 that is the pattern NOVA recommends, not a processed product. ' +
+  'Give a dish group 3 or 4 only when a manufactured group 3 or 4 product is a real part of it (the bread under it, the shop sausages in it, the jarred sauce over it), and name that product in nova_why. ' +
+  'If you cannot tell how the food was made, set nova 0 rather than guessing a middle group.';
 var EST_RULES = EST_SHARED + ' Nutrition figures describe the portion in serving_text; serving_grams and nova may be 0 when they cannot be judged. Never invent a barcode.';
 var PHOTO_SYSTEM = 'You read food photos for a consumer food-scanning app and answer only with JSON matching the schema. ' + EST_RULES +
   ' When a nutrition table is legible, copy its figures for the printed serving and set confidence high; set ingredients_from_label true only when the ingredient list itself is legible.';
@@ -4165,7 +4197,7 @@ function estimateNorm(item, opts) {
     source: 'AI estimate', name: text(item.name), brand: text(item.brand), image: (opts && opts.preview) || null, quantity: null,
     servingSize: text(item.serving_text) || (grams ? grams + (drink ? ' ml' : ' g') : null), servingGrams: grams,
     per100: per100, perServing: perServing,
-    ingredients: ingredients, nova: nova, nutriscorePoints: null, labelsKnown: false, organic: false, nutriscore: null, nutriscoreNote: null,
+    ingredients: ingredients, nova: nova, novaWhy: nova === null ? null : text(item.nova_why), nutriscorePoints: null, labelsKnown: false, organic: false, nutriscore: null, nutriscoreNote: null,
     additives: fromLabel ? (Array.isArray(item.additives) ? item.additives.map(function (a) { return String(a).toLowerCase().trim(); }).filter(Boolean) : []) : [],
     additivesAnalysed: fromLabel && !!ingredients,
     allergens: keys(item.allergens), traces: keys(item.may_contain), analysis: analysis,
@@ -4251,7 +4283,7 @@ var LABEL_SCHEMA = aiSchemaObject({
   vegan: { type: 'string', enum: ['yes', 'no', 'maybe'] },
   vegetarian: { type: 'string', enum: ['yes', 'no', 'maybe'] },
   palm_oil: { type: 'string', enum: ['yes', 'no', 'maybe', 'unknown'] },
-  nova: { type: 'integer', description: 'NOVA processing group 1 to 4 judged from the printed ingredient list; 0 when the list is not legible' },
+  nova: { type: 'integer', description: 'NOVA processing group 1 to 4 judged from the printed ingredient list: 1 when the list is one whole food and nothing else, 4 when it names substances not used in home cooking; 0 when the list is not legible' },
   note: { type: 'string', description: 'What could not be read, in one short line; empty when the panel was fully legible' }
 });
 var LABEL_SYSTEM = 'You read printed food labels for a consumer food-scanning app and answer only with JSON matching the schema. ' +
@@ -4901,7 +4933,8 @@ function mealProps() {
     fat: { type: 'number', description: 'Total fat per serving, grams' },
     sat_fat: { type: 'number', description: 'Saturated fat per serving, grams' },
     sodium_mg: { type: 'number', description: 'Sodium per serving, milligrams' },
-    nova: { type: 'integer', description: 'NOVA group 1 to 4 of the meal as prepared' },
+    nova: { type: 'integer', description: 'NOVA group 1 to 4, judged from how the meal is made; a meal cooked from whole ingredients is 1' },
+    nova_why: { type: 'string', description: 'One short phrase, six words or fewer, saying what decided the NOVA group' },
     allergens: { type: 'array', items: { type: 'string', enum: EST_ALLERGEN_KEYS }, description: 'Allergens the meal contains' },
     may_contain: { type: 'array', items: { type: 'string', enum: EST_ALLERGEN_KEYS }, description: 'Allergens that may be present' },
     vegan: { type: 'string', enum: ['yes', 'no', 'maybe'] },
@@ -5439,11 +5472,11 @@ function samplePlan() {
           meal({ mealType: 'Dinner', title: 'Herb-crusted salmon with roasted vegetables', portions: '5 oz salmon, 1.5 cups roasted vegetables, a small portion of brown rice', ingredients: ['5 oz salmon fillet', '1 cup broccoli florets', '1/2 cup bell peppers', '1/2 cup zucchini', '2 tbsp dill and parsley', '1 tbsp olive oil', '1/3 cup brown rice'],
             steps: ['Heat the oven to 400°F (200°C)', 'Toss the vegetables with half the oil and roast for 20 minutes', 'Season the salmon with the herbs and the remaining oil', 'Add the salmon to the pan and roast 12 to 15 minutes until flaky', 'Serve over the brown rice'], tags: ['high-protein', 'heart-healthy', 'omega-3'],
             foodOrderTip: 'Begin with the roasted broccoli and zucchini, then the salmon, and have the rice as the final course.', prepTime: 35, serving_grams: 450, kcal: 580, carbs: 34, sugars: 6, fiber: 6, protein: 38, fat: 30, sat_fat: 5, sodium_mg: 320, nova: 1, allergens: ['fish'] })],
-          snacks: [meal({ mealType: 'Snack', title: 'Apple slices with almond butter', portions: '1 medium apple, 2 tbsp almond butter', ingredients: ['1 medium apple', '2 tbsp almond butter'], foodOrderTip: 'Dip the apple in the almond butter so each bite of fruit comes with protein and fat.', prepTime: 3, serving_grams: 210, kcal: 280, carbs: 30, sugars: 20, fiber: 6, protein: 7, fat: 18, sat_fat: 1.5, sodium_mg: 5, nova: 3, allergens: ['nuts'], vegan: 'yes', vegetarian: 'yes' })] },
+          snacks: [meal({ mealType: 'Snack', title: 'Apple slices with almond butter', portions: '1 medium apple, 2 tbsp almond butter', ingredients: ['1 medium apple', '2 tbsp almond butter'], foodOrderTip: 'Dip the apple in the almond butter so each bite of fruit comes with protein and fat.', prepTime: 3, serving_grams: 210, kcal: 280, carbs: 30, sugars: 20, fiber: 6, protein: 7, fat: 18, sat_fat: 1.5, sodium_mg: 5, nova: 1, allergens: ['nuts'], vegan: 'yes', vegetarian: 'yes' })] },
         { dayName: 'Tuesday', meals: [
           meal({ mealType: 'Breakfast', title: 'Overnight oats with berries', portions: '1/2 cup oats, 1/2 cup berries, nuts', ingredients: ['1/2 cup rolled oats', '1/2 cup Greek yogurt', '1/2 cup unsweetened almond milk', '1/2 cup mixed berries', '1 tbsp chia seeds', '2 tbsp walnuts'],
             steps: ['Combine the oats, yogurt, milk and chia in a jar', 'Refrigerate overnight', 'Top with the berries and walnuts before eating'], tags: ['high-fiber', 'heart-healthy', 'no-cook'],
-            foodOrderTip: 'Stir the chia and walnuts in first, then eat slowly so each spoonful carries protein and fiber along with the oats.', prepTime: 5, serving_grams: 350, kcal: 420, carbs: 48, sugars: 12, fiber: 10, protein: 20, fat: 18, sat_fat: 3, sodium_mg: 90, nova: 3, allergens: ['milk', 'nuts'], may_contain: ['gluten'], vegetarian: 'yes' }),
+            foodOrderTip: 'Stir the chia and walnuts in first, then eat slowly so each spoonful carries protein and fiber along with the oats.', prepTime: 5, serving_grams: 350, kcal: 420, carbs: 48, sugars: 12, fiber: 10, protein: 20, fat: 18, sat_fat: 3, sodium_mg: 90, nova: 1, allergens: ['milk', 'nuts'], may_contain: ['gluten'], vegetarian: 'yes' }),
           meal({ mealType: 'Lunch', title: 'Turkey and avocado lettuce wraps', portions: '4 oz turkey, 1/2 avocado, as much lettuce as you like', ingredients: ['4 oz sliced turkey breast', '4 large butter lettuce leaves', '1/2 avocado, sliced', '1/4 cup shredded carrots', '1/4 cup red cabbage', '2 tbsp Greek yogurt ranch'],
             steps: ['Lay out the lettuce leaves', 'Layer the turkey, avocado, carrots and cabbage', 'Drizzle with the ranch, roll up and eat'], tags: ['low-carb', 'high-protein', 'quick'],
             foodOrderTip: 'The vegetables are wrapped with the protein here, so eat the wraps as they are.', prepTime: 10, serving_grams: 320, kcal: 380, carbs: 14, sugars: 5, fiber: 8, protein: 32, fat: 22, sat_fat: 4, sodium_mg: 720, nova: 3, allergens: ['milk'] }),
