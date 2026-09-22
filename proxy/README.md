@@ -1,9 +1,16 @@
 # FoodScanner AI proxy
 
-A small Cloudflare Worker that holds the site's API keys. The site sends its Claude requests here instead of to
-api.anthropic.com, the Worker adds the key and streams the answer back; with a USDA key it also answers the barcode
-lookups against USDA FoodData Central. The keys never appear in the repo, on GitHub Pages or in anyone's browser, and
-every visitor gets the photo scan, the menu scanner, the meal planner and USDA data without typing anything.
+A small Cloudflare Worker that holds the site's API keys. The app sends each AI request here instead of to the
+service, the Worker adds the key and streams the answer back; with a USDA key it also answers the barcode lookups
+against USDA FoodData Central. The keys never appear in the repo, on GitHub Pages or in anyone's browser, and every
+visitor gets the photo scan, the menu scanner, the meal planner and USDA data without typing anything.
+
+It serves one route per service: `POST /v1/gemini`, `/v1/groq`, `/v1/openrouter` and `/v1/messages` (Anthropic), plus
+`GET /v1/providers`, which just lists the ones it has keys for. **The three free services are what the app asks by
+default**, in that order, so a Worker with a free key or three costs nothing to run. Anthropic is served for anyone
+who points their own phone at this proxy, but the app never asks for it on the site's keys — a public page must not be
+able to spend a paid balance. A route whose key is missing answers `501`, which the app reads as "not here" and
+crosses off for that page load instead of retrying on every scan.
 
 There are two ways to deploy it. The first needs nothing but a phone.
 
@@ -21,9 +28,17 @@ into `index.html`, all from repository secrets. You collect the keys and paste t
    exactly one. If you have several accounts, copy the id from the **Account details** box at the bottom of the
    Workers & Pages overview page (on a computer it is on the right), or from the address bar after
    `dash.cloudflare.com/`.
-2. **Anthropic.** At https://console.anthropic.com add credit under **Billing**, set a **monthly spend limit** under
-   **Limits** (the only hard cap on what a leaked URL can cost you), then **API keys** › **Create Key** and copy it.
+2. **The free AI keys.** All three take a minute and no card. Get at least the first.
+   - **Gemini**, https://aistudio.google.com/apikey — the one the app asks first, and the one that reads a plate
+     properly. If you set nothing else, set this.
+   - **Groq** (optional), https://console.groq.com/keys — the fast fallback.
+   - **OpenRouter** (optional), https://openrouter.ai/keys — the last fallback; its free router picks among whatever
+     free models are up that day, and the free plan allows fifty requests a day.
 3. **USDA** (optional). Fill in https://fdc.nal.usda.gov/api-key-signup; the key arrives by email within a minute.
+   **Anthropic is optional and is not free.** Only add `ANTHROPIC_API_KEY` if you want people who point their own
+   phone at this proxy to be able to use Claude; the site's own page never asks for it. If you do, set a **monthly
+   spend limit** at https://console.anthropic.com under **Limits** first — it is the only hard cap on what a leaked
+   URL can cost you.
 4. **GitHub.** Open the repo in the phone's browser (the GitHub app cannot edit secrets; in Safari use the
    AA menu › **Request Desktop Website** if the Settings tab is hidden): **Settings** › **Secrets and variables** ›
    **Actions** › **New repository secret**, once per secret:
@@ -32,8 +47,11 @@ into `index.html`, all from repository secrets. You collect the keys and paste t
    | --- | --- |
    | `CLOUDFLARE_API_TOKEN` | the token from step 1 |
    | `CLOUDFLARE_ACCOUNT_ID` | only if the token can see several accounts (step 1) |
-   | `ANTHROPIC_API_KEY` | the key from step 2 |
+   | `GEMINI_API_KEY` | the key from step 2 (leave all three out and the AI features stay off) |
+   | `GROQ_API_KEY` | optional, from step 2 |
+   | `OPENROUTER_API_KEY` | optional, from step 2 |
    | `USDA_API_KEY` | the key from step 3 (leave out to skip USDA) |
+   | `ANTHROPIC_API_KEY` | optional and not free; see step 3 |
 
    A `PROXY_TOKEN` secret is optional (see "Keeping strangers out"); if you set one, use letters, digits, dashes and
    underscores only, since it is written into `index.html` as well as set on the Worker.
@@ -60,7 +78,10 @@ You need a Cloudflare account (free) and Node.js.
 cd proxy
 npx wrangler login                          # opens the browser once
 npx wrangler deploy                         # prints the URL, e.g. https://foodscanner-proxy.<you>.workers.dev
-npx wrangler secret put ANTHROPIC_API_KEY   # paste the key from https://console.anthropic.com/settings/keys
+npx wrangler secret put GEMINI_API_KEY      # free, from https://aistudio.google.com/apikey — the one to set first
+npx wrangler secret put GROQ_API_KEY        # optional, free, from https://console.groq.com/keys
+npx wrangler secret put OPENROUTER_API_KEY  # optional, free, from https://openrouter.ai/keys
+npx wrangler secret put ANTHROPIC_API_KEY   # optional and NOT free; the site's page never asks for it
 npx wrangler secret put USDA_API_KEY        # optional, from https://fdc.nal.usda.gov/api-key-signup
 npx wrangler secret put PROXY_TOKEN         # optional, see "Keeping strangers out" below
 ```
@@ -99,7 +120,9 @@ Either way, a key or proxy a user saves under Settings takes precedence over the
 
 The Worker URL is public, so someone who finds it could spend on your key. Four layers, in order of strength:
 
-- **Spend limit** on the key in the Anthropic console. The only hard cap. Set it.
+- **Free tiers cannot be overspent**, which is the point: the worst a leaked proxy URL can do to a Gemini, Groq or
+  OpenRouter key is use up that day's quota. If you also set `ANTHROPIC_API_KEY`, the **spend limit** on that key in
+  the Anthropic console is the only hard cap there. Set it.
 - **Rate limit**: on by default (the `ratelimits` block in `wrangler.toml`); more than 30 requests a minute from
   one address are refused, USDA lookups included. It is what stops a loop from burning the USDA quota or the spend
   limit; a determined attacker with many addresses gets past it, which is what the spend limit is for.

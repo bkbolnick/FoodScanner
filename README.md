@@ -109,26 +109,56 @@ is embedded in the page, so it works offline. Educational content only, not medi
 
 ## AI features
 
-**Built-in proxy (AI and USDA for everyone).** `proxy/` holds a small Cloudflare Worker that keeps the Anthropic
-key, and optionally a USDA key, on Cloudflare and forwards the site's requests. It can be deployed from a phone: paste
+**It costs nothing to run.** The photo scan, the menu scanner and the meal planner ask a chain of services in order —
+**Gemini, then Groq, then OpenRouter** — until one answers. All three have free tiers, so the app is free to run and
+free to use. No single one of them is load-bearing: a service that is rate limited, out of keys, having a bad day or
+unable to see photos hands the request to the next one down, and only when all of them have refused does the card say
+so, naming the first real reason and which others were asked. A request carrying a photo skips any service that
+cannot read one, so the chain for a photo can be shorter than the chain for the meal planner.
+
+Each service is asked in its own dialect: the photo is inline base64 for Gemini and a `data:` URL for the two
+OpenAI-shaped ones; the answer schema is translated into Gemini's narrower dialect and put into the prompt for the
+services that do not take one; Gemini is asked not to think, because on those models the thinking comes out of the
+same token budget as the answer and a tight cap can be spent entirely on thoughts. The card's source row says which
+one read your food, because they do not all read a plate equally well.
+
+**Claude is opt-in and never free.** Anthropic is in the chain too, but the site's own keys are never used for it:
+save an Anthropic key under Settings and it goes to the front of the queue on your own account, for the best reading
+of a hard photo. With no key of your own, the app never spends anybody's Claude credit.
+
+**Built-in proxy (AI and USDA for everyone).** `proxy/` holds a small Cloudflare Worker that keeps the free keys,
+and optionally a USDA key, on Cloudflare and forwards the site's requests. It can be deployed from a phone: paste
 the keys into the repository's Actions secrets and the workflow in `.github/workflows/deploy-proxy.yml` deploys the
 Worker and writes its URL into `DEFAULT_PROXY` near the top of the script in `index.html` (steps in
-`proxy/README.md`; a computer with `wrangler` works too). Every visitor then gets the photo scan, the menu scanner,
-the meal planner and USDA lookups with nothing to type. For one phone only, open `…/#proxy=<worker url>` instead and
+`proxy/README.md`; a computer with `wrangler` works too). Give it whichever of `GEMINI_API_KEY`, `GROQ_API_KEY` and
+`OPENROUTER_API_KEY` you have — one is enough, three is resilient — and every visitor gets the photo scan, the menu
+scanner, the meal planner and USDA lookups with nothing to type and nothing to pay. A service the Worker has no key
+for answers `501` once; the app crosses it off for that page load and asks the next one, rather than wasting a round
+trip on every scan. `GET /v1/providers` says which keys it holds, which is how the settings screen can be honest
+about it without spending a request finding out. For one phone only, open `…/#proxy=<worker url>` instead and
 agree when the app asks (that covers the AI features, not USDA). A key or proxy a user saves under Settings ›
 Use your own keys always takes precedence over the built-in one; with a built-in proxy those fields stay out of the
 way until asked for.
 
 
-The photo scan, the menu scanner and the meal planner call the Claude API (`claude-opus-5`, Messages API with a
-JSON schema for every answer; when the API cannot compile an answer's schema it answers HTTP 400, and the app then
-sends the same request with no output format, writes the schema into the prompt and reads the JSON out of the text
-answer instead, skipping that schema for the rest of the page load). Under **Settings › AI features** (behind
-**Use your own keys** when the site has a
-built-in proxy) paste an Anthropic API key, or a proxy URL: with a
-key the browser calls `api.anthropic.com` directly and the key is stored only in this browser's localStorage and
-sent only to that host; with a proxy URL the request goes there unchanged, without the key, and the proxy adds its
-own (an optional proxy token travels as a bearer header so the proxy can refuse strangers). Nothing is sent until
+Every answer is asked for as JSON against a schema; when a service cannot compile one it answers HTTP 400, and the
+app sends the same request again with no output format, writes the schema into the prompt and reads the JSON out of
+the text answer instead, skipping that schema on that service for the rest of the page load. A model a service has
+renamed out from under it costs one request, not the feature: the next model in that service's list is tried and
+kept. Under **Settings › AI features** (behind **Use your own keys** when the site has a built-in proxy) you can
+paste a free key for any of the services — it is stored only in this browser's localStorage, sent only to that
+service, and used instead of the site's — or a proxy URL, in which case **everything** goes there, without any key
+saved here, and the proxy adds its own (an optional proxy token travels as a bearer header so the proxy can refuse
+strangers). Only Gemini publishes the CORS headers that let a phone call it directly with a key of your own; a Groq
+or OpenRouter key is therefore used **through the proxy** when there is one, and tried from the phone only when
+there is not — once, after which the settings row says the browser blocked it rather than retrying it on every scan.
+
+Three promises the code keeps, each pinned by a test: the site's own proxy is **never** used for a paid service, so a
+page anybody can open cannot run up a bill (saving the site's own proxy URL as "your own proxy" does not get around
+it); a key you paste for one service is used only for that service and sent only to that service; and if you set a
+proxy of your own, **everything** goes there and no key saved in this browser is sent anywhere. A key a service
+rejects is forgiven once — one refusal is a bad moment, two is a bad key — and then crossed off for the page load,
+with a word about it on screen rather than a silent retry before every scan. Nothing is sent until
 you take a photo or generate a plan, and only what those need is sent: the resized photo, or the plan answers and
 the scoring profile in words (the menu scanner sends only the photo; the ranking happens on the phone). Estimates are the model's best guess and are marked
 as such everywhere they appear; History counts them on their own Photo estimates row and never inside the database

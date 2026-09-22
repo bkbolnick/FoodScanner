@@ -5,7 +5,12 @@
 # Repository secrets:
 #   CLOUDFLARE_API_TOKEN   required; a token made from the "Edit Cloudflare Workers" template
 #   CLOUDFLARE_ACCOUNT_ID  optional; the workflow finds the account itself when the token can see only one
-#   ANTHROPIC_API_KEY      the key the Worker uses for the AI features
+#   GEMINI_API_KEY         a free key from aistudio.google.com/apikey. The app asks this one first and it is the only
+#                          one of the three that reads photos really well, so set this one if you set nothing else
+#   GROQ_API_KEY           optional, free, from console.groq.com/keys; the fast fallback
+#   OPENROUTER_API_KEY     optional, free, from openrouter.ai/keys; the last fallback
+#   ANTHROPIC_API_KEY      optional and NOT free. The app never asks for it on the site's keys, so setting it here only
+#                          serves people who point their own phone at this proxy
 #   USDA_API_KEY           optional; lets the Worker answer USDA lookups for every visitor
 #   PROXY_TOKEN            optional; letters, digits, dashes and underscores only. It is also written into the public
 #                          page, so it only deters scripts (see the README)
@@ -84,6 +89,9 @@ jobs:
       - name: Set the Worker's secrets
         working-directory: proxy
         env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           USDA_API_KEY: ${{ secrets.USDA_API_KEY }}
           PROXY_TOKEN: ${{ secrets.PROXY_TOKEN }}
@@ -93,7 +101,7 @@ jobs:
               echo "::error::PROXY_TOKEN may only contain letters, digits, dashes and underscores (it is written into index.html as well as set on the Worker). Change the repository secret and re-run."
               exit 1;;
           esac
-          for name in ANTHROPIC_API_KEY USDA_API_KEY PROXY_TOKEN; do
+          for name in GEMINI_API_KEY GROQ_API_KEY OPENROUTER_API_KEY ANTHROPIC_API_KEY USDA_API_KEY PROXY_TOKEN; do
             value="${!name}"
             if [ -n "$value" ]; then
               printf '%s' "$value" | npx --yes wrangler@4 secret put "$name" > /dev/null
@@ -102,8 +110,8 @@ jobs:
               echo "$name: no repository secret, left as it is on the Worker"
             fi
           done
-          if [ -z "$ANTHROPIC_API_KEY" ]; then
-            echo "::warning::ANTHROPIC_API_KEY is not a repository secret. The AI features stay off until it is set here or in the Cloudflare dashboard (the Worker > Settings > Variables and Secrets)."
+          if [ -z "$GEMINI_API_KEY$GROQ_API_KEY$OPENROUTER_API_KEY" ]; then
+            echo "::warning::None of GEMINI_API_KEY, GROQ_API_KEY or OPENROUTER_API_KEY is a repository secret. The AI features stay off for everyone who has not saved a key of their own, until one is set here or in the Cloudflare dashboard (the Worker > Settings > Variables and Secrets). All three are free; GEMINI_API_KEY is the one to set first."
           fi
 
       - name: Check the proxy
