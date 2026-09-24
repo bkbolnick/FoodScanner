@@ -831,7 +831,7 @@ body.ob-open, body.dbg-open { overflow: hidden; }
   <div id="dbgLines"></div>
 </div>
 <div id="toast" role="status"></div>
-<div id="onboard" role="dialog" aria-modal="true" aria-label="Scoring setup"><div class="ob-inner" id="obInner"></div></div>
+<div id="onboard" role="dialog" aria-modal="true" aria-label="Food preferences"><div class="ob-inner" id="obInner"></div></div>
 
 <!-- ZXing fallback decoder (used when the native BarcodeDetector API is unavailable, i.e. iOS Safari).
      Pinned UMD build; exposes the global `ZXingBrowser` and bundles @zxing/library. -->
@@ -1648,7 +1648,7 @@ function renderTally() {
   var uniq = {};
   scanLog.forEach(function (e) { if (!e.estimate && e.barcode) uniq[e.barcode] = 1; });
   var n = Object.keys(uniq).length;
-  $('tallyNote').textContent = 'Every barcode lookup and photo estimate counts, cached repeats included; ' + n + ' unique barcode' + (n === 1 ? '' : 's') + ' in the log. The database rows count barcode scans only. Incomplete means a found product is missing serving size, carbs, sugars, fiber, protein or ingredients. Scores use the scoring profile in force at scan time. Safari can clear this data after 7 days without a visit, so export it now and then.';
+  $('tallyNote').textContent = 'Every barcode lookup and photo estimate counts, cached repeats included; ' + n + ' unique barcode' + (n === 1 ? '' : 's') + ' in the log. The database rows count barcode scans only. Incomplete means a found product is missing serving size, carbs, sugars, fiber, protein or ingredients. Scores use the preferences in force at scan time. Safari can clear this data after 7 days without a visit, so export it now and then.';
 }
 function originWord(o) { return o === 'scan' ? 'scanned' : o === 'manual' ? 'typed' : o === 'refetch' ? 'refreshed' : o === 'log' ? 'reopened' : o === 'photo' ? 'from a photo' : (o || ''); }
 function statusColor(s) { return s === 'found' ? 'green' : s === 'error' ? 'orange' : s === 'skipped' ? '' : 'red'; }
@@ -2608,8 +2608,8 @@ var NUTRIENT_OPTS = {
 };
 // Every pick already means less (or more) of that nutrient; the level says how strongly it counts. Slight and medium
 // preferences use the standard guideline cut-offs and differ only in weight; a strict preference also halves the limit
-// cut-offs ('low' metrics). The scaled 'high' targets are kept for the summary screen but the scorer ignores them:
-// anything you want more of is bonus-only, so a higher bar could only shrink the bonus (see customScore).
+// cut-offs ('low' metrics). The scaled 'high' targets are still stored in the profile but nothing reads them: anything
+// you want more of is bonus-only and judged on the standard cut-offs, so a higher bar could only shrink the bonus (see customScore).
 var STRICTNESS = { slight: { low: 1, high: 1, weight: 1, label: 'Slight preference' }, medium: { low: 1, high: 1, weight: 3, label: 'Medium preference' }, strict: { low: 0.5, high: 1.5, weight: 5, label: 'Strict preference' } };
 var STRICT_LEVELS = ['slight', 'medium', 'strict'];
 var LEGACY_LEVELS = { relaxed: 'slight', typical: 'medium' };   // names used by earlier versions of the questionnaire
@@ -2628,7 +2628,7 @@ var QUESTIONS = [
   { id: 'more', title: 'What do you want more of?', hint: 'Pick any, or none. Total fat and calories appear here for high-fat or weight-gain plans, unless you chose to limit them in the previous question.', type: 'multi', options: NUTRIENT_OPTS.more },
   { id: 'strict', title: 'How strong is each preference?', hint: 'Each pick already means less (or more) of it; this is how much it matters to you. Choose strict for a plan that depends on it, such as keto, diabetes or low sodium: for something you want less of, strict also holds foods to a tighter limit.', type: 'strictness' },
   { id: 'processing', title: 'Processing and additives?', type: 'single', options: [
-    ['ok', 'Do not mind', 'How processed a food is makes no difference.'],
+    ['ok', 'Do not mind', 'No extra preference for less processed food.'],
     ['prefer', 'Prefer less processed food', 'Less processed food and fewer additives are favoured.'],
     ['avoid', 'Avoid ultra-processed food and risky additives', 'Ultra-processed food and risky additives count strongly against a food.']] },
   { id: 'avoid', title: 'Anything to avoid or look for?', hint: 'Pick any, or none. A food that contains something you avoid, or that does not fit your diet, gets a warning. Organic is different: organic food is favoured.', type: 'multi', groups: AVOID_OPTS }
@@ -2754,7 +2754,7 @@ function openOnboarding(step) {
 }
 function closeOnboarding() {
   $('onboard').classList.remove('open'); document.body.classList.remove('ob-open');
-  $('onboard').setAttribute('aria-label', 'Scoring setup');
+  $('onboard').setAttribute('aria-label', 'Food preferences');
   if (!$('dbgPanel').classList.contains('open')) setBackgroundInert(false);
   updatePaused();
   restoreFocus(ob.prevFocus); ob.prevFocus = null;
@@ -2859,19 +2859,22 @@ function renderQuestion(box, q, qi) {
     h('button', { class: 'btn primary', type: 'button', id: 'obNext', disabled: canNext ? null : 'disabled', onclick: function () { ob.step = ob.step + 1; renderOnboarding(); $('onboard').scrollTop = 0; } }, qi + 1 === QUESTIONS.length ? 'See my preferences' : 'Next')
   ]));
 }
+function prefLabel(met) { return met.key === 'processing' ? 'Processing' : met.label; }   // the preference screens do not name the NOVA method
 function cutoffText(x, unit) { return ((unit === 'kcal' || unit === 'mg') ? Math.round(x) : Math.round(x * 100) / 100) + ' ' + unit; }   // exact, unlike the 1-decimal display rounding
 function renderSummary(box) {
   var p = answersToProfile(ob.answers), total = 0, informative = 0;
   METRICS.forEach(function (met) { var w = p.weights[met.key] || 0; total += w; if (met.key !== 'organic') informative += w; });   // an organic label alone never gives a score
   box.appendChild(h('h2', { text: 'Your preferences: ' + p.name }));
-  if (!informative) box.appendChild(h('p', { class: 'warn', text: 'Nothing is chosen yet' + (total ? ' (preferring organic is not enough on its own)' : '') + '. Go back and pick at least one nutrient or a processing preference.' }));
+  // Warnings and "prefer organic" are real choices, so the line says what is still missing rather than that nothing was chosen.
+  var notEnough = total && p.avoid.length ? ' (warnings and preferring organic are not enough on their own)' : total ? ' (preferring organic is not enough on its own)' : p.avoid.length ? ' (warnings are not enough on their own)' : '';
+  if (!informative) box.appendChild(h('p', { class: 'warn', text: 'Go back and pick at least one nutrient or a processing preference' + notEnough + '.' }));
   else box.appendChild(h('p', { text: 'Your preferences move each food up or down for you; they never replace how healthy it is. Each one shows how much it matters, from 1 (a little) to 5 (the most). You can fine-tune them later in Settings.' }));
   var list = h('div', { class: 'group' });
   METRICS.slice().sort(function (x, y) { return (p.weights[y.key] || 0) - (p.weights[x.key] || 0); }).forEach(function (met) {   // heaviest first
     var w = p.weights[met.key] || 0;
     if (!w) return;
     var dir = metricDir(p, met), lv = p.answers.strict[met.key];
-    list.appendChild(h('div', { class: 'wrow' }, [h('span', { class: 'wl' }, [met.label + (dir !== met.dir ? ' (more is better)' : ''), lv ? h('span', { class: 'foot', text: STRICTNESS[lv].label + '.' }) : null]), h('span', { class: 'wv', text: String(w) })]));
+    list.appendChild(h('div', { class: 'wrow' }, [h('span', { class: 'wl' }, [prefLabel(met) + (dir !== met.dir ? ' (more is better)' : ''), lv ? h('span', { class: 'foot', text: STRICTNESS[lv].label + '.' }) : null]), h('span', { class: 'wv', text: String(w) })]));
   });
   box.appendChild(list);
   if (p.avoid.length) box.appendChild(h('p', { text: 'You will be warned about: ' + p.avoid.map(function (k) { return AVOID_LABEL[k].toLowerCase(); }).join(', ') + '.' }));
@@ -2890,15 +2893,15 @@ function renderWeightsEditor(box) {
     var inf = 0;
     METRICS.forEach(function (met) { if (met.key !== 'organic') inf += draft.weights[met.key] || 0; });
     doneBtn.disabled = !inf;
-    warnLine.textContent = inf ? '' : 'Nothing is chosen (preferring organic is not enough on its own). Turn up at least one other preference.';
+    warnLine.textContent = inf ? '' : 'Turn up at least one preference' + ((draft.weights.organic || 0) > 0 ? ' other than organic (preferring organic is not enough on its own)' : '') + '.';
   }
   var list = h('div', { class: 'group' });
   METRICS.forEach(function (met) {
     var val = h('span', { class: 'wv', text: String(draft.weights[met.key] || 0) });
-    var range = h('input', { type: 'range', min: '0', max: '5', step: '1', 'data-metric': met.key, value: String(draft.weights[met.key] || 0), 'aria-label': met.label + ', how much it matters' });
+    var range = h('input', { type: 'range', min: '0', max: '5', step: '1', 'data-metric': met.key, value: String(draft.weights[met.key] || 0), 'aria-label': prefLabel(met) + ', how much it matters' });
     range.addEventListener('input', function () { draft.weights[met.key] = parseInt(range.value, 10) || 0; val.textContent = range.value; refresh(); });
     var dirNote = (met.dir === 'low' || met.dir === 'high') ? (metricDir(draft, met) === 'high' ? ' (more is better)' : ' (less is better)') : '';
-    list.appendChild(h('div', { class: 'wrow' }, [h('span', { class: 'wl', text: met.label + dirNote }), range, val]));
+    list.appendChild(h('div', { class: 'wrow' }, [h('span', { class: 'wl', text: prefLabel(met) + dirNote }), range, val]));
   });
   box.appendChild(list);
   doneBtn = h('button', { class: 'btn primary', type: 'button', id: 'obDone', onclick: function () {
@@ -3872,7 +3875,7 @@ function aiWhoDetail(ai) {
     + (px ? '; the ones with no key of yours go through ' + (px.builtIn ? 'the site\u2019s built-in proxy' : 'your proxy') + ' at ' + proxyHost(px.proxy) + '.' : '.');
 }
 function renderSettings() {
-  renderIdle();   // the first screen names the same sources and profile this one configures
+  renderIdle();   // the first screen's foot names the preferences this one sets
   renderServiceRow();
   renderProviders();
   var si = clear($('scoringInfo'));
@@ -4851,7 +4854,7 @@ function renderPlanWizard() {
     inner.appendChild(single(DIETS, w.diet, function (v) { w.diet = v; }));
     groupHead('Allergies and intolerances');
     inner.appendChild(multi(PLAN_ALLERGIES, w.allergies));
-    if (profile && profile.avoid && profile.avoid.length) inner.appendChild(h('p', { class: 'foot', text: 'Pre-filled from the avoid list of your scoring profile.' }));
+    if (profile && profile.avoid && profile.avoid.length) inner.appendChild(h('p', { class: 'foot', text: 'Pre-filled from what your preferences avoid.' }));
     groupHead('Religious requirements');
     inner.appendChild(single(RELIGIOUS, w.religious, function (v) { w.religious = v; }));
     groupHead('Foods you dislike or want to avoid');
@@ -6476,10 +6479,10 @@ function init() {
     else {
       var decoded = decodeProfile(pf[1]);
       if (!decoded) dbg('warn', 'Ignoring an unreadable #profile= value');
-      else { saveProfile(decoded); store.set('fs.profile.seed', pf[1]); toast('Scoring profile loaded from link'); }
+      else { saveProfile(decoded); store.set('fs.profile.seed', pf[1]); toast('Preferences loaded from link'); }
     }
   }
-  if (!profile) openOnboarding(0);   // first run: choose Standard or Customize
+  if (!profile) openOnboarding(0);   // first run: No preferences (mode 'standard') or Set my preferences
 
   // Support ?code=… for quick desktop testing / sharing.
   var mq = /[?&]code=(\d+)/.exec(location.search);
