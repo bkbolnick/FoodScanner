@@ -23,7 +23,8 @@ type, semantic colours in light and dark, a bottom tab bar, grouped settings and
 1. Open the page in Safari on your iPhone (it must be served over HTTPS, which GitHub Pages does). Optionally
    add it to the Home Screen; it then opens full screen like an app.
 2. The **Analyze** tab offers three things: **Scan a barcode**, **Photograph food** and **Review a menu**, with
-   **History** underneath. **Review a menu** opens the menu reader under the Analyze tab, with a back link.
+   **History** underneath, and a line at the foot naming your **Custom Preferences**. **Review a menu** opens the
+   menu reader under the Analyze tab, with a back link.
    Tap **Scan a barcode** and allow camera access. The camera fills the screen; hold the
    barcode inside the marked region, roughly 10–15 cm from the lens. It detects EAN-13, EAN-8, UPC-A and UPC-E
    continuously. A beep and a green flash of the corner marks mean a code was read. The same code is ignored while
@@ -168,8 +169,10 @@ key: a photo or a menu is a few cents, a week of meals more. **Test key** sends 
 
 ## Scoring
 
-On first open the app asks how products should be scored. Both choices can be changed later under Settings ›
-**Scoring**.
+On first open the app asks for your food preferences: none, or five quick questions. Either can be changed later
+under Settings › **Preferences** (**Change preferences**), and the foot of the Analyze screen shows the set in force as
+**Custom Preferences: …**. The app's own screens talk about preferences; the rest of this section is how they become a
+score.
 
 - **Standard**: a 0–100 composite of nutritional quality (50 points, from the product's Nutri-Score; when Open Food
   Facts has no grade it is estimated from the nutrients with the 2023 algorithm, using the beverage, fats/oils/nuts and
@@ -241,7 +244,7 @@ On first open the app asks how products should be scored. Both choices can be ch
   shows the arithmetic ("Worked out: quality 35, then net carbs −9, sugar −9, fiber ±0, processing −3,
   additives +1 = 15"). Those per-factor points are shared out from the movement the score actually made, so they add
   up even where the scale runs out at 0 or 100, which the card says when it happens. Weights can be fine-tuned under
-  **Adjust weights** (custom profiles only). A profile adjusts a quality score, so when nothing is known about a
+  **Fine-tune preferences** (custom profiles only), where each one is a 0–5 slider for how much it matters. A profile adjusts a quality score, so when nothing is known about a
   food's quality there is no score at all, however well the things you asked about do.
 - **Avoid list** (question 5): allergens (milk, eggs, gluten, peanuts, tree nuts, soy, fish, shellfish, sesame,
   celery, mustard, lupin, sulphites), non-vegan or non-vegetarian ingredients (the "I am vegan" and "I am vegetarian"
@@ -256,7 +259,7 @@ On first open the app asks how products should be scored. Both choices can be ch
   it adds the organic label to the score.
 - Bands: Excellent 75–100, Good 50–74, Poor 25–49, Bad 0–24. A "low confidence" note appears when the nutrition data
   behind the quality score is missing.
-- **Copy link with my profile** (and **Copy link with my key**) produce one link carrying the USDA key and the
+- **Copy link with my preferences** (and **Copy link with my key**) produce one link carrying the USDA key and the
   scoring profile, including the questionnaire answers and avoid list. Opening it seeds the profile once; changes made in
   Settings afterwards are kept, and after Safari has cleared storage the same link seeds it again. Copy a fresh link to
   pick up later edits.
