@@ -238,7 +238,7 @@ input[type=range] { accent-color: var(--accent); width: 100%; margin: 0; }
 .sec-h { font-size: var(--caps); font-weight: 700; letter-spacing: 0.1em; font-variant-caps: all-small-caps; color: var(--label2); margin-bottom: 9px; }
 .sec-f { font-size: 0.765rem; color: var(--label2); margin-top: 9px; line-height: 1.4; }
 /* the number itself, the band beside it as a tinted pill, and the profile underneath */
-.score-row { display: flex; align-items: flex-end; gap: 14px; }
+.score-row { display: flex; align-items: flex-start; gap: 14px; }   /* top-aligned: a long preferences line must not pull the number down */
 .score-n { font-size: 3.2rem; font-weight: 700; line-height: 0.84; letter-spacing: -0.045em; }
 .score-n.none { color: var(--label3); font-size: 2.4rem; line-height: 1.1; }
 .score-row .grow { padding-bottom: 3px; }
@@ -1630,7 +1630,7 @@ function toCSV(entries) {
 function renderIdle() {
   var hint = $('historyHint'), foot = clear($('idleFoot'));
   if (hint) hint.textContent = scanLog.length ? scanLog.length + ' food' + (scanLog.length === 1 ? '' : 's') + ', newest first' : 'Everything you scan is kept on this phone';
-  foot.appendChild(h('span', { text: 'Custom Preferences: ' + (!profile ? 'not set' : profile.mode === 'standard' ? 'none' : capitalize(prefTextAll(profile))) }));
+  foot.appendChild(h('span', { text: 'Custom Preferences: ' + (!profile ? 'not set' : profile.mode === 'standard' ? 'none' : capitalize(prefTextAll(profile) || 'none')) }));
 }
 function renderTally() {
   renderIdle();
@@ -2545,7 +2545,7 @@ function renderScore(sc, estimated) {
     h('div', { class: 'score-n' + (tone ? ' t-' + tone : ''), text: String(sc.score), 'aria-label': 'Score ' + sc.score + ' of 100' }),
     h('div', { class: 'grow' }, [
       h('div', { class: 'band' + (tone ? ' b-' + tone : '') }, [h('span', { class: 'dot ' + tone, 'aria-hidden': 'true' }), sc.lowConfidence ? 'Low confidence' : sc.band.label]),
-      h('div', { class: 'foot', text: standard ? 'Standard score' : 'Your preferences: ' + capitalize(prefText(profile)) })
+      h('div', { class: 'foot', text: standard ? 'Standard score' : 'Your preferences: ' + capitalize(prefText(profile) || 'none') })
     ])
   ]));
   if (!standard && sc.base !== null && sc.base !== undefined) {
@@ -2699,7 +2699,7 @@ function answersToProfile(a) {
   return { mode: 'custom', version: 3, name: profileNameFor(a), weights: w, dirs: dirs, thresholds: scaleThresholds(a.strict, dirs),
     avoid: a.avoid.filter(function (k) { return k !== 'organic'; }), answers: a };
 }
-function profileName(p) { if (!p) return 'not chosen'; return p.mode === 'standard' ? 'Standard' : 'Custom: ' + (p.name || 'custom'); }
+function profileName(p) { if (!p) return 'not chosen'; return p.mode === 'standard' ? 'Standard' : 'Custom: ' + (prefTextAll(p) || 'nothing weighted') + (String(p.name || '').indexOf('(adjusted)') >= 0 ? ' (adjusted)' : ''); }   // the debug log only
 // Anything read from storage or a link is normalised to a safe shape (weights 0–5, valid thresholds, known avoid keys).
 function sanitizeProfile(p) {
   if (!p || typeof p !== 'object' || Array.isArray(p)) return null;
@@ -2730,6 +2730,7 @@ function loadProfile() { try { profile = sanitizeProfile(store.getJSON(PROFILE_K
 function saveProfile(p) {
   profile = p;
   store.setJSON(PROFILE_KEY, p);
+  if (menu && menu.current) menu.ranked = rankMenu(menu.current);
   dbg('log', 'Scoring profile: ' + profileName(p));
   renderSettings();
   if (current && current.merged && current.merged.found) renderResult(current);
@@ -2866,7 +2867,8 @@ function renderSummary(box) {
   var p = answersToProfile(ob.answers), total = 0, informative = 0;
   METRICS.forEach(function (met) { var w = p.weights[met.key] || 0; total += w; if (met.key !== 'organic') informative += w; });   // an organic label alone never gives a score
   box.appendChild(h('h2', { text: 'Your preferences' }));
-  box.appendChild(h('p', { class: 'ob-prefs', text: capitalize(prefText(p)) + '.' }));
+  var prefLine = prefText(p);
+  if (prefLine) box.appendChild(h('p', { class: 'ob-prefs', text: capitalize(prefLine) + '.' }));
   // Warnings and "prefer organic" are real choices, so the line says what is still missing rather than that nothing was chosen.
   var notEnough = total && p.avoid.length ? ' (warnings and preferring organic are not enough on their own)' : total ? ' (preferring organic is not enough on its own)' : p.avoid.length ? ' (warnings are not enough on their own)' : '';
   if (!informative) box.appendChild(h('p', { class: 'warn', text: 'Go back and pick at least one nutrient or a processing preference' + notEnough + '.' }));
@@ -3740,18 +3742,18 @@ function prefText(p) {
     var met = metricByKey(k);
     if (!met || !((w[k] || 0) > 0)) return;
     var verb = metricDir(p, met) === 'high' ? 'more' : k === 'kcal' ? 'fewer' : 'less';
-    groups[verb].push(nutrientLabel(k).toLowerCase());
+    groups[verb].push(PLAIN_NUTRIENT[k] || nutrientLabel(k).toLowerCase());
   });
   var parts = ['less', 'fewer', 'more'].filter(function (v) { return groups[v].length; }).map(function (v) { return v + ' ' + joinPlain(groups[v]); });
   if ((w.processing || 0) > 0) parts.push('less processed food');
   if ((w.additives || 0) > 0) parts.push('fewer additives');
   if ((w.organic || 0) > 0) parts.push('organic food');
-  return parts.length ? parts.join(', ') : String(p.name || 'custom');
+  return parts.join(', ');   // empty only for a set with nothing weighted, which the summary says in its own words
 }
 // The same, with what is avoided, for the one line that has to carry all of it.
 function prefTextAll(p) {
-  var t = prefText(p), avoid = (p && p.avoid || []).map(function (k) { return AVOID_LABEL[k] ? AVOID_LABEL[k].toLowerCase() : k; });
-  return t + (avoid.length ? '; avoiding ' + joinPlain(avoid) : '');
+  var avoid = (p && p.avoid || []).map(function (k) { return AVOID_LABEL[k] ? AVOID_LABEL[k].toLowerCase() : k; });
+  return [prefText(p), avoid.length ? 'avoiding ' + joinPlain(avoid) : ''].filter(Boolean).join('; ');
 }
 // Settings, "Data and AI": one plain row says what is on and through what. With the site's built-in proxy the
 // Which services the proxy holding the site's keys can actually answer for. Asked once, and only to put an honest
@@ -3898,7 +3900,7 @@ function renderSettings() {
   if (!profile) row('Your preferences', 'Tell FoodScanner what matters to you.', 'Not set');
   else if (profile.mode === 'standard') row('Your preferences', 'None yet. Add what you want less of, more of, and anything to avoid.', 'None');
   else {
-    row('Your preferences', capitalize(prefText(profile)));
+    row('Your preferences', capitalize(prefText(profile) || 'none'));
     if (profile.avoid && profile.avoid.length) row('Avoiding', profile.avoid.map(function (k) { return AVOID_LABEL[k].toLowerCase(); }).join(', '));
   }
   $('btnWeights').classList.toggle('hidden', !(profile && profile.mode === 'custom'));
@@ -4258,7 +4260,7 @@ function scoreHeadline(sc) {
   var words = standard ? componentWords(byKey[w.key]) : factorWords(byKey[w.key], sc);
   return words.title + (words.value ? ', ' + words.value : '');
 }
-function profileShort() { return (profile && profile.mode === 'custom') ? 'your preferences (' + prefText(profile) + ')' : 'the standard score'; }
+function profileShort() { return (profile && profile.mode === 'custom') ? 'your preferences (' + (prefText(profile) || 'none') + ')' : 'the standard score'; }
 function pickPhoto(id) {
   if (!aiReady()) { toast('Add an API key under Settings, AI features'); showTab('settings'); return; }
   var input = $(id || 'photoInput');
@@ -4851,7 +4853,7 @@ function renderPlanWizard() {
     inner.appendChild(g);
     groupHead('Nutritional emphasis (optional)');
     inner.appendChild(multi(EMPHASIS, w.emphasis));
-    inner.appendChild(h('p', { class: 'foot', text: 'The plan is also scored with ' + profileShort() + ', so the meals are written to do well on it.' }));
+    inner.appendChild(h('p', { class: 'foot', text: 'The plan is also scored with ' + profileShort() + ', so the meals are written to score well.' }));
   } else if (step === 2) {
     head('Meal structure', 'How do you like to eat through the day?');
     var g2 = h('div', { class: 'group' });
