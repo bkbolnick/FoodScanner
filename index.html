@@ -503,6 +503,7 @@ body.ob-open, body.dbg-open { overflow: hidden; }
 .ob-inner h2 { font-size: 1.647rem; font-weight: 700; line-height: 1.2; margin: 6px 0 8px; }
 .ob-inner p { font-size: 0.882rem; color: var(--label2); line-height: 1.4; }
 .ob-inner p.warn { color: var(--orange); }
+.ob-inner p.ob-prefs { font-size: 1rem; color: var(--label); margin: 0 0 8px; }
 .ob-progress { font-size: 0.765rem; color: var(--label2); }
 .ob-choice { display: block; width: 100%; background: var(--cell); border-radius: 10px; padding: 14px 16px; margin: 0 0 12px; }
 .ob-choice b { display: block; font-size: 1rem; font-weight: 600; margin-bottom: 3px; }
@@ -1629,7 +1630,7 @@ function toCSV(entries) {
 function renderIdle() {
   var hint = $('historyHint'), foot = clear($('idleFoot'));
   if (hint) hint.textContent = scanLog.length ? scanLog.length + ' food' + (scanLog.length === 1 ? '' : 's') + ', newest first' : 'Everything you scan is kept on this phone';
-  foot.appendChild(h('span', { text: 'Custom Preferences: ' + (!profile ? 'not set' : profile.mode === 'standard' ? 'none' : (profile.name || 'custom')) }));
+  foot.appendChild(h('span', { text: 'Custom Preferences: ' + (!profile ? 'not set' : profile.mode === 'standard' ? 'none' : capitalize(prefTextAll(profile))) }));
 }
 function renderTally() {
   renderIdle();
@@ -2544,7 +2545,7 @@ function renderScore(sc, estimated) {
     h('div', { class: 'score-n' + (tone ? ' t-' + tone : ''), text: String(sc.score), 'aria-label': 'Score ' + sc.score + ' of 100' }),
     h('div', { class: 'grow' }, [
       h('div', { class: 'band' + (tone ? ' b-' + tone : '') }, [h('span', { class: 'dot ' + tone, 'aria-hidden': 'true' }), sc.lowConfidence ? 'Low confidence' : sc.band.label]),
-      h('div', { class: 'foot', text: standard ? 'Standard score' : 'Your profile: ' + ((profile && profile.name) || 'custom') })
+      h('div', { class: 'foot', text: standard ? 'Standard score' : 'Your preferences: ' + capitalize(prefText(profile)) })
     ])
   ]));
   if (!standard && sc.base !== null && sc.base !== undefined) {
@@ -2864,7 +2865,8 @@ function cutoffText(x, unit) { return ((unit === 'kcal' || unit === 'mg') ? Math
 function renderSummary(box) {
   var p = answersToProfile(ob.answers), total = 0, informative = 0;
   METRICS.forEach(function (met) { var w = p.weights[met.key] || 0; total += w; if (met.key !== 'organic') informative += w; });   // an organic label alone never gives a score
-  box.appendChild(h('h2', { text: 'Your preferences: ' + p.name }));
+  box.appendChild(h('h2', { text: 'Your preferences' }));
+  box.appendChild(h('p', { class: 'ob-prefs', text: capitalize(prefText(p)) + '.' }));
   // Warnings and "prefer organic" are real choices, so the line says what is still missing rather than that nothing was chosen.
   var notEnough = total && p.avoid.length ? ' (warnings and preferring organic are not enough on their own)' : total ? ' (preferring organic is not enough on its own)' : p.avoid.length ? ' (warnings are not enough on their own)' : '';
   if (!informative) box.appendChild(h('p', { class: 'warn', text: 'Go back and pick at least one nutrient or a processing preference' + notEnough + '.' }));
@@ -3726,17 +3728,30 @@ function buildSeedLink() {
   if (profile) parts.push('profile=' + encodeProfile(profile));
   return location.origin + location.pathname + (parts.length ? '#' + parts.join('&') : '');
 }
-// What a custom profile cares about most, in words ("less sugar, more protein, less processed food"). Settings talks
-// about preferences, not the weights behind them.
-function topPreferences(p) {
-  return METRICS.map(function (met) { return [met, (p.weights && p.weights[met.key]) || 0]; }).filter(function (x) { return x[1] > 0; })
-    .sort(function (a, b) { return b[1] - a[1]; }).slice(0, 3).map(function (x) {
-      var met = x[0];
-      if (met.key === 'processing') return 'less processed food';
-      if (met.key === 'additives') return 'fewer additives';
-      if (met.key === 'organic') return 'organic food';
-      return (metricDir(p, met) === 'high' ? 'more ' : met.key === 'kcal' ? 'fewer ' : 'less ') + nutrientLabel(met.key).toLowerCase();
-    }).join(', ');
+// Every preference a custom profile holds, in words: "less sugar and net carbs, more protein and fiber, less processed
+// food". It is worked out from what the profile actually weighs, so a preference the fine-tune screen turned down to 0
+// drops out and one it turned up appears. The stored name is not used for this: it only ever named the first two
+// picks, and a person with four saw two of them everywhere their preferences were shown.
+function prefText(p) {
+  if (!p || p.mode !== 'custom') return '';
+  var w = p.weights || {}, groups = { less: [], fewer: [], more: [] }, a = p.answers || {};
+  // in the order they were picked, then anything the fine-tune screen added, in the order the questions offer them
+  (a.limit || []).concat(a.more || [], NUTRIENT_KEYS).filter(function (k, i, all) { return all.indexOf(k) === i; }).forEach(function (k) {
+    var met = metricByKey(k);
+    if (!met || !((w[k] || 0) > 0)) return;
+    var verb = metricDir(p, met) === 'high' ? 'more' : k === 'kcal' ? 'fewer' : 'less';
+    groups[verb].push(nutrientLabel(k).toLowerCase());
+  });
+  var parts = ['less', 'fewer', 'more'].filter(function (v) { return groups[v].length; }).map(function (v) { return v + ' ' + joinPlain(groups[v]); });
+  if ((w.processing || 0) > 0) parts.push('less processed food');
+  if ((w.additives || 0) > 0) parts.push('fewer additives');
+  if ((w.organic || 0) > 0) parts.push('organic food');
+  return parts.length ? parts.join(', ') : String(p.name || 'custom');
+}
+// The same, with what is avoided, for the one line that has to carry all of it.
+function prefTextAll(p) {
+  var t = prefText(p), avoid = (p && p.avoid || []).map(function (k) { return AVOID_LABEL[k] ? AVOID_LABEL[k].toLowerCase() : k; });
+  return t + (avoid.length ? '; avoiding ' + joinPlain(avoid) : '');
 }
 // Settings, "Data and AI": one plain row says what is on and through what. With the site's built-in proxy the
 // Which services the proxy holding the site's keys can actually answer for. Asked once, and only to put an honest
@@ -3883,9 +3898,7 @@ function renderSettings() {
   if (!profile) row('Your preferences', 'Tell FoodScanner what matters to you.', 'Not set');
   else if (profile.mode === 'standard') row('Your preferences', 'None yet. Add what you want less of, more of, and anything to avoid.', 'None');
   else {
-    row('Your preferences', profile.name || 'Custom');
-    var most = topPreferences(profile);
-    if (most) row('Matters most', most);
+    row('Your preferences', capitalize(prefText(profile)));
     if (profile.avoid && profile.avoid.length) row('Avoiding', profile.avoid.map(function (k) { return AVOID_LABEL[k].toLowerCase(); }).join(', '));
   }
   $('btnWeights').classList.toggle('hidden', !(profile && profile.mode === 'custom'));
@@ -4245,7 +4258,7 @@ function scoreHeadline(sc) {
   var words = standard ? componentWords(byKey[w.key]) : factorWords(byKey[w.key], sc);
   return words.title + (words.value ? ', ' + words.value : '');
 }
-function profileShort() { return (profile && profile.mode === 'custom') ? 'your profile (' + (profile.name || 'custom') + ')' : 'the standard score'; }
+function profileShort() { return (profile && profile.mode === 'custom') ? 'your preferences (' + prefText(profile) + ')' : 'the standard score'; }
 function pickPhoto(id) {
   if (!aiReady()) { toast('Add an API key under Settings, AI features'); showTab('settings'); return; }
   var input = $(id || 'photoInput');
